@@ -1,0 +1,4 @@
+# 전역 core.autocrlf=true여도 이 저장소는 LF로 체크아웃한다 (셸 훅이 CRLF면 실행되지 않음)
+* text=auto eol=lf
+*.woff2 binary
+*.png binary
