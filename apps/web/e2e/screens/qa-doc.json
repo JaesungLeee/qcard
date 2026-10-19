@@ -1,0 +1,13 @@
+[
+  { "name": "qa-doc-list", "path": "/p/haru/docs", "waitFor": "QA 문서 1.3.0" },
+  { "name": "qa-doc-cases", "path": "/p/haru/docs/doc-130", "waitFor": "TC-ONBOARDING-001" },
+  { "name": "qa-doc-case-changed", "path": "/p/haru/docs/doc-130?tab=cases&case=TC-ONBOARDING-008", "waitFor": "이전 버전 대비 변경" },
+  { "name": "qa-doc-case-held", "path": "/p/haru/docs/doc-130?case=TC-ONBOARDING-030", "waitFor": "승인 보류" },
+  { "name": "qa-doc-case-removed", "path": "/p/haru/docs/doc-130?case=TC-ONBOARDING-062", "waitFor": "삭제됨 — 다음 사이클에서 제외" },
+  { "name": "qa-doc-case-edit", "path": "/p/haru/docs/doc-130?case=TC-ONBOARDING-021&edit=1", "waitFor": "검증 포인트 추가" },
+  { "name": "qa-doc-questions", "path": "/p/haru/docs/doc-130?tab=questions", "waitFor": "Q-1" },
+  { "name": "qa-doc-suggestions", "path": "/p/haru/docs/doc-130?tab=suggestions", "waitFor": "보강 제안은 케이스가 아닙니다" },
+  { "name": "qa-doc-traceability", "path": "/p/haru/docs/doc-130?tab=traceability", "waitFor": "커버리지" },
+  { "name": "qa-doc-v120", "path": "/p/haru/docs/doc-120", "waitFor": "QA 문서 1.2.0" },
+  { "name": "qa-doc-prep-flows", "path": "/p/haru/prep-flows", "waitFor": "온보딩 완료" }
+]
