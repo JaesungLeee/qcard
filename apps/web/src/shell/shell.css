@@ -1,0 +1,104 @@
+/* 앱 골격 레이아웃. 색은 --qc-* 토큰만 쓴다. */
+.qc-shell {
+  /* 사이드바 열 배경이 페이지 끝까지 이어지게 한다 */
+  background: linear-gradient(
+    to right,
+    var(--qc-background-neutral-secondary) 232px,
+    var(--qc-background-neutral-primary) 232px
+  );
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  min-height: 100dvh;
+}
+.qc-sidebar {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-4);
+  padding: var(--qc-space-16) var(--qc-space-12);
+  background: var(--qc-background-neutral-secondary);
+  border-right: 1px solid var(--qc-line-neutral-tertiary);
+}
+.qc-sidebar-project {
+  padding: var(--qc-space-8) var(--qc-space-10) var(--qc-space-16);
+}
+.qc-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-2);
+}
+.qc-nav a {
+  display: flex;
+  align-items: center;
+  gap: var(--qc-space-10);
+  padding: var(--qc-space-8) var(--qc-space-10);
+  border-radius: var(--qc-radius-8);
+  color: var(--qc-foreground-neutral-secondary);
+  text-decoration: none;
+}
+.qc-nav a:hover {
+  background: var(--qc-surface-neutral-tertiary);
+}
+.qc-nav a.active {
+  background: var(--qc-surface-brand-subtle);
+  color: var(--qc-foreground-brand-primary);
+}
+.qc-nav a:focus-visible {
+  outline: 3px solid var(--qc-line-brand-focus);
+}
+.qc-sidebar-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-12);
+  padding: var(--qc-space-8) var(--qc-space-10);
+}
+.qc-main {
+  min-width: 0;
+  background: var(--qc-background-neutral-primary);
+}
+.qc-page {
+  max-width: 1440px;
+  padding: var(--qc-space-24) var(--qc-space-32) var(--qc-space-40);
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-24);
+}
+.qc-card {
+  background: var(--qc-surface-neutral-primary);
+  border: 1px solid var(--qc-line-neutral-secondary);
+  border-radius: var(--qc-radius-12);
+  padding: var(--qc-space-20);
+}
+
+@media (max-width: 900px) {
+  .qc-shell {
+    grid-template-columns: minmax(0, 1fr);
+    background: var(--qc-background-neutral-primary);
+  }
+  .qc-sidebar {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: var(--qc-space-8) var(--qc-space-12);
+    border-right: 0;
+    border-bottom: 1px solid var(--qc-line-neutral-tertiary);
+  }
+  .qc-sidebar-project {
+    padding: var(--qc-space-4) var(--qc-space-8);
+  }
+  .qc-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .qc-sidebar-foot {
+    display: none;
+  }
+  .qc-page {
+    padding: var(--qc-space-16);
+  }
+}
