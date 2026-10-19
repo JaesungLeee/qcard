@@ -1,0 +1,38 @@
+/* 앱 진입점에서 한 번만 import: `import '@qcard/ui/styles.css'` */
+@import '@montage-ui/core/global.css';
+@import './generated/tokens.css';
+
+@font-face {
+  font-family: Pretendard;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/Pretendard-Regular.subset.woff2') format('woff2');
+}
+@font-face {
+  font-family: Pretendard;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/Pretendard-Medium.subset.woff2') format('woff2');
+}
+@font-face {
+  font-family: Pretendard;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/Pretendard-SemiBold.subset.woff2') format('woff2');
+}
+@font-face {
+  font-family: Pretendard;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/Pretendard-Bold.subset.woff2') format('woff2');
+}
+
+body {
+  background: var(--qc-background-neutral-primary);
+  color: var(--qc-foreground-neutral-primary);
+  font-family: var(--qc-font-sans);
+}
+
+.qc-mono {
+  font-family: var(--qc-font-mono);
+}
