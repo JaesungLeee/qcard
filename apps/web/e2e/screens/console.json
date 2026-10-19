@@ -1,0 +1,5 @@
+[
+  { "name": "console-running", "path": "/console?at=3", "waitFor": "Agent 사고 로그" },
+  { "name": "console-manual", "path": "/console?at=end", "waitFor": "수동 스텝 — 디바이스에서 직접 수행해 주세요" },
+  { "name": "console-done", "path": "/console?at=done", "waitFor": "다음 케이스 준비 중" }
+]
