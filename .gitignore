@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.turbo/
+*.log
+.DS_Store
+
+# 로컬 산출물
+apps/web/.snap/
+apps/web/test-results/
+apps/web/playwright-report/
+
+# 비밀값
+.env
+.env.*
+!.env.example

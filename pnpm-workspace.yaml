@@ -1,0 +1,12 @@
+packages:
+  - apps/*
+  - packages/*
+
+# 공개 후 2주(20160분)가 지나지 않은 버전은 설치하지 않는다.
+# Montage는 디자인 시스템(Montage for qcard)이 4.1.3에 맞춰져 있어 예외로 둔다.
+minimumReleaseAge: 20160
+minimumReleaseAgeExclude:
+  - '@montage-ui/*'
+
+onlyBuiltDependencies:
+  - esbuild

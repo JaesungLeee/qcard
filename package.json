@@ -1,0 +1,22 @@
+{
+  "name": "qcard",
+  "private": true,
+  "packageManager": "pnpm@10.34.6",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "verify": "turbo run typecheck test && node scripts/check-colors.mjs",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "tokens": "pnpm --filter @qcard/ui tokens",
+    "dev": "pnpm --filter @qcard/web dev",
+    "ui:snap": "pnpm --filter @qcard/web ui:snap",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "turbo": "2.11.7",
+    "typescript": "5.9.3",
+    "prettier": "3.9.9"
+  }
+}
