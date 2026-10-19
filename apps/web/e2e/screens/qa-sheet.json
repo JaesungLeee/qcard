@@ -1,0 +1,16 @@
+[
+  { "name": "qa-sheet-cycles", "path": "/p/haru/cycles", "waitFor": "1.3.0 (130) 1차 회귀" },
+  { "name": "qa-sheet-summary", "path": "/p/haru/cycles/cycle-130-1?tab=summary", "waitFor": "진행 매트릭스" },
+  { "name": "qa-sheet-cases", "path": "/p/haru/cycles/cycle-130-1?tab=cases", "waitFor": "TC-ONBOARDING-001" },
+  { "name": "qa-sheet-defects", "path": "/p/haru/cycles/cycle-130-1?tab=defects", "waitFor": "토스트가 겹쳐 쌓임" },
+  { "name": "qa-sheet-traceability", "path": "/p/haru/cycles/cycle-130-1?tab=traceability", "waitFor": "요구사항별 연결 케이스" },
+  { "name": "qa-sheet-env", "path": "/p/haru/cycles/cycle-130-1?tab=env", "waitFor": "서명 인증서 SHA-1" },
+  { "name": "qa-sheet-done-summary", "path": "/p/haru/cycles/cycle-121-1?tab=summary", "waitFor": "진행 매트릭스" },
+  { "name": "qa-sheet-trace-fail", "path": "/p/haru/cycles/cycle-130-1/results/TC-ONBOARDING-032/galaxy-s24-15", "waitFor": "스텝 타임라인" },
+  { "name": "qa-sheet-trace-check", "path": "/p/haru/cycles/cycle-130-1/results/TC-ONBOARDING-030/galaxy-s24-15", "waitFor": "스텝 타임라인" },
+  { "name": "qa-sheet-trace-override", "path": "/p/haru/cycles/cycle-130-1/results/TC-ONBOARDING-023/galaxy-s24-15", "waitFor": "자동 Pass 반전" },
+  { "name": "qa-sheet-trace-blocked", "path": "/p/haru/cycles/cycle-130-1/results/TC-ONBOARDING-013/pixel-8-16", "waitFor": "Blocked 사유" },
+  { "name": "qa-sheet-trace-pass", "path": "/p/haru/cycles/cycle-130-1/results/TC-ONBOARDING-024/galaxy-s24-15", "waitFor": "판정 변경 이력" },
+  { "name": "qa-sheet-trace-nt", "path": "/p/haru/cycles/cycle-130-1/results/TC-ONBOARDING-028/pixel-8-16", "waitFor": "아직 수행하지 않았습니다" },
+  { "name": "qa-sheet-trace-manual", "path": "/p/haru/cycles/cycle-130-1/results/TC-ONBOARDING-027/pixel-8-16", "waitFor": "수동 결과 입력" }
+]
