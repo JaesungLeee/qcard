@@ -1,0 +1,387 @@
+import { z } from 'zod';
+import { Verdict } from './verdict';
+
+/** 도메인 스키마 (PRD §6.4). Firestore 문서·fixture·LLM 구조화 출력이 같은 정의를 쓴다. */
+
+export const Project = z.object({
+  id: z.string(),
+  name: z.string(),
+  appName: z.string(),
+  packageName: z.string(),
+});
+export type Project = z.infer<typeof Project>;
+
+/** 원본 스펙 근거: 스펙 파일·헤딩 경로·줄 범위 (F-QD-02) */
+export const SpecRef = z.object({
+  spec: z.string(),
+  file: z.string(),
+  headingPath: z.array(z.string()),
+  lineStart: z.number(),
+  lineEnd: z.number(),
+});
+export type SpecRef = z.infer<typeof SpecRef>;
+
+/** `<스펙 이름>/FR-xxx` 또는 `<스펙 이름>/UX-xxx` */
+export const Requirement = z.object({
+  id: z.string(),
+  spec: z.string(),
+  text: z.string(),
+  sourceRef: SpecRef,
+});
+export type Requirement = z.infer<typeof Requirement>;
+
+export const CaseChange = z.enum(['new', 'changed', 'removed', 'same']);
+export type CaseChange = z.infer<typeof CaseChange>;
+export const CHANGE_LABEL: Record<CaseChange, string> = { new: '신규', changed: '변경', removed: '삭제', same: '동일' };
+
+export const TestType = z.enum(['functional', 'ui', 'exception', 'boundary', 'state', 'permission', 'compat']);
+export type TestType = z.infer<typeof TestType>;
+export const TEST_TYPE_LABEL: Record<TestType, string> = {
+  functional: '기능',
+  ui: 'UI',
+  exception: '예외',
+  boundary: '경계값',
+  state: '상태전이',
+  permission: '권한',
+  compat: '호환성',
+};
+
+export const Priority = z.enum(['high', 'medium', 'low']);
+export type Priority = z.infer<typeof Priority>;
+export const PRIORITY_LABEL: Record<Priority, string> = { high: 'High', medium: 'Medium', low: 'Low' };
+
+export const Platform = z.enum(['common', 'android', 'ios']);
+export type Platform = z.infer<typeof Platform>;
+export const PLATFORM_LABEL: Record<Platform, string> = { common: '공통', android: 'AOS', ios: 'iOS' };
+
+export const ExecMode = z.enum(['auto', 'manual']);
+export type ExecMode = z.infer<typeof ExecMode>;
+
+export const CaseStep = z.object({ text: z.string(), manual: z.boolean().default(false) });
+export type CaseStep = z.infer<typeof CaseStep>;
+
+/** 검증 포인트 (F-EX-03): QA 문서 생성 시 정의·승인된다. */
+export const PointCompare = z.enum(['text_exists', 'visible', 'not_visible', 'count', 'size_dp', 'screen', 'state']);
+export type PointCompare = z.infer<typeof PointCompare>;
+export const POINT_COMPARE_LABEL: Record<PointCompare, string> = {
+  text_exists: '텍스트 존재',
+  visible: '표시',
+  not_visible: '비표시',
+  count: '개수',
+  size_dp: '크기(dp)',
+  screen: '화면',
+  state: '앱 상태',
+};
+export const PointMethod = z.enum(['tree', 'vision']);
+export type PointMethod = z.infer<typeof PointMethod>;
+export const POINT_METHOD_LABEL: Record<PointMethod, string> = { tree: '접근성 트리', vision: '비전' };
+
+export const VerificationPoint = z.object({
+  id: z.string(),
+  target: z.string(),
+  compare: PointCompare,
+  expected: z.string(),
+  method: PointMethod,
+});
+export type VerificationPoint = z.infer<typeof VerificationPoint>;
+
+export const ApprovalStatus = z.enum(['pending', 'approved', 'rejected', 'held']);
+export type ApprovalStatus = z.infer<typeof ApprovalStatus>;
+export const APPROVAL_LABEL: Record<ApprovalStatus, string> = {
+  pending: '미승인',
+  approved: '승인',
+  rejected: '반려',
+  held: '보류',
+};
+
+export const Approval = z.object({
+  status: ApprovalStatus,
+  by: z.string().optional(),
+  at: z.string().optional(),
+  /** 승인 당시 내용 해시 (F-QD-10). 내용이 바뀌면 자동 미승인 */
+  contentHash: z.string().optional(),
+});
+export type Approval = z.infer<typeof Approval>;
+
+/** 케이스 본문 — 편집 대상 필드. `previous`는 "변경" 케이스의 이전 버전 블록(diff용). */
+export const CaseBody = z.object({
+  title: z.string(),
+  preconditions: z.array(z.string()),
+  prepFlowIds: z.array(z.string()),
+  cleanState: z.boolean(),
+  accountRole: z.string().optional(),
+  data: z.string().optional(),
+  steps: z.array(CaseStep),
+  verificationPoints: z.array(VerificationPoint),
+  priority: Priority,
+  type: TestType,
+  platform: Platform,
+  mode: ExecMode,
+});
+export type CaseBody = z.infer<typeof CaseBody>;
+
+export const TestCase = CaseBody.extend({
+  tcId: z.string(),
+  /** 출처 ID: `<스펙 이름>/TS-xxx` · `EC-xxx` */
+  sourceId: z.string(),
+  requirementIds: z.array(z.string()),
+  /** 기능(스펙) / 세부 기능(유저 플로우) */
+  feature: z.string(),
+  subFeature: z.string(),
+  sourceRef: SpecRef,
+  change: CaseChange,
+  previous: CaseBody.optional(),
+  contentHash: z.string(),
+  /** 낙관적 잠금용 버전 (F-QD-09) */
+  rev: z.number(),
+  approval: Approval,
+  questionIds: z.array(z.string()),
+  updatedBy: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+export type TestCase = z.infer<typeof TestCase>;
+
+export const SpecQuestion = z.object({
+  id: z.string(),
+  requirementId: z.string(),
+  caseIds: z.array(z.string()),
+  text: z.string(),
+  assignee: z.string(),
+  status: z.enum(['open', 'answered', 'proceed']),
+  answer: z.string().optional(),
+  comments: z.array(z.object({ by: z.string(), at: z.string(), text: z.string() })),
+});
+export type SpecQuestion = z.infer<typeof SpecQuestion>;
+
+/** 스펙 보강 제안 (F-QD-05) — 케이스가 아니다. */
+export const SpecSuggestion = z.object({
+  id: z.string(),
+  requirementId: z.string(),
+  technique: z.enum(['normal', 'negative', 'boundary', 'partition', 'state', 'role']),
+  text: z.string(),
+});
+export type SpecSuggestion = z.infer<typeof SpecSuggestion>;
+export const TECHNIQUE_LABEL: Record<SpecSuggestion['technique'], string> = {
+  normal: '정상 플로우',
+  negative: '예외/부정',
+  boundary: '경계값',
+  partition: '동등분할',
+  state: '상태 전이',
+  role: '권한/역할',
+};
+
+export const QADocument = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  appVersion: z.string(),
+  specBundleId: z.string(),
+  prevDocId: z.string().optional(),
+  createdAt: z.string(),
+  specs: z.array(z.object({ name: z.string(), feature: z.string(), file: z.string() })),
+  requirements: z.array(Requirement),
+  cases: z.array(TestCase),
+  questions: z.array(SpecQuestion),
+  suggestions: z.array(SpecSuggestion),
+});
+export type QADocument = z.infer<typeof QADocument>;
+
+export const Build = z.object({
+  id: z.string(),
+  version: z.string(),
+  buildNumber: z.number(),
+  packageName: z.string(),
+  signingSha1: z.string(),
+  uploadedAt: z.string(),
+});
+export type Build = z.infer<typeof Build>;
+
+/** 사이클 대상 디바이스: 모델 + OS 메이저 (F-CY-01) */
+export const TargetDevice = z.object({
+  id: z.string(),
+  model: z.string(),
+  osMajor: z.number(),
+  resolution: z.string(),
+  label: z.string(),
+});
+export type TargetDevice = z.infer<typeof TargetDevice>;
+
+/** 스크린샷: 실제 이미지(Storage URL) 또는 fixture용 목업 화면 키 */
+export const Screenshot = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('url'), url: z.string() }),
+  z.object({ kind: z.literal('mock'), screen: z.string(), state: z.record(z.string(), z.string()).optional() }),
+]);
+export type Screenshot = z.infer<typeof Screenshot>;
+
+/** 화면 위 사각형 (디바이스 px, 좌상단 기준) */
+export const Bounds = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() });
+export type Bounds = z.infer<typeof Bounds>;
+
+export const StepAction = z.enum([
+  'tap',
+  'input',
+  'swipe',
+  'back',
+  'home',
+  'restart',
+  'wait',
+  'env',
+  'manual',
+  'verify',
+]);
+export type StepAction = z.infer<typeof StepAction>;
+export const STEP_ACTION_LABEL: Record<StepAction, string> = {
+  tap: '탭',
+  input: '입력',
+  swipe: '스와이프',
+  back: '뒤로가기',
+  home: '홈',
+  restart: '앱 재시작',
+  wait: '대기',
+  env: '환경 조작',
+  manual: '수동',
+  verify: '검증',
+};
+
+/** 스텝 타임라인 한 줄 (F-EX-06) */
+export const ExecStep = z.object({
+  index: z.number(),
+  action: StepAction,
+  target: z.object({ label: z.string(), elementId: z.string().optional(), bounds: Bounds.optional() }).optional(),
+  /** 스와이프 시작·끝 (디바이스 px) */
+  swipe: z.object({ from: z.tuple([z.number(), z.number()]), to: z.tuple([z.number(), z.number()]) }).optional(),
+  input: z.string().optional(),
+  intent: z.string(),
+  screenshot: Screenshot,
+  videoTs: z.number(),
+  durationMs: z.number(),
+  risk: z.object({ kind: z.string(), planned: z.boolean(), approvedBy: z.string().optional() }).optional(),
+  caseStepIndex: z.number().optional(),
+});
+export type ExecStep = z.infer<typeof ExecStep>;
+
+export const PointResult = z.object({
+  pointId: z.string(),
+  expected: z.string(),
+  method: PointMethod,
+  targetElement: z.string().optional(),
+  observed: z.string(),
+  result: z.enum(['match', 'mismatch', 'unknown']),
+  evidence: Screenshot,
+  reason: z.string(),
+});
+export type PointResult = z.infer<typeof PointResult>;
+export const POINT_RESULT_LABEL: Record<PointResult['result'], string> = {
+  match: '일치',
+  mismatch: '불일치',
+  unknown: '판단불가',
+};
+
+/** 자동 확정 조건 (F-RP-03) */
+export const AutoConfirmCondition = z.enum(['all_match', 'tree_only', 'no_takeover', 'within_retry']);
+export type AutoConfirmCondition = z.infer<typeof AutoConfirmCondition>;
+export const AUTO_CONFIRM_LABEL: Record<AutoConfirmCondition, string> = {
+  all_match: '모든 검증 포인트 일치',
+  tree_only: '모든 포인트를 접근성 트리로 확인',
+  no_takeover: 'Take over·스텝 건너뛰기 없음',
+  within_retry: '자가 복구 재시도 한도 이내',
+};
+
+export const DecidedBy = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('agent') }),
+  z.object({ kind: z.literal('human'), name: z.string() }),
+]);
+export type DecidedBy = z.infer<typeof DecidedBy>;
+
+export const VerdictChange = z.object({
+  at: z.string(),
+  by: z.string(),
+  from: Verdict,
+  to: Verdict,
+  note: z.string().optional(),
+});
+export type VerdictChange = z.infer<typeof VerdictChange>;
+
+/** 케이스 × 대상 디바이스 결과 (RunCase). verdict가 nt면 아직 수행 전. */
+export const CaseResult = z.object({
+  tcId: z.string(),
+  deviceId: z.string(),
+  verdict: Verdict,
+  /** Agent가 낸 판정 (사람 확정 전 원래 값) */
+  agentVerdict: Verdict.optional(),
+  decidedBy: DecidedBy.optional(),
+  autoConfirmed: z.boolean(),
+  unmetConditions: z.array(AutoConfirmCondition),
+  blockedReason: z.string().optional(),
+  actualSummary: z.string().optional(),
+  attempts: z.number(),
+  executor: z.string().optional(),
+  executedAt: z.string().optional(),
+  osBuild: z.string().optional(),
+  defectId: z.string().optional(),
+  note: z.string().optional(),
+  runId: z.string().optional(),
+  steps: z.array(ExecStep),
+  points: z.array(PointResult),
+  history: z.array(VerdictChange),
+  tokens: z.number().optional(),
+  costUsd: z.number().optional(),
+});
+export type CaseResult = z.infer<typeof CaseResult>;
+
+export const Severity = z.enum(['critical', 'major', 'minor', 'trivial']);
+export type Severity = z.infer<typeof Severity>;
+export const SEVERITY_LABEL: Record<Severity, string> = {
+  critical: 'Critical',
+  major: 'Major',
+  minor: 'Minor',
+  trivial: 'Trivial',
+};
+
+export const Defect = z.object({
+  id: z.string(),
+  title: z.string(),
+  severity: Severity,
+  tcId: z.string(),
+  deviceId: z.string(),
+  repro: z.array(z.string()),
+  expected: z.string(),
+  actual: z.string(),
+  status: z.enum(['open', 'fixed', 'closed']),
+  trackerUrl: z.string().optional(),
+});
+export type Defect = z.infer<typeof Defect>;
+
+export const Run = z.object({
+  id: z.string(),
+  cycleId: z.string(),
+  executor: z.string(),
+  deviceId: z.string(),
+  status: z.enum(['running', 'paused', 'done', 'aborted']),
+  currentTcId: z.string().optional(),
+  startedAt: z.string(),
+});
+export type Run = z.infer<typeof Run>;
+
+export const TestCycle = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  name: z.string(),
+  docId: z.string(),
+  buildId: z.string(),
+  targets: z.array(TargetDevice),
+  period: z.object({ start: z.string(), end: z.string().optional() }),
+  serverEnv: z.enum(['dev', 'stage', 'prod']),
+  /** 케이스 스냅샷 (F-CY-02) */
+  snapshot: z.array(z.object({ tcId: z.string(), contentHash: z.string() })),
+  accounts: z.array(z.object({ role: z.string(), id: z.string() })),
+  createdBy: z.string(),
+});
+export type TestCycle = z.infer<typeof TestCycle>;
+
+/** 로컬 콘솔: Agent 사고 로그 한 줄 (F-DB-04) */
+export const ThoughtEntry = z.object({
+  at: z.number(),
+  kind: z.enum(['observe', 'decide', 'act', 'verify', 'recover', 'system']),
+  text: z.string(),
+});
+export type ThoughtEntry = z.infer<typeof ThoughtEntry>;
