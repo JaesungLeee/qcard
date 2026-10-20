@@ -12,6 +12,7 @@ import {
   neighbors,
   oneLineSummary,
   parseTab,
+  primaryDevice,
   progressMatrix,
   resultKey,
   traceability,
@@ -130,5 +131,19 @@ describe('기타', () => {
     const counts = caseVerdictCounts(d.cases, d.cycle.targets, indexResults(d.results));
     expect(counts.fail).toBe(3);
     expect(counts.check).toBe(2);
+  });
+});
+
+describe('primaryDevice', () => {
+  const r = (verdict: CaseResult['verdict']) => ({ verdict }) as CaseResult;
+  const targets = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  it('Fail > Blocked > 확인필요 순으로 확인할 칸을 고른다', () => {
+    expect(primaryDevice(targets, { a: r('check'), b: r('blocked'), c: r('fail') })).toBe('c');
+    expect(primaryDevice(targets, { a: r('check'), b: r('blocked'), c: r('pass') })).toBe('b');
+  });
+  it('문제가 없으면 수행한 칸, 모두 미수행이면 첫 디바이스', () => {
+    expect(primaryDevice(targets, { a: r('nt'), b: r('pass'), c: r('nt') })).toBe('b');
+    expect(primaryDevice(targets, { a: r('nt'), b: r('nt') })).toBe('a');
+    expect(primaryDevice([], {})).toBeUndefined();
   });
 });

@@ -1,4 +1,4 @@
-// ② 테스트 케이스 (PRD §5.10 컬럼). 결과 셀을 누르면 판정 추적 뷰로 간다.
+// ② 테스트 케이스 (PRD §5.10 컬럼). TC ID를 누르면 판정 추적 뷰, 결과 셀은 그 디바이스의 판정 추적 뷰로 간다.
 import {
   CHANGE_LABEL,
   PLATFORM_LABEL,
@@ -12,7 +12,7 @@ import { Chip, Icons, TextField, TextFieldContent, VerdictBadge, textClass, toke
 import type { CellClickedEvent, CellKeyDownEvent, ColDef, ColGroupDef, ICellRendererParams } from 'ag-grid-community';
 import { AgGridReact } from 'ag-grid-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { qcardGridTheme } from '../../components/agGrid';
 import { fmtDateTime } from '../../components/format';
 import {
@@ -21,6 +21,7 @@ import {
   matchesQuery,
   matchesVerdict,
   oneLineSummary,
+  primaryDevice,
   resultKey,
   shortId,
   VERDICTS,
@@ -47,8 +48,17 @@ function ResultCell(p: ICellRendererParams<Row>) {
   );
 }
 
-function TcIdCell(p: ICellRendererParams<Row>) {
-  return <span className={`qc-mono ${textClass('label2', 'medium')}`}>{p.value as string}</span>;
+/** TC ID는 판정 추적 뷰로 가는 링크. 디바이스는 primaryDevice로 고른다. */
+function TcIdCell(p: ICellRendererParams<Row> & { href: (row: Row) => string | undefined }) {
+  const href = p.data && p.href(p.data);
+  const label = <span className={`qc-mono ${textClass('label2', 'medium')}`}>{p.value as string}</span>;
+  if (!href) return label;
+  return (
+    // 그리드가 셀 포커스·Enter를 처리하므로 링크 자체는 탭 순서에서 뺀다
+    <Link to={href} className="qs-link" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
+      {label}
+    </Link>
+  );
 }
 
 export function CasesTab({ d, index, projectId }: SheetProps) {
@@ -84,6 +94,11 @@ export function CasesTab({ d, index, projectId }: SheetProps) {
     return present.map((x) => `${x.t.model} ${x.v}`).join(' · ');
   };
 
+  const caseHref = (row: Row) => {
+    const deviceId = primaryDevice(targets, row.results);
+    return deviceId && row.results[deviceId] ? traceUrl(projectId, d.cycle.id, row.tc.tcId, deviceId) : undefined;
+  };
+
   const columns = useMemo<(ColDef<Row> | ColGroupDef<Row>)[]>(() => {
     const classify = (c: ColDef<Row>): ColDef<Row> => ({
       filter: 'agTextColumnFilter',
@@ -99,6 +114,7 @@ export function CasesTab({ d, index, projectId }: SheetProps) {
         pinned: 'left',
         width: 168,
         cellRenderer: TcIdCell,
+        cellRendererParams: { href: caseHref },
         sort: undefined,
       },
       text({ headerName: '제목', colId: 'title', valueGetter: (p) => p.data?.tc.title, width: 260 }),
@@ -258,10 +274,16 @@ export function CasesTab({ d, index, projectId }: SheetProps) {
       },
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targets, wide]);
+  }, [targets, wide, projectId, d.cycle.id]);
 
   const open = (colId: string | undefined, row: Row | undefined) => {
-    if (!row || !colId?.startsWith(DEVICE_COL)) return;
+    if (!row) return;
+    if (colId === 'tcId') {
+      const href = caseHref(row);
+      if (href) navigate(href);
+      return;
+    }
+    if (!colId?.startsWith(DEVICE_COL)) return;
     const deviceId = colId.slice(DEVICE_COL.length);
     if (!row.results[deviceId]) return;
     navigate(traceUrl(projectId, d.cycle.id, row.tc.tcId, deviceId));
@@ -299,7 +321,7 @@ export function CasesTab({ d, index, projectId }: SheetProps) {
       </div>
       <div className={`${textClass('caption1')} qs-muted`}>
         {visible.length === d.cases.length ? `${d.cases.length}건` : `${visible.length} / ${d.cases.length}건`} · 판정
-        필터는 디바이스 중 한 칸이라도 해당하면 표시 · 결과 셀을 누르면 판정 추적 뷰
+        필터는 디바이스 중 한 칸이라도 해당하면 표시 · TC ID를 누르면 판정 추적 뷰 (결과 셀은 그 디바이스로 바로)
       </div>
       <div className="qs-grid">
         <AgGridReact<Row>

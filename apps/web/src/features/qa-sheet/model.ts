@@ -154,6 +154,22 @@ export function decidedByLabel(r: CaseResult | undefined): string {
   return r.autoConfirmed ? 'Agent(자동 확정)' : 'Agent';
 }
 
+/**
+ * TC ID에서 판정 추적 뷰를 열 때의 디바이스: 확인할 거리가 있는 칸(Fail > Blocked > 확인필요)을 먼저,
+ * 없으면 수행한 칸, 그것도 없으면 첫 대상 디바이스.
+ */
+export function primaryDevice(
+  targets: { id: string }[],
+  results: Record<string, CaseResult | undefined>,
+): string | undefined {
+  const pick = (ok: (r: CaseResult) => boolean) => targets.find((t) => results[t.id] && ok(results[t.id]!))?.id;
+  for (const v of ['fail', 'blocked', 'check'] as Verdict[]) {
+    const id = pick((r) => r.verdict === v);
+    if (id) return id;
+  }
+  return pick((r) => r.verdict !== 'nt') ?? targets[0]?.id;
+}
+
 /** 자동 Pass를 사람이 뒤집은 결과 (F-RP-07) */
 export const isAutoPassReversal = (r: CaseResult) =>
   r.agentVerdict === 'pass' && r.verdict !== 'pass' && r.decidedBy?.kind === 'human';
