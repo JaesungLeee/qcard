@@ -12,7 +12,10 @@
     "tokens": "pnpm --filter @qcard/ui tokens",
     "dev": "pnpm --filter @qcard/web dev",
     "ui:snap": "pnpm --filter @qcard/web ui:snap",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "device:record": "pnpm --filter @qcard/device record",
+    "llm:smoke": "pnpm --filter @qcard/llm smoke",
+    "device:check": "pnpm --filter @qcard/device check"
   },
   "devDependencies": {
     "turbo": "2.11.7",

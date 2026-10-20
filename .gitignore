@@ -13,3 +13,7 @@ apps/web/playwright-report/
 .env
 .env.*
 !.env.example
+
+# 실기기 녹화 (앱 화면 포함, 커밋하지 않음)
+packages/device/recordings/
+packages/agent/runs/
