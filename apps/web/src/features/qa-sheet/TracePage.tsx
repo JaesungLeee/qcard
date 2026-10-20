@@ -1,13 +1,11 @@
-// 판정 추적 뷰 (F-RP-02) + 자동 확정 조건 (F-RP-03) + 사람 확정 (F-RP-04) + 수동 결과 입력 (F-RP-05)
+// 판정 추적 뷰 (F-RP-02, 근거 띠는 EvidenceBand) + 자동 확정 조건 (F-RP-03) + 사람 확정 (F-RP-04) + 수동 결과 입력 (F-RP-05)
 import {
   PLATFORM_LABEL,
   POINT_METHOD_LABEL,
   POINT_RESULT_LABEL,
   PRIORITY_LABEL,
-  STEP_ACTION_LABEL,
   TEST_TYPE_LABEL,
   type CaseResult,
-  type ExecStep,
   type PointResult,
   type TestCase,
 } from '@qcard/shared';
@@ -33,9 +31,10 @@ import type { CycleDetail } from '../../data/api';
 import { useCycle } from '../../data/hooks';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
-import { fmtDateTime, fmtNumber, fmtTs } from '../../components/format';
+import { fmtDateTime, fmtNumber } from '../../components/format';
 import { MockScreen } from '../../mock/MockScreen';
 import { ConfirmPanel } from './ConfirmPanel';
+import { EvidenceBand } from './EvidenceBand';
 import { autoConfirmChecks, decidedByLabel, isAutoPassReversal, neighbors, resultKey, shortId } from './model';
 import { Card, KV, Mono, RunState, traceUrl } from './parts';
 import './qa-sheet.css';
@@ -80,6 +79,8 @@ function Trace({ d }: { d: CycleDetail }) {
     (x) => x.deviceId === deviceId && x.currentTcId === tcId && (x.status === 'running' || x.status === 'paused'),
   );
   const notRun = r.verdict === 'nt';
+  // 자동 실행 기록이 있으면 근거 띠, 없으면(미수행·수동 입력) 요약 카드
+  const band = !notRun && r.steps.length > 0;
 
   return (
     <>
@@ -98,6 +99,15 @@ function Trace({ d }: { d: CycleDetail }) {
         }
         actions={
           <>
+            <div style={{ width: 120 * d.cycle.targets.length, maxWidth: '100%' }}>
+              <SegmentedControl size="small" value={deviceId} onValueChange={(v) => go(tcId, v)} name="device">
+                {d.cycle.targets.map((t) => (
+                  <SegmentedControlItem key={t.id} value={t.id}>
+                    {t.model}
+                  </SegmentedControlItem>
+                ))}
+              </SegmentedControl>
+            </div>
             <Button
               size="small"
               variant="outlined"
@@ -122,74 +132,69 @@ function Trace({ d }: { d: CycleDetail }) {
         }
       />
 
-      <div className="qc-card qs-stack" style={{ gap: token('space-12') }}>
-        <div className="qs-card-head" style={{ alignItems: 'center' }}>
-          <div className="qs-row" style={{ gap: token('space-12') }}>
-            <span style={{ transform: 'scale(1.15)', transformOrigin: 'left center' }}>
-              <VerdictBadge verdict={r.verdict} />
-            </span>
-            {isAutoPassReversal(r) && (
+      {band ? (
+        <EvidenceBand key={resultKey(r.tcId, r.deviceId)} r={r} manual={manual} />
+      ) : (
+        <div className="qc-card qs-stack" style={{ gap: token('space-12') }}>
+          <div className="qs-card-head" style={{ alignItems: 'center' }}>
+            <div className="qs-row" style={{ gap: token('space-12') }}>
+              <span style={{ transform: 'scale(1.15)', transformOrigin: 'left center' }}>
+                <VerdictBadge verdict={r.verdict} />
+              </span>
+              {isAutoPassReversal(r) && (
+                <ContentBadge color="neutral" size="small" variant="outlined">
+                  자동 Pass 반전
+                </ContentBadge>
+              )}
+              {r.autoConfirmed && (
+                <ContentBadge color="neutral" size="small" variant="outlined" leadingContent={<Icons.IconCheck />}>
+                  자동 확정
+                </ContentBadge>
+              )}
               <ContentBadge color="neutral" size="small" variant="outlined">
-                자동 Pass 반전
+                {manual ? 'Manual' : 'Auto'}
               </ContentBadge>
-            )}
-            {r.autoConfirmed && (
-              <ContentBadge color="neutral" size="small" variant="outlined" leadingContent={<Icons.IconCheck />}>
-                자동 확정
-              </ContentBadge>
-            )}
-            <ContentBadge color="neutral" size="small" variant="outlined">
-              {manual ? 'Manual' : 'Auto'}
-            </ContentBadge>
+            </div>
           </div>
-          <div style={{ width: 120 * d.cycle.targets.length, maxWidth: '100%' }}>
-          <SegmentedControl size="small" value={deviceId} onValueChange={(v) => go(tcId, v)} name="device">
-            {d.cycle.targets.map((t) => (
-              <SegmentedControlItem key={t.id} value={t.id}>
-                {t.model}
-              </SegmentedControlItem>
-            ))}
-          </SegmentedControl>
-          </div>
+          {!notRun && (<KV
+            items={[
+              ['판정 주체', decidedByLabel(r)],
+              [
+                'Agent 판정',
+                manual ? '— (수동 케이스)' : r.agentVerdict ? <VerdictBadge verdict={r.agentVerdict} /> : '—',
+              ],
+              ['시도', r.attempts > 0 ? `${r.attempts}회${r.attempts > 1 ? ` (재시도 ${r.attempts - 1}회)` : ''}` : '—'],
+              ['수행', r.executedAt ? `${fmtDateTime(r.executedAt)} · ${r.executor ?? ''}` : '—'],
+              ['OS 빌드', r.osBuild ? <Mono>{r.osBuild}</Mono> : '—'],
+              ['결함', r.defectId ? <Mono>{r.defectId}</Mono> : '—'],
+              ...(r.tokens
+                ? ([['토큰 · 비용', `${fmtNumber(r.tokens)} · $${r.costUsd?.toFixed(3) ?? '0'}`]] as [string, string][])
+                : []),
+            ]}
+          />)}
+          {notRun && (
+            <span className={`${textClass('label1')} qs-muted`}>
+              {manual ? '수동 케이스 — 아직 결과를 입력하지 않았습니다.' : '아직 수행하지 않은 칸입니다.'}
+            </span>
+          )}
+          {r.blockedReason && (
+            <SectionMessage variant="negative" description={r.blockedReason}>
+              Blocked 사유
+            </SectionMessage>
+          )}
+          {r.actualSummary && (
+            <SectionMessage variant={r.verdict === 'fail' ? 'negative' : 'info'} description={r.actualSummary}>
+              실제 결과
+            </SectionMessage>
+          )}
+          {r.note && (
+            <span className={`${textClass('label1')} qs-muted`}>
+              <span className="qs-faint">비고 </span>
+              {r.note}
+            </span>
+          )}
         </div>
-        {!notRun && (<KV
-          items={[
-            ['판정 주체', decidedByLabel(r)],
-            [
-              'Agent 판정',
-              manual ? '— (수동 케이스)' : r.agentVerdict ? <VerdictBadge verdict={r.agentVerdict} /> : '—',
-            ],
-            ['시도', r.attempts > 0 ? `${r.attempts}회${r.attempts > 1 ? ` (재시도 ${r.attempts - 1}회)` : ''}` : '—'],
-            ['수행', r.executedAt ? `${fmtDateTime(r.executedAt)} · ${r.executor ?? ''}` : '—'],
-            ['OS 빌드', r.osBuild ? <Mono>{r.osBuild}</Mono> : '—'],
-            ['결함', r.defectId ? <Mono>{r.defectId}</Mono> : '—'],
-            ...(r.tokens
-              ? ([['토큰 · 비용', `${fmtNumber(r.tokens)} · $${r.costUsd?.toFixed(3) ?? '0'}`]] as [string, string][])
-              : []),
-          ]}
-        />)}
-        {notRun && (
-          <span className={`${textClass('label1')} qs-muted`}>
-            {manual ? '수동 케이스 — 아직 결과를 입력하지 않았습니다.' : '아직 수행하지 않은 칸입니다.'}
-          </span>
-        )}
-        {r.blockedReason && (
-          <SectionMessage variant="negative" description={r.blockedReason}>
-            Blocked 사유
-          </SectionMessage>
-        )}
-        {r.actualSummary && (
-          <SectionMessage variant={r.verdict === 'fail' ? 'negative' : 'info'} description={r.actualSummary}>
-            실제 결과
-          </SectionMessage>
-        )}
-        {r.note && (
-          <span className={`${textClass('label1')} qs-muted`}>
-            <span className="qs-faint">비고 </span>
-            {r.note}
-          </span>
-        )}
-      </div>
+      )}
 
       <div className="qs-trace">
         <div className="qs-stack">
@@ -217,10 +222,7 @@ function Trace({ d }: { d: CycleDetail }) {
               수동 케이스 · 아직 결과가 없습니다
             </SectionMessage>
           ) : (
-            <>
-              <Timeline steps={r.steps} />
-              {r.points.length > 0 && <PointsCard points={r.points} />}
-            </>
+            r.points.length > 0 && <PointsCard points={r.points} />
           )}
         </div>
 
@@ -290,53 +292,6 @@ function CaseCard({ tc }: { tc: TestCase }) {
           ['기능 / 세부 기능', `${tc.feature} / ${tc.subFeature}`],
         ]}
       />
-    </Card>
-  );
-}
-
-function Timeline({ steps }: { steps: ExecStep[] }) {
-  return (
-    <Card
-      title="스텝 타임라인"
-      actions={
-        <span className={`${textClass('label2')} qs-muted`}>{steps.length}스텝 · 화면은 액션 직전 스크린샷</span>
-      }
-    >
-      <ol className="qs-steps" style={{ listStyle: 'none', margin: 0 }} aria-label="스텝">
-        {steps.map((s) => (
-          <li key={s.index} className="qs-step">
-            <div className="qs-row" style={{ justifyContent: 'space-between' }}>
-              <span className="qs-row" style={{ gap: token('space-4') }}>
-                <span className={`${textClass('label2', 'bold')} qs-big`}>{s.index}</span>
-                <ContentBadge color="neutral" size="xsmall" variant={s.action === 'verify' ? 'solid' : 'outlined'}>
-                  {STEP_ACTION_LABEL[s.action]}
-                </ContentBadge>
-              </span>
-              <Mono className={`${textClass('caption1')} qs-faint`}>{fmtTs(s.videoTs)}</Mono>
-            </div>
-            <MockScreen
-              screenshot={s.screenshot}
-              width={150}
-              action={s}
-              label={`스텝 ${s.index} ${STEP_ACTION_LABEL[s.action]} 직전 화면`}
-            />
-            <span className={textClass('label2', 'medium')}>{s.intent}</span>
-            {s.target && (
-              <span className={`${textClass('caption1')} qs-muted`}>
-                대상 {s.target.label}
-                {s.target.elementId && <Mono> · {s.target.elementId}</Mono>}
-              </span>
-            )}
-            {s.input && <span className={`${textClass('caption1')} qs-muted`}>입력 “{s.input}”</span>}
-            {s.risk && (
-              <span className={`${textClass('caption1')}`} style={{ color: token('qcard-verdict-blocked-fg') }}>
-                위험 액션 {s.risk.kind}
-                {s.risk.approvedBy ? ` · 승인 ${s.risk.approvedBy}` : ''}
-              </span>
-            )}
-          </li>
-        ))}
-      </ol>
     </Card>
   );
 }

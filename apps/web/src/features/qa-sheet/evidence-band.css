@@ -1,0 +1,237 @@
+/* 판정 추적 뷰의 근거 띠 (테스트 결과 → 검증 증거 → 테스트 동작 흐름). 색은 --qc-* 토큰만 쓴다. */
+
+.et-band {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: var(--qc-space-16);
+  align-items: stretch;
+}
+.et-flow-card {
+  grid-column: 1 / -1;
+}
+@media (min-width: 1600px) {
+  .et-band {
+    grid-template-columns: 320px 280px minmax(0, 1fr);
+  }
+  .et-flow-card {
+    grid-column: auto;
+  }
+}
+@media (max-width: 760px) {
+  .et-band {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.et-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-12);
+  min-width: 0;
+}
+.et-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-6);
+}
+.et-actual {
+  margin: 0;
+  padding: var(--qc-space-10) var(--qc-space-12);
+  border-radius: var(--qc-radius-8);
+  background: var(--qc-surface-neutral-tertiary);
+  border-left: 3px solid var(--qc-line-neutral-primary);
+}
+.et-actual[data-v='pass'] {
+  border-left-color: var(--qc-qcard-verdict-pass-fg);
+}
+.et-actual[data-v='fail'] {
+  border-left-color: var(--qc-qcard-verdict-fail-fg);
+}
+.et-actual[data-v='blocked'] {
+  border-left-color: var(--qc-qcard-verdict-blocked-fg);
+}
+.et-actual[data-v='check'] {
+  border-left-color: var(--qc-qcard-verdict-check-fg);
+}
+
+/* 검증 근거: 누르면 증거 패널이 그 포인트의 증거로 바뀐다 */
+.et-reasons {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-6);
+}
+.et-reason {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-4);
+  padding: var(--qc-space-8) var(--qc-space-10);
+  border-radius: var(--qc-radius-8);
+  border: 1px solid var(--qc-line-neutral-tertiary);
+  cursor: pointer;
+  color: var(--qc-foreground-neutral-primary);
+}
+.et-reason:hover {
+  background: var(--qc-surface-neutral-tertiary);
+}
+.et-reason[aria-pressed='true'] {
+  border-color: var(--qc-line-brand-primary);
+  background: var(--qc-surface-brand-subtle);
+}
+.et-reason:focus-visible,
+.et-shot:focus-visible {
+  outline: 3px solid var(--qc-line-brand-focus);
+  outline-offset: 2px;
+}
+.et-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qc-space-2);
+  padding: var(--qc-space-2) var(--qc-space-6);
+  border-radius: var(--qc-radius-4);
+  flex: none;
+}
+.et-chip svg {
+  width: 12px;
+  height: 12px;
+}
+
+.et-meta {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--qc-space-4) var(--qc-space-12);
+  margin: auto 0 0;
+  padding-top: var(--qc-space-12);
+  border-top: 1px solid var(--qc-line-neutral-tertiary);
+  font-size: 13px;
+  line-height: 18px;
+}
+.et-meta dt {
+  color: var(--qc-foreground-neutral-tertiary);
+}
+.et-meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 검증 증거 */
+.et-stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding: var(--qc-space-8) 0;
+  border-radius: var(--qc-radius-8);
+  background: var(--qc-surface-neutral-tertiary);
+}
+.et-video-step {
+  position: absolute;
+  left: var(--qc-space-8);
+  top: var(--qc-space-8);
+  padding: var(--qc-space-2) var(--qc-space-8);
+  border-radius: var(--qc-radius-full);
+  background: var(--qc-surface-neutral-inverse);
+  color: var(--qc-foreground-neutral-inverse);
+}
+.et-player {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--qc-space-8);
+}
+.et-track {
+  position: relative;
+  min-width: 0;
+}
+.et-track input {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--qc-surface-brand-primary);
+}
+.et-ticks {
+  position: relative;
+  height: 6px;
+}
+.et-ticks > span {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 6px;
+  background: var(--qc-line-neutral-primary);
+}
+
+/* 테스트 동작 흐름 */
+.et-flow {
+  display: flex;
+  gap: var(--qc-space-12);
+  overflow-x: auto;
+  margin: 0;
+  padding: 0 0 var(--qc-space-8);
+  list-style: none;
+}
+.et-step {
+  flex: none;
+  width: 156px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-8);
+  padding: var(--qc-space-10);
+  border-radius: var(--qc-radius-12);
+  background: var(--qc-surface-neutral-tertiary);
+}
+.et-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--qc-space-4);
+  border-radius: var(--qc-radius-full);
+  background: var(--qc-surface-brand-primary);
+  color: var(--qc-static-white);
+}
+.et-shot {
+  all: unset;
+  align-self: center;
+  border-radius: var(--qc-radius-8);
+  cursor: pointer;
+  box-shadow: 0 0 0 2px transparent;
+}
+.et-shot[aria-pressed='true'] {
+  box-shadow: 0 0 0 3px var(--qc-line-brand-primary);
+}
+.et-intent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-2);
+  padding: var(--qc-space-6) var(--qc-space-8);
+  border-radius: var(--qc-radius-8);
+  background: var(--qc-surface-brand-subtle);
+}
+.et-intent-label {
+  color: var(--qc-foreground-brand-primary);
+}
+.et-target {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-2);
+  overflow-wrap: anywhere;
+}
+.et-final {
+  width: 188px;
+  background: var(--qc-surface-neutral-primary);
+  box-shadow: inset 0 0 0 1px var(--qc-line-neutral-secondary);
+}
+.et-why {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-4);
+  padding: var(--qc-space-8) var(--qc-space-10);
+  border-radius: var(--qc-radius-8);
+  background: var(--qc-surface-neutral-inverse);
+  color: var(--qc-foreground-neutral-inverse);
+}
