@@ -1,14 +1,14 @@
-import type { PrepFlow } from '@qcard/fixtures';
 import {
+  type CaseBody,
   PLATFORM_LABEL,
   POINT_COMPARE_LABEL,
   POINT_METHOD_LABEL,
-  PRIORITY_LABEL,
-  TEST_TYPE_LABEL,
-  type CaseBody,
   type PointCompare,
   type PointMethod,
+  type PrepFlow,
+  PRIORITY_LABEL,
   type QADocument,
+  TEST_TYPE_LABEL,
   type TestCase,
   type VerificationPoint,
 } from '@qcard/shared';
@@ -339,7 +339,7 @@ export function CaseEditForm({
                 </IconButton>
               </div>
               <TextArea
- width="100%"
+                width="100%"
                 aria-label={`단계 ${i + 1}`}
                 minRows={1}
                 maxRows={6}
@@ -411,7 +411,7 @@ export function CaseEditForm({
                 </SegmentedControl>
               </div>
               <TextArea
- width="100%"
+                width="100%"
                 aria-label={`검증 포인트 ${i + 1} 기대값`}
                 placeholder="기대값"
                 minRows={1}

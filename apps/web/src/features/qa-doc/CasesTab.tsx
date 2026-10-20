@@ -1,5 +1,4 @@
-import type { PrepFlow } from '@qcard/fixtures';
-import { CHANGE_LABEL, PRIORITY_LABEL, type QADocument, type TestCase } from '@qcard/shared';
+import { CHANGE_LABEL, type PrepFlow, PRIORITY_LABEL, type QADocument, type TestCase } from '@qcard/shared';
 import { Button, Checkbox, Chip, Icons, TextField, TextFieldContent, textClass, token } from '@qcard/ui';
 import type {
   CellClickedEvent,

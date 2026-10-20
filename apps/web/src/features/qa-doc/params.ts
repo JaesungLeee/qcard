@@ -1,4 +1,4 @@
-import type { PrepFlow } from '@qcard/fixtures';
+import type { PrepFlow } from '@qcard/shared';
 import { useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 

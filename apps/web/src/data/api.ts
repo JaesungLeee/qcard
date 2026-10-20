@@ -1,7 +1,8 @@
-import type { ConsoleSession, PrepFlow } from '@qcard/fixtures';
+import type { ConsoleSession } from '@qcard/fixtures';
 import type {
   Build,
   CaseBody,
+  PrepFlow,
   CaseResult,
   Defect,
   Project,

@@ -6,6 +6,7 @@ import type {
   Defect,
   ExecStep,
   PointResult,
+  PrepFlow,
   Project,
   QADocument,
   Requirement,
@@ -83,13 +84,6 @@ const shot = (screen: string, state?: Record<string, string>): Screenshot => ({ 
 
 // ---------------------------------------------------------------- 준비 플로우
 
-export type PrepFlow = {
-  id: string;
-  name: string;
-  kind: 'login' | 'data_state' | 'env';
-  check: string;
-  steps: string[];
-};
 
 export const PREP_FLOWS: PrepFlow[] = [
   {

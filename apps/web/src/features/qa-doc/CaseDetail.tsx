@@ -1,11 +1,11 @@
-import type { PrepFlow } from '@qcard/fixtures';
 import {
   PLATFORM_LABEL,
   POINT_COMPARE_LABEL,
   POINT_METHOD_LABEL,
+  type PrepFlow,
   PRIORITY_LABEL,
-  TEST_TYPE_LABEL,
   type QADocument,
+  TEST_TYPE_LABEL,
   type TestCase,
 } from '@qcard/shared';
 import { Button, IconButton, Icons, SectionMessage, textClass, token } from '@qcard/ui';

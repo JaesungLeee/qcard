@@ -85,6 +85,16 @@ export const VerificationPoint = z.object({
 });
 export type VerificationPoint = z.infer<typeof VerificationPoint>;
 
+/** 준비 플로우 (F-PF-01): 공통 사전조건. env는 코드가 수행(앱 데이터 초기화 + 실행), 나머지는 Agent가 UI로 수행 */
+export const PrepFlow = z.object({
+  id: z.string(),
+  name: z.string(),
+  kind: z.enum(['login', 'data_state', 'env']),
+  check: z.string(),
+  steps: z.array(z.string()),
+});
+export type PrepFlow = z.infer<typeof PrepFlow>;
+
 export const ApprovalStatus = z.enum(['pending', 'approved', 'rejected', 'held']);
 export type ApprovalStatus = z.infer<typeof ApprovalStatus>;
 export const APPROVAL_LABEL: Record<ApprovalStatus, string> = {
@@ -205,9 +215,9 @@ export const TargetDevice = z.object({
 });
 export type TargetDevice = z.infer<typeof TargetDevice>;
 
-/** 스크린샷: 실제 이미지(Storage URL) 또는 fixture용 목업 화면 키 */
+/** 스크린샷: 실제 이미지(Storage URL, w·h는 디바이스 px) 또는 fixture용 목업 화면 키 */
 export const Screenshot = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('url'), url: z.string() }),
+  z.object({ kind: z.literal('url'), url: z.string(), w: z.number().optional(), h: z.number().optional() }),
   z.object({ kind: z.literal('mock'), screen: z.string(), state: z.record(z.string(), z.string()).optional() }),
 ]);
 export type Screenshot = z.infer<typeof Screenshot>;
@@ -264,6 +274,8 @@ export const PointResult = z.object({
   expected: z.string(),
   method: PointMethod,
   targetElement: z.string().optional(),
+  /** 대상 요소 위치 (증거 화면 위 강조용) */
+  targetBounds: Bounds.optional(),
   observed: z.string(),
   result: z.enum(['match', 'mismatch', 'unknown']),
   evidence: Screenshot,
@@ -375,6 +387,8 @@ export const TestCycle = z.object({
   snapshot: z.array(z.object({ tcId: z.string(), contentHash: z.string() })),
   accounts: z.array(z.object({ role: z.string(), id: z.string() })),
   createdBy: z.string(),
+  /** local_run: 호스트에서 돌린 실행 결과를 사이클로 묶어 보여 주는 것 (개발용) */
+  origin: z.enum(['cycle', 'local_run']).optional(),
 });
 export type TestCycle = z.infer<typeof TestCycle>;
 

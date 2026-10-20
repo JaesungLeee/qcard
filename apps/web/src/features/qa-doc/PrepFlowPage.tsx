@@ -1,5 +1,4 @@
-import type { PrepFlow } from '@qcard/fixtures';
-import type { QADocument, TestCase } from '@qcard/shared';
+import type { PrepFlow, QADocument, TestCase } from '@qcard/shared';
 import { Button, Icons, textClass, token } from '@qcard/ui';
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router';
@@ -76,7 +75,8 @@ function FlowCards({ flows, doc, projectId }: { flows: PrepFlow[]; doc?: QADocum
 
             <div className="qd-block">
               <h3 className={`${textClass('label2', 'medium')} qd-block-title`}>확인 조건</h3>
-              <div className={`${textClass('label1')} qd-source`}><span>
+              <div className={`${textClass('label1')} qd-source`}>
+                <span>
                   <RichText text={f.check} />
                 </span>
               </div>
