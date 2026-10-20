@@ -18,7 +18,13 @@ export function CycleListPage() {
         title="테스트 사이클"
         meta="QA 문서 버전 + 빌드 + 대상 디바이스로 묶은 실행 단위. 여러 실행자의 Run 결과가 한 사이클로 모입니다."
         actions={
-          <Button variant="solid" color="primary" leadingContent={<Icons.IconPlus />} disabled title="백엔드 연결 후 지원합니다">
+          <Button
+            variant="solid"
+            color="primary"
+            leadingContent={<Icons.IconPlus />}
+            disabled
+            title="백엔드 연결 후 지원합니다"
+          >
             사이클 만들기
           </Button>
         }
@@ -51,15 +57,27 @@ function CycleCard({ s, projectId }: { s: CycleSummary; projectId: string }) {
   const { cycle, build } = s;
   const completed = Boolean(cycle.period.end);
   const progress = s.total ? s.done / s.total : 0;
+  // 호스트에서 돌린 실행을 묶은 것: 빌드 대신 설치된 앱, 진행 상태 대신 "로컬 실행"
+  const local = cycle.origin === 'local_run';
   const deviceLabel = (id: string) => cycle.targets.find((d) => d.id === id)?.label ?? id;
   return (
     <Link to={`/p/${projectId}/cycles/${cycle.id}`} className="qc-card qs-cycle">
       <div className="qs-card-head" style={{ alignItems: 'center' }}>
         <div className="qs-row" style={{ gap: token('space-10') }}>
           <h2 className={textClass('headline2', 'bold')}>{cycle.name}</h2>
-          <ContentBadge size="small" variant={completed ? 'outlined' : 'solid'} color={completed ? 'neutral' : 'accent'}>
-            {completed ? '완료' : '진행 중'}
-          </ContentBadge>
+          {local ? (
+            <ContentBadge size="small" variant="outlined" color="neutral" leadingContent={<Icons.IconPhone />}>
+              로컬 실행
+            </ContentBadge>
+          ) : (
+            <ContentBadge
+              size="small"
+              variant={completed ? 'outlined' : 'solid'}
+              color={completed ? 'neutral' : 'accent'}
+            >
+              {completed ? '완료' : '진행 중'}
+            </ContentBadge>
+          )}
         </div>
         <span className={`qs-row ${textClass('label2', 'medium')} qs-muted`} style={{ gap: token('space-2') }}>
           QA 시트 열기
@@ -68,17 +86,26 @@ function CycleCard({ s, projectId }: { s: CycleSummary; projectId: string }) {
       </div>
 
       <div className={`qs-row ${textClass('label1')} qs-muted`} style={{ columnGap: token('space-16') }}>
-        <span>
-          빌드{' '}
-          <b className="qs-big" style={{ color: token('foreground-neutral-primary') }}>
-            {build.version} ({build.buildNumber})
-          </b>
-        </span>
+        {local ? (
+          <span>
+            설치된 앱{' '}
+            <b style={{ color: token('foreground-neutral-primary') }}>
+              <Mono>{build.packageName}</Mono>
+            </b>
+          </span>
+        ) : (
+          <span>
+            빌드{' '}
+            <b className="qs-big" style={{ color: token('foreground-neutral-primary') }}>
+              {build.version} ({build.buildNumber})
+            </b>
+          </span>
+        )}
         <span>
           QA 문서 <b style={{ color: token('foreground-neutral-primary') }}>v{s.docVersion}</b>
         </span>
         <span>기간 {periodLabel(cycle.period)}</span>
-        <span>서버 {SERVER_ENV_LABEL[cycle.serverEnv]}</span>
+        {!local && <span>서버 {SERVER_ENV_LABEL[cycle.serverEnv]}</span>}
       </div>
 
       <div className="qs-cycle-body">
@@ -98,7 +125,13 @@ function CycleCard({ s, projectId }: { s: CycleSummary; projectId: string }) {
           <span className={`${textClass('title3', 'bold')} qs-big`}>{fmtPercent(s.passRate)}</span>
           <div className="qs-row" style={{ gap: token('space-4') }}>
             {cycle.targets.map((d) => (
-              <ContentBadge key={d.id} size="small" variant="outlined" color="neutral" leadingContent={<Icons.IconPhone />}>
+              <ContentBadge
+                key={d.id}
+                size="small"
+                variant="outlined"
+                color="neutral"
+                leadingContent={<Icons.IconPhone />}
+              >
                 {d.label}
               </ContentBadge>
             ))}
@@ -113,7 +146,11 @@ function CycleCard({ s, projectId }: { s: CycleSummary; projectId: string }) {
             </span>
           ) : (
             s.activeRuns.map((r) => (
-              <div key={r.id} className={`qs-run ${textClass('label2')}`} style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+              <div
+                key={r.id}
+                className={`qs-run ${textClass('label2')}`}
+                style={{ flexDirection: 'column', alignItems: 'flex-start' }}
+              >
                 <span className="qs-row" style={{ gap: token('space-6') }}>
                   <RunState paused={r.status === 'paused'} />
                   <b>{r.executor}</b>

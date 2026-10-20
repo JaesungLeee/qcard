@@ -1,0 +1,101 @@
+{
+  "tcId": "TC-ONBOARDING-003",
+  "deviceId": "galaxy-s24-15",
+  "autoConfirmed": false,
+  "unmetConditions": [
+    "all_match"
+  ],
+  "attempts": 1,
+  "executor": "agent",
+  "executedAt": "2026-10-20T00:00:00.000Z",
+  "osBuild": "Android 15",
+  "steps": [
+    {
+      "action": "input",
+      "target": {
+        "label": "습관 이름",
+        "elementId": "room_name",
+        "bounds": {
+          "x": 60,
+          "y": 480,
+          "w": 960,
+          "h": 150
+        }
+      },
+      "input": "콩콩이",
+      "intent": "사전조건: 방 정보 입력",
+      "screenshot": {
+        "kind": "mock",
+        "screen": "room-create"
+      },
+      "durationMs": 0,
+      "index": 0,
+      "videoTs": 0,
+      "caseStepIndex": 0
+    },
+    {
+      "action": "tap",
+      "target": {
+        "label": "방 만들기",
+        "elementId": "room_create",
+        "bounds": {
+          "x": 60,
+          "y": 2160,
+          "w": 960,
+          "h": 160
+        }
+      },
+      "intent": "방 만들기",
+      "screenshot": {
+        "kind": "mock",
+        "screen": "room-create"
+      },
+      "durationMs": 0,
+      "index": 1,
+      "videoTs": 500,
+      "caseStepIndex": 0
+    }
+  ],
+  "points": [
+    {
+      "pointId": "TC-ONBOARDING-003-P1",
+      "expected": "메이트 초대 스텝이 열린다",
+      "method": "tree",
+      "evidence": {
+        "kind": "mock",
+        "screen": "invite"
+      },
+      "result": "match",
+      "observed": "찾은 요소: id=invite_title \"함께할 메이트를 불러볼까요?\"",
+      "reason": "요소가 화면에 있다 — 마지막 관찰(6)에 '함께할 메이트를 불러볼까요?' 제목(invite_title)과 초대 버튼들이 있어 메이트 초대 스텝 화면임을 보여 준다.",
+      "targetElement": "invite_title",
+      "targetBounds": {
+        "x": 60,
+        "y": 320,
+        "w": 960,
+        "h": 120
+      }
+    },
+    {
+      "pointId": "TC-ONBOARDING-003-P2",
+      "expected": "방금 만든 방의 초대 링크가 준비된다",
+      "method": "tree",
+      "evidence": {
+        "kind": "mock",
+        "screen": "invite"
+      },
+      "observed": "화면으로 알 수 없음",
+      "result": "unknown",
+      "reason": "초대 링크 자체나 링크 생성 완료를 나타내는 텍스트는 어느 관찰에도 없고 '초대 링크 복사' 버튼만 있다. 이것만으로 방금 만든 방의 링크가 준비됐는지는 알 수 없다."
+    }
+  ],
+  "history": [],
+  "decidedBy": {
+    "kind": "agent"
+  },
+  "tokens": 32642,
+  "costUsd": 0.026702800000000002,
+  "verdict": "check",
+  "agentVerdict": "check",
+  "actualSummary": "방금 만든 방의 초대 링크가 준비된다 → 화면으로 알 수 없음"
+}

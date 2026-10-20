@@ -12,5 +12,9 @@
   { "name": "qa-sheet-trace-blocked", "path": "/p/haru/cycles/cycle-130-1/results/TC-ONBOARDING-013/pixel-8-16", "waitFor": "Blocked 사유" },
   { "name": "qa-sheet-trace-pass", "path": "/p/haru/cycles/cycle-130-1/results/TC-ONBOARDING-024/galaxy-s24-15", "waitFor": "판정 변경 이력" },
   { "name": "qa-sheet-trace-nt", "path": "/p/haru/cycles/cycle-130-1/results/TC-ONBOARDING-028/pixel-8-16", "waitFor": "아직 수행하지 않았습니다" },
-  { "name": "qa-sheet-trace-manual", "path": "/p/haru/cycles/cycle-130-1/results/TC-ONBOARDING-027/pixel-8-16", "waitFor": "수동 결과 입력" }
+  { "name": "qa-sheet-trace-manual", "path": "/p/haru/cycles/cycle-130-1/results/TC-ONBOARDING-027/pixel-8-16", "waitFor": "수동 결과 입력" },
+  { "name": "qa-sheet-local-cases", "path": "/p/haru/cycles/run-2026-10-20T09-00-00-000Z?tab=cases", "waitFor": "TC-ONBOARDING-004" },
+  { "name": "qa-sheet-local-summary", "path": "/p/haru/cycles/run-2026-10-20T09-00-00-000Z?tab=summary", "waitFor": "진행 매트릭스" },
+  { "name": "qa-sheet-local-trace-fail", "path": "/p/haru/cycles/run-2026-10-20T09-00-00-000Z/results/TC-ONBOARDING-001/galaxy-s24-15", "waitFor": "테스트 동작 흐름" },
+  { "name": "qa-sheet-local-trace-pass", "path": "/p/haru/cycles/run-2026-10-20T09-00-00-000Z/results/TC-ONBOARDING-004/galaxy-s24-15", "waitFor": "테스트 동작 흐름" }
 ]

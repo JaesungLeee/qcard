@@ -52,6 +52,7 @@ function Sheet({ d, projectId }: { d: CycleDetail; projectId: string }) {
     { value: 'env', label: '환경' },
   ];
 
+  const local = d.cycle.origin === 'local_run';
   return (
     <>
       <PageHeader
@@ -59,12 +60,16 @@ function Sheet({ d, projectId }: { d: CycleDetail; projectId: string }) {
         title={d.cycle.name}
         meta={
           <span className="qs-row" style={{ columnGap: token('space-16'), rowGap: token('space-2') }}>
-            <span>
-              빌드 {d.build.version} ({d.build.buildNumber})
-            </span>
+            {local ? (
+              <span>로컬 실행 · 설치된 앱 {d.build.packageName}</span>
+            ) : (
+              <span>
+                빌드 {d.build.version} ({d.build.buildNumber})
+              </span>
+            )}
             <span>QA 문서 v{d.doc.appVersion}</span>
             <span>기간 {periodLabel(d.cycle.period)}</span>
-            <span>서버 {SERVER_ENV_LABEL[d.cycle.serverEnv]}</span>
+            {!local && <span>서버 {SERVER_ENV_LABEL[d.cycle.serverEnv]}</span>}
             {check > 0 && <span style={{ color: token('qcard-verdict-check-fg') }}>확인필요 {check}칸</span>}
           </span>
         }

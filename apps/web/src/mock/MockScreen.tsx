@@ -6,7 +6,7 @@ import { Fragment, type CSSProperties, type ReactNode } from 'react';
 
 /**
  * 디바이스 스크린샷 자리. fixture의 목업 화면(`kind: 'mock'`)은 요소 배치대로 그리고,
- * 실제 이미지(`kind: 'url'`)는 그대로 보여준다. 디바이스 화면은 qcard 테마와 무관해야 하므로
+ * 실제 이미지(`kind: 'url'`)는 그대로 보여준다. 실제 이미지는 w·h(디바이스 px)가 있으면 그 비율을 쓴다. 디바이스 화면은 qcard 테마와 무관해야 하므로
  * 테마에 따라 바뀌지 않는 atomic·static 토큰만 쓴다.
  *
  * `action`을 주면 액션 표시(탭 위치·대상 박스·스와이프 화살표·액션 배지)를 겹쳐 그린다 (F-EX-06, F-DB-03).
@@ -27,8 +27,25 @@ export function MockScreen({
   /** 스크린 리더용 설명 */
   label?: string;
 }) {
-  const scale = width / DEVICE_SIZE.w;
-  const height = Math.round(DEVICE_SIZE.h * scale);
+  const size =
+    screenshot.kind === 'url' && screenshot.w && screenshot.h ? { w: screenshot.w, h: screenshot.h } : DEVICE_SIZE;
+  const scale = width / size.w;
+  const height = Math.round(size.h * scale);
+  // 액션 표시·강조 박스는 디바이스 좌표로 그린 뒤 화면 크기에 맞춰 줄인다
+  const overlay = (
+    <>
+      {highlight && <Box bounds={highlight} color={token('atomic-orange-50')} dashed />}
+      {action && <ActionOverlay step={action} size={size} />}
+    </>
+  );
+  const layer: CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    width: size.w,
+    height: size.h,
+    transform: `scale(${scale})`,
+    transformOrigin: '0 0',
+  };
   const def = screenshot.kind === 'mock' ? SCREENS[screenshot.screen] : undefined;
   return (
     <div
@@ -47,19 +64,12 @@ export function MockScreen({
       }}
     >
       {screenshot.kind === 'url' ? (
-        <img src={screenshot.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <>
+          <img src={screenshot.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          {(highlight || action) && <div style={{ ...layer, pointerEvents: 'none' }}>{overlay}</div>}
+        </>
       ) : (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: DEVICE_SIZE.w,
-            height: DEVICE_SIZE.h,
-            transform: `scale(${scale})`,
-            transformOrigin: '0 0',
-            fontFamily: 'var(--qc-font-sans)',
-          }}
-        >
+        <div style={{ ...layer, fontFamily: 'var(--qc-font-sans)' }}>
           {def?.elements.map((el) =>
             el.kind === 'sheet' && def.dim ? (
               <Fragment key={el.id}>
@@ -83,8 +93,7 @@ export function MockScreen({
               알 수 없는 화면: {screenshot.kind === 'mock' ? screenshot.screen : ''}
             </Center>
           )}
-          {highlight && <Box bounds={highlight} color={token('atomic-orange-50')} dashed />}
-          {action && <ActionOverlay step={action} />}
+          {overlay}
         </div>
       )}
     </div>
@@ -318,7 +327,7 @@ function Box({ bounds, color, dashed }: { bounds: Bounds; color: string; dashed?
 }
 
 /** 액션 표시. 디바이스 좌표 위에 그린다. */
-export function ActionOverlay({ step }: { step: ExecStep }) {
+export function ActionOverlay({ step, size = DEVICE_SIZE }: { step: ExecStep; size?: { w: number; h: number } }) {
   const color = token('atomic-red-orange-50');
   const b = step.target?.bounds;
   const cx = b ? b.x + b.w / 2 : 0;
@@ -343,11 +352,7 @@ export function ActionOverlay({ step }: { step: ExecStep }) {
         />
       )}
       {step.swipe && (
-        <svg
-          width={DEVICE_SIZE.w}
-          height={DEVICE_SIZE.h}
-          style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
-        >
+        <svg width={size.w} height={size.h} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
           <defs>
             <marker
               id={`arrow-${step.index}`}
@@ -379,7 +384,7 @@ export function ActionOverlay({ step }: { step: ExecStep }) {
             position: 'absolute',
             left: 60,
             right: 60,
-            top: 1060,
+            top: size.h * 0.44,
             padding: '36px 48px',
             borderRadius: 36,
             background: color,

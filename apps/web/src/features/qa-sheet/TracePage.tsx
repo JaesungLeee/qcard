@@ -156,22 +156,30 @@ function Trace({ d }: { d: CycleDetail }) {
               </ContentBadge>
             </div>
           </div>
-          {!notRun && (<KV
-            items={[
-              ['판정 주체', decidedByLabel(r)],
-              [
-                'Agent 판정',
-                manual ? '— (수동 케이스)' : r.agentVerdict ? <VerdictBadge verdict={r.agentVerdict} /> : '—',
-              ],
-              ['시도', r.attempts > 0 ? `${r.attempts}회${r.attempts > 1 ? ` (재시도 ${r.attempts - 1}회)` : ''}` : '—'],
-              ['수행', r.executedAt ? `${fmtDateTime(r.executedAt)} · ${r.executor ?? ''}` : '—'],
-              ['OS 빌드', r.osBuild ? <Mono>{r.osBuild}</Mono> : '—'],
-              ['결함', r.defectId ? <Mono>{r.defectId}</Mono> : '—'],
-              ...(r.tokens
-                ? ([['토큰 · 비용', `${fmtNumber(r.tokens)} · $${r.costUsd?.toFixed(3) ?? '0'}`]] as [string, string][])
-                : []),
-            ]}
-          />)}
+          {!notRun && (
+            <KV
+              items={[
+                ['판정 주체', decidedByLabel(r)],
+                [
+                  'Agent 판정',
+                  manual ? '— (수동 케이스)' : r.agentVerdict ? <VerdictBadge verdict={r.agentVerdict} /> : '—',
+                ],
+                [
+                  '시도',
+                  r.attempts > 0 ? `${r.attempts}회${r.attempts > 1 ? ` (재시도 ${r.attempts - 1}회)` : ''}` : '—',
+                ],
+                ['수행', r.executedAt ? `${fmtDateTime(r.executedAt)} · ${r.executor ?? ''}` : '—'],
+                ['OS 빌드', r.osBuild ? <Mono>{r.osBuild}</Mono> : '—'],
+                ['결함', r.defectId ? <Mono>{r.defectId}</Mono> : '—'],
+                ...(r.tokens
+                  ? ([['토큰 · 비용', `${fmtNumber(r.tokens)} · $${r.costUsd?.toFixed(3) ?? '0'}`]] as [
+                      string,
+                      string,
+                    ][])
+                  : []),
+              ]}
+            />
+          )}
           {notRun && (
             <span className={`${textClass('label1')} qs-muted`}>
               {manual ? '수동 케이스 — 아직 결과를 입력하지 않았습니다.' : '아직 수행하지 않은 칸입니다.'}
@@ -329,7 +337,7 @@ function PointsCard({ points }: { points: PointResult[] }) {
                   {p.targetElement ? (
                     <Mono className={textClass('caption1')}>{p.targetElement}</Mono>
                   ) : (
-                    <span className="qs-faint">— (비전)</span>
+                    <span className="qs-faint">{p.method === 'vision' ? '— (비전)' : '—'}</span>
                   )}
                 </TableCell>
                 <TableCell sx={{ verticalAlign: 'top', minWidth: 160 }}>{p.observed}</TableCell>

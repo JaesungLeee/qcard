@@ -1,0 +1,94 @@
+{
+  "tcId": "TC-ONBOARDING-004",
+  "deviceId": "galaxy-s24-15",
+  "autoConfirmed": true,
+  "unmetConditions": [],
+  "attempts": 1,
+  "executor": "agent",
+  "executedAt": "2026-10-20T00:00:00.000Z",
+  "osBuild": "Android 15",
+  "steps": [
+    {
+      "action": "tap",
+      "target": {
+        "label": "초대 링크 복사",
+        "elementId": "invite_copy",
+        "bounds": {
+          "x": 60,
+          "y": 2150,
+          "w": 960,
+          "h": 130
+        }
+      },
+      "intent": "초대 링크 복사 버튼 탭",
+      "screenshot": {
+        "kind": "mock",
+        "screen": "invite"
+      },
+      "durationMs": 0,
+      "index": 0,
+      "videoTs": 0,
+      "caseStepIndex": 0
+    },
+    {
+      "action": "wait",
+      "intent": "기다리기",
+      "screenshot": {
+        "kind": "mock",
+        "screen": "invite-toast"
+      },
+      "durationMs": 3000,
+      "index": 1,
+      "videoTs": 500,
+      "caseStepIndex": 0
+    }
+  ],
+  "points": [
+    {
+      "pointId": "TC-ONBOARDING-004-P1",
+      "expected": "복사 완료 토스트가 뜬다",
+      "method": "tree",
+      "evidence": {
+        "kind": "mock",
+        "screen": "invite-toast"
+      },
+      "result": "match",
+      "observed": "찾은 요소: id=toast \"초대 링크를 복사했어요\"",
+      "reason": "요소가 화면에 있다 — 관찰 7의 트리에 Toast \"초대 링크를 복사했어요\"(e6)가 있어 복사 완료 토스트로 볼 수 있다.",
+      "targetElement": "toast",
+      "targetBounds": {
+        "x": 90,
+        "y": 2120,
+        "w": 900,
+        "h": 120
+      }
+    },
+    {
+      "pointId": "TC-ONBOARDING-004-P2",
+      "expected": "화면은 메이트 초대 스텝에 그대로 머무른다",
+      "method": "tree",
+      "evidence": {
+        "kind": "mock",
+        "screen": "invite"
+      },
+      "result": "match",
+      "observed": "찾은 요소: id=invite_title \"함께할 메이트를 불러볼까요?\"",
+      "reason": "요소가 화면에 있다 — 마지막 관찰 8에도 메이트 초대 스텝의 제목 \"함께할 메이트를 불러볼까요?\"(e1)가 남아 있어 같은 화면에 머무름을 보여 준다.",
+      "targetElement": "invite_title",
+      "targetBounds": {
+        "x": 60,
+        "y": 320,
+        "w": 960,
+        "h": 120
+      }
+    }
+  ],
+  "history": [],
+  "decidedBy": {
+    "kind": "agent"
+  },
+  "tokens": 39140,
+  "costUsd": 0.0310568,
+  "verdict": "pass",
+  "agentVerdict": "pass"
+}

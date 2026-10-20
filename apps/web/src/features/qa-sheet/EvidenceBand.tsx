@@ -1,6 +1,13 @@
 // 판정 추적 뷰의 근거 띠 (F-RP-02): 테스트 결과 → 검증 증거 → 테스트 동작 흐름을 한 줄로 거슬러 올라간다.
 import { SCREENS } from '@qcard/fixtures';
-import { POINT_RESULT_LABEL, STEP_ACTION_LABEL, type Bounds, type CaseResult, type ExecStep, type PointResult } from '@qcard/shared';
+import {
+  POINT_RESULT_LABEL,
+  STEP_ACTION_LABEL,
+  type Bounds,
+  type CaseResult,
+  type ExecStep,
+  type PointResult,
+} from '@qcard/shared';
 import {
   ContentBadge,
   IconButton,
@@ -238,6 +245,7 @@ function ResultCard({
 
 /** 검증 포인트의 대상 요소(`<id> "<label>"`)를 증거 화면에서 찾아 박스로 강조한다 */
 function pointBounds(p: PointResult): Bounds | undefined {
+  if (p.targetBounds) return p.targetBounds;
   if (p.evidence.kind !== 'mock' || !p.targetElement) return undefined;
   const id = p.targetElement.split(' ')[0];
   return SCREENS[p.evidence.screen]?.elements.find((e) => e.id === id)?.bounds;
@@ -304,7 +312,7 @@ function EvidenceCard({
           </div>
           <div className="qs-row" style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
             <Mono className={`${textClass('caption1')} qs-muted qs-ellipsis`}>
-              {point ? `${point.pointId.split("-").at(-1)}_evidence.png` : shotName(step)}
+              {point ? `${point.pointId.split('-').at(-1)}_evidence.png` : shotName(step)}
             </Mono>
             <span className="qs-row" style={{ gap: token('space-2'), flexWrap: 'nowrap' }}>
               <IconButton
@@ -385,7 +393,9 @@ function finalReason(r: CaseResult) {
   if (r.agentVerdict && r.agentVerdict !== 'pass' && unmet.length)
     return `검증 포인트는 일치했지만 ${unmet.map((c) => c.label).join(', ')} 조건을 충족하지 못해 사람이 확정하도록 남겼습니다.`;
   const lead =
-    r.points.length === 1 ? '검증 포인트가 기대와 일치했습니다.' : `검증 포인트 ${r.points.length}개가 모두 기대와 일치했습니다.`;
+    r.points.length === 1
+      ? '검증 포인트가 기대와 일치했습니다.'
+      : `검증 포인트 ${r.points.length}개가 모두 기대와 일치했습니다.`;
   return `${lead} ${r.points[0]!.reason}`;
 }
 

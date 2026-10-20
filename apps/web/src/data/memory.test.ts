@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ConflictError } from './api';
+import type { LocalRun } from './localRuns';
 import { createMemoryApi, passRate } from './memory';
 
 const DOC = 'doc-130';
@@ -76,5 +77,68 @@ describe('사이클 판정', () => {
     const api = createMemoryApi();
     const [summary] = await api.listCycles('haru');
     expect(summary!.total).toBe(summary!.cycle.snapshot.length * summary!.cycle.targets.length);
+  });
+});
+
+describe('로컬 실행', () => {
+  const run = (over: Partial<LocalRun> = {}): LocalRun => ({
+    id: '2026-10-20T08-26-50-756Z',
+    startedAt: '2026-10-20T08:26:50.756Z',
+    finishedAt: '2026-10-20T08:28:30.000Z',
+    device: { model: 'SM-S711N', osMajor: 16, size: { w: 1080, h: 2340 } },
+    appPackage: 'com.example.harukong.qa',
+    docId: DOC,
+    results: [
+      {
+        tcId: 'TC-ONBOARDING-001',
+        deviceId: 'SM-S711N-16',
+        verdict: 'pass',
+        agentVerdict: 'pass',
+        autoConfirmed: true,
+        unmetConditions: [],
+        attempts: 1,
+        steps: [],
+        points: [],
+        history: [],
+      },
+    ],
+    ...over,
+  });
+
+  it('실행 하나가 사이클 하나가 되고, 실행한 케이스·기기만 담는다', async () => {
+    const api = createMemoryApi({ localRuns: async () => [run()] });
+    const local = (await api.listCycles('haru')).find((s) => s.cycle.origin === 'local_run')!;
+    expect(local.cycle.id).toBe('run-2026-10-20T08-26-50-756Z');
+    expect(local.cycle.targets.map((t) => t.id)).toEqual(['SM-S711N-16']);
+    expect(local).toMatchObject({ total: 1, done: 1, passRate: 1 });
+    expect(local.build.packageName).toBe('com.example.harukong.qa');
+    const detail = await api.getCycle(local.cycle.id);
+    expect(detail.cases.map((c) => c.tcId)).toEqual(['TC-ONBOARDING-001']);
+  });
+
+  it('로컬 실행 결과도 사람이 확정할 수 있다', async () => {
+    const api = createMemoryApi({ localRuns: async () => [run()] });
+    const r = await api.confirmVerdict({
+      cycleId: 'run-2026-10-20T08-26-50-756Z',
+      tcId: 'TC-ONBOARDING-001',
+      deviceId: 'SM-S711N-16',
+      verdict: 'check',
+      note: '다시 볼 것',
+    });
+    expect(r.history.at(-1)).toMatchObject({ from: 'pass', to: 'check' });
+  });
+
+  it('없는 QA 문서를 가리키는 실행은 건너뛰고, 한 번만 읽는다', async () => {
+    let calls = 0;
+    const api = createMemoryApi({
+      localRuns: async () => {
+        calls++;
+        return [run({ docId: 'doc-x' })];
+      },
+    });
+    await api.listCycles('haru');
+    await api.listCycles('haru');
+    expect(calls).toBe(1);
+    expect((await api.listCycles('haru')).some((s) => s.cycle.origin === 'local_run')).toBe(false);
   });
 });

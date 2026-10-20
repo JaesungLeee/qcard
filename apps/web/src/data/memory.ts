@@ -10,6 +10,7 @@ import {
   type QcardApi,
   type VerdictCounts,
 } from './api';
+import { localRunCycle, type LocalRun } from './localRuns';
 
 const VERDICTS: Verdict[] = ['pass', 'fail', 'blocked', 'check', 'nt', 'na'];
 
@@ -27,9 +28,28 @@ export function passRate(counts: VerdictCounts): number {
 
 const clone = <T>(v: T): T => structuredClone(v);
 
-/** fixture 위의 메모리 구현. 새로고침하면 처음 상태로 돌아간다. */
-export function createMemoryApi(options: { db?: FixtureDb; currentUser?: string; latencyMs?: number } = {}): QcardApi {
+/**
+ * fixture 위의 메모리 구현. 새로고침하면 처음 상태로 돌아간다.
+ * `localRuns`를 주면 호스트에서 돌린 실행을 처음 한 번 읽어 "로컬 실행" 사이클로 더한다.
+ */
+export function createMemoryApi(
+  options: { db?: FixtureDb; currentUser?: string; latencyMs?: number; localRuns?: () => Promise<LocalRun[]> } = {},
+): QcardApi {
   const db = options.db ?? createFixtureDb();
+  let loaded: Promise<void> | undefined;
+  const ensureLocal = () =>
+    (loaded ??= (options.localRuns?.() ?? Promise.resolve([])).then((runs) => {
+      for (const run of runs) {
+        const doc = db.qaDocs.find((d) => d.id === run.docId);
+        if (!doc || db.cycles.some((c) => c.id === `run-${run.id}`)) continue;
+        const { cycle, build } = localRunCycle(run, doc);
+        db.cycles.push(cycle);
+        db.builds.push(build);
+        db.results[cycle.id] = run.results;
+        db.defects[cycle.id] = [];
+        db.runs[cycle.id] = [];
+      }
+    }));
   const currentUser = options.currentUser ?? PEOPLE.lead;
   const latency = options.latencyMs ?? 0;
   const now = () => new Date().toISOString();
@@ -151,6 +171,7 @@ export function createMemoryApi(options: { db?: FixtureDb; currentUser?: string;
     },
 
     async listCycles(projectId) {
+      await ensureLocal();
       const out: CycleSummary[] = db.cycles
         .filter((c) => c.projectId === projectId)
         .map((c) => {
@@ -170,6 +191,7 @@ export function createMemoryApi(options: { db?: FixtureDb; currentUser?: string;
       return wait(out);
     },
     async getCycle(cycleId) {
+      await ensureLocal();
       const c = cycle(cycleId);
       const d = doc(c.docId);
       const byId = new Map(d.cases.map((x) => [x.tcId, x]));
@@ -185,6 +207,7 @@ export function createMemoryApi(options: { db?: FixtureDb; currentUser?: string;
       return wait(detail);
     },
     async confirmVerdict(input: ConfirmVerdictInput) {
+      await ensureLocal();
       const results = db.results[input.cycleId] ?? [];
       const r = results.find((x) => x.tcId === input.tcId && x.deviceId === input.deviceId);
       if (!r) throw new NotFoundError(`결과 없음: ${input.tcId} × ${input.deviceId}`);

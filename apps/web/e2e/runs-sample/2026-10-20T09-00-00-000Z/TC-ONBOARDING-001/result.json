@@ -1,0 +1,75 @@
+{
+  "tcId": "TC-ONBOARDING-001",
+  "deviceId": "galaxy-s24-15",
+  "autoConfirmed": false,
+  "unmetConditions": [
+    "all_match"
+  ],
+  "attempts": 1,
+  "executor": "agent",
+  "executedAt": "2026-10-20T00:00:00.000Z",
+  "osBuild": "Android 15",
+  "steps": [
+    {
+      "action": "wait",
+      "intent": "스플래시가 끝나기를 기다림",
+      "screenshot": {
+        "kind": "mock",
+        "screen": "splash"
+      },
+      "durationMs": 3000,
+      "index": 0,
+      "videoTs": 0,
+      "caseStepIndex": 0
+    }
+  ],
+  "points": [
+    {
+      "pointId": "TC-ONBOARDING-001-P1",
+      "expected": "닉네임 설정 스텝이 열려 있다",
+      "method": "tree",
+      "evidence": {
+        "kind": "mock",
+        "screen": "profile"
+      },
+      "result": "match",
+      "observed": "찾은 요소: id=profile_title \"닉네임 설정\"",
+      "reason": "요소가 화면에 있다 — 마지막 관찰에 '닉네임 설정' 제목(profile_title)이 있어 닉네임 설정 스텝 화면임을 보여 준다.",
+      "targetElement": "profile_title",
+      "targetBounds": {
+        "x": 300,
+        "y": 110,
+        "w": 480,
+        "h": 100
+      }
+    },
+    {
+      "pointId": "TC-ONBOARDING-001-P2",
+      "expected": "바텀 네비게이션이 보이지 않는다",
+      "method": "tree",
+      "evidence": {
+        "kind": "mock",
+        "screen": "profile"
+      },
+      "result": "mismatch",
+      "observed": "찾은 요소: id=bottom_nav \"홈 · 방 · 마이\"",
+      "reason": "보이면 안 되는 요소가 있다 — 마지막 관찰에 바텀 네비게이션(bottom_nav, '홈 · 방 · 마이')이 존재한다.",
+      "targetElement": "bottom_nav",
+      "targetBounds": {
+        "x": 0,
+        "y": 2220,
+        "w": 1080,
+        "h": 180
+      }
+    }
+  ],
+  "history": [],
+  "decidedBy": {
+    "kind": "agent"
+  },
+  "tokens": 8397,
+  "costUsd": 0.007764900000000001,
+  "verdict": "fail",
+  "agentVerdict": "fail",
+  "actualSummary": "바텀 네비게이션이 보이지 않는다 → 찾은 요소: id=bottom_nav \"홈 · 방 · 마이\""
+}

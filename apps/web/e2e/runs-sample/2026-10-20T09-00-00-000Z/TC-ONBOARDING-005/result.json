@@ -1,0 +1,185 @@
+{
+  "tcId": "TC-ONBOARDING-005",
+  "deviceId": "galaxy-s24-15",
+  "autoConfirmed": false,
+  "unmetConditions": [
+    "all_match"
+  ],
+  "attempts": 1,
+  "executor": "agent",
+  "executedAt": "2026-10-20T00:00:00.000Z",
+  "osBuild": "Android 15",
+  "steps": [
+    {
+      "action": "swipe",
+      "swipe": {
+        "from": [
+          864,
+          1200
+        ],
+        "to": [
+          216,
+          1200
+        ]
+      },
+      "intent": "튜토리얼 다음 스텝으로 이동",
+      "screenshot": {
+        "kind": "mock",
+        "screen": "tutorial-1"
+      },
+      "durationMs": 0,
+      "index": 0,
+      "videoTs": 0,
+      "caseStepIndex": 0
+    },
+    {
+      "action": "swipe",
+      "swipe": {
+        "from": [
+          864,
+          1200
+        ],
+        "to": [
+          216,
+          1200
+        ]
+      },
+      "intent": "다음 스텝으로 이동",
+      "screenshot": {
+        "kind": "mock",
+        "screen": "tutorial-2"
+      },
+      "durationMs": 0,
+      "index": 1,
+      "videoTs": 500,
+      "caseStepIndex": 0
+    },
+    {
+      "action": "swipe",
+      "swipe": {
+        "from": [
+          864,
+          1200
+        ],
+        "to": [
+          216,
+          1200
+        ]
+      },
+      "intent": "다음 스텝으로 이동",
+      "screenshot": {
+        "kind": "mock",
+        "screen": "tutorial-3"
+      },
+      "durationMs": 0,
+      "index": 2,
+      "videoTs": 1000,
+      "caseStepIndex": 0
+    },
+    {
+      "action": "swipe",
+      "swipe": {
+        "from": [
+          864,
+          1200
+        ],
+        "to": [
+          216,
+          1200
+        ]
+      },
+      "intent": "스텝 5로 이동",
+      "screenshot": {
+        "kind": "mock",
+        "screen": "tutorial-4"
+      },
+      "durationMs": 0,
+      "index": 3,
+      "videoTs": 1500,
+      "caseStepIndex": 0
+    },
+    {
+      "action": "tap",
+      "target": {
+        "label": "하루콩 시작하기",
+        "elementId": "tutorial_start",
+        "bounds": {
+          "x": 60,
+          "y": 2160,
+          "w": 960,
+          "h": 160
+        }
+      },
+      "intent": "하루콩 시작하기 버튼 탭",
+      "screenshot": {
+        "kind": "mock",
+        "screen": "tutorial-5"
+      },
+      "durationMs": 0,
+      "index": 4,
+      "videoTs": 2000,
+      "caseStepIndex": 0
+    }
+  ],
+  "points": [
+    {
+      "pointId": "TC-ONBOARDING-005-P1",
+      "expected": "온보딩이 완료로 기록된다",
+      "method": "tree",
+      "evidence": {
+        "kind": "mock",
+        "screen": "home"
+      },
+      "observed": "화면으로 알 수 없음",
+      "result": "unknown",
+      "reason": "온보딩 완료 기록 여부는 내부 저장 상태라 접근성 트리만으로는 알 수 없다. 튜토리얼 화면이 사라진 것만으로 기록을 확인할 수는 없다."
+    },
+    {
+      "pointId": "TC-ONBOARDING-005-P2",
+      "expected": "홈 탭이 열린다",
+      "method": "tree",
+      "evidence": {
+        "kind": "mock",
+        "screen": "home"
+      },
+      "result": "match",
+      "observed": "찾은 요소: id=home_title \"하루콩\"",
+      "reason": "요소가 화면에 있다 — 마지막 관찰에 홈 화면 제목 '하루콩'(home_title)과 지도·빈 상태 문구가 보여 홈 탭이 열린 것을 알 수 있다.",
+      "targetElement": "home_title",
+      "targetBounds": {
+        "x": 60,
+        "y": 110,
+        "w": 300,
+        "h": 100
+      }
+    },
+    {
+      "pointId": "TC-ONBOARDING-005-P3",
+      "expected": "바텀 네비게이션이 노출된다",
+      "method": "tree",
+      "evidence": {
+        "kind": "mock",
+        "screen": "home"
+      },
+      "result": "match",
+      "observed": "찾은 요소: id=bottom_nav \"홈 · 방 · 마이\"",
+      "reason": "요소가 화면에 있다 — 마지막 관찰에 하단 네비게이션(bottom_nav, '홈 · 방 · 마이')이 있다.",
+      "targetElement": "bottom_nav",
+      "targetBounds": {
+        "x": 0,
+        "y": 2220,
+        "w": 1080,
+        "h": 180
+      }
+    }
+  ],
+  "history": [],
+  "decidedBy": {
+    "kind": "agent"
+  },
+  "tokens": 54966,
+  "costUsd": 0.04124900000000001,
+  "verdict": "check",
+  "agentVerdict": "check",
+  "actualSummary": "온보딩이 완료로 기록된다 → 화면으로 알 수 없음"
+}

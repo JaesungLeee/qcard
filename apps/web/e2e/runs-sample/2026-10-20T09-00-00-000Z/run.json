@@ -1,0 +1,17 @@
+{
+  "id": "2026-10-20T09-00-00-000Z",
+  "startedAt": "2026-10-20T09:00:00.000Z",
+  "finishedAt": "2026-10-20T09:04:00.000Z",
+  "device": {
+    "serial": "FAKE-S24",
+    "model": "SM-S921N",
+    "osMajor": 15,
+    "size": {
+      "w": 1080,
+      "h": 2400
+    },
+    "density": 420
+  },
+  "appPackage": "com.example.harukong",
+  "docId": "doc-130"
+}
