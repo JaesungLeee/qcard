@@ -36,7 +36,7 @@ export function TopBar({ session }: { session: ConsoleSession }) {
         <DeviceMenu device={session.device} others={session.otherDevices} />
         <Link
           className={`qcc-link ${textClass('label1', 'medium')}`}
-          to={`/p/haru/cycles/${session.cycleId}`}
+          to={`/p/${session.projectId}/cycles/${session.cycleId}`}
         >
           대시보드에서 보기
           <Icons.IconArrowUpRight aria-hidden style={{ width: 16, height: 16 }} />

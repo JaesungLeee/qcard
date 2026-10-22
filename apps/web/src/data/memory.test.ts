@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ConflictError } from './api';
+import { PEOPLE } from '@qcard/fixtures';
+import { ConflictError, PermissionError, RuleError } from './api';
 import type { LocalRun } from './localRuns';
 import { createMemoryApi, passRate } from './memory';
 
@@ -140,5 +141,92 @@ describe('로컬 실행', () => {
     await api.listCycles('haru');
     expect(calls).toBe(1);
     expect((await api.listCycles('haru')).some((s) => s.cycle.origin === 'local_run')).toBe(false);
+  });
+});
+
+describe('프로젝트·멤버·초대 (F-TM-09~13)', () => {
+  const as = (user: string) => {
+    const api = createMemoryApi();
+    api.switchUser(user);
+    return api;
+  };
+
+  it('내 프로젝트만 보이고, 멤버가 아니면 열 수 없다', async () => {
+    const api = createMemoryApi();
+    const mine = (await api.listMyProjects()).map((s) => `${s.project.id}:${s.role}`);
+    expect(mine).toEqual(['haru:admin', 'widget:admin', 'roomie:viewer', 'old-poc:admin']);
+    await expect(api.getProject('atlas')).rejects.toBeInstanceOf(PermissionError);
+  });
+
+  it('누구나 프로젝트를 만들고 만든 사람이 Admin. 데이터 처리 안내 확인이 필요하다', async () => {
+    const api = as(PEOPLE.planner);
+    const input = { name: 'New App', appName: '새 앱', packageName: 'com.example.new', dataNoticeAck: false };
+    await expect(api.createProject(input)).rejects.toBeInstanceOf(RuleError);
+    const p = await api.createProject({ ...input, dataNoticeAck: true });
+    expect(await api.myRole(p.id)).toBe('admin');
+    await expect(api.createProject({ ...input, packageName: 'not a package', dataNoticeAck: true })).rejects.toThrow(
+      'com.example.app',
+    );
+  });
+
+  it('Admin이 0명이 되는 역할 변경·탈퇴는 막는다', async () => {
+    const api = createMemoryApi();
+    await expect(api.setMemberRole('haru', PEOPLE.lead, 'qa')).rejects.toBeInstanceOf(RuleError);
+    await expect(api.leaveProject('haru')).rejects.toThrow('마지막 Admin');
+    await api.setMemberRole('haru', PEOPLE.qa, 'admin');
+    await api.leaveProject('haru');
+    expect(await api.myRole('haru')).toBeUndefined();
+  });
+
+  it('혼자 남은 멤버는 탈퇴 대신 삭제해야 한다', async () => {
+    await expect(createMemoryApi().leaveProject('widget')).rejects.toThrow('프로젝트를 삭제하세요');
+  });
+
+  it('Admin이 아니면 멤버·초대를 관리할 수 없다', async () => {
+    const api = as(PEOPLE.qa);
+    await expect(api.listInvitations('haru')).rejects.toBeInstanceOf(PermissionError);
+    await expect(api.createInvitation('haru', { role: 'viewer' })).rejects.toBeInstanceOf(PermissionError);
+    await expect(api.removeMember('haru', PEOPLE.planner)).rejects.toBeInstanceOf(PermissionError);
+    await expect(api.deleteProject('haru', '하루콩')).rejects.toBeInstanceOf(PermissionError);
+  });
+
+  it('링크 초대는 데이터 처리 안내 확인 후 수락하면 멤버가 된다', async () => {
+    const api = as(PEOPLE.planner);
+    expect((await api.getInvitation('atlas-join')).state).toBe('pending');
+    await expect(api.acceptInvitation('atlas-join', { dataNoticeAck: false })).rejects.toBeInstanceOf(RuleError);
+    await api.acceptInvitation('atlas-join', { dataNoticeAck: true });
+    expect(await api.myRole('atlas')).toBe('qa');
+    expect((await api.getInvitation('atlas-join')).state).toBe('member');
+  });
+
+  it('만료·취소·다른 사람 앞 초대는 수락할 수 없다', async () => {
+    // 박도윤은 하루콩 멤버라서 먼저 탈퇴시킨다
+    const api = as(PEOPLE.planner);
+    await api.leaveProject('haru');
+    expect((await api.getInvitation('haru-expired')).state).toBe('expired');
+    await expect(api.acceptInvitation('haru-expired', { dataNoticeAck: true })).rejects.toThrow('만료');
+    expect((await api.getInvitation('haru-hyejin')).state).toBe('other-user');
+    await expect(api.acceptInvitation('haru-hyejin', { dataNoticeAck: true })).rejects.toThrow('@hyejin-han');
+    const admin = createMemoryApi();
+    await admin.revokeInvitation('haru', 'inv-2');
+    expect((await admin.getInvitation('haru-link')).state).toBe('revoked');
+  });
+
+  it('초대를 만들면 7일 뒤 만료되고, 이미 멤버·대기 중인 사용자명은 거부한다', async () => {
+    const api = createMemoryApi();
+    const inv = await api.createInvitation('haru', { role: 'qa', github: '@new-person' });
+    expect(inv.github).toBe('new-person');
+    const ttl = (Date.parse(inv.expiresAt) - Date.parse(inv.createdAt)) / 86_400_000;
+    expect(Math.round(ttl)).toBe(7);
+    await expect(api.createInvitation('haru', { role: 'qa', github: 'minji-kim' })).rejects.toThrow('이미 멤버');
+    await expect(api.createInvitation('haru', { role: 'qa', github: 'new-person' })).rejects.toThrow('대기 중');
+  });
+
+  it('삭제는 이름을 입력해 확인하고, 30일 유예 동안 복구할 수 있다', async () => {
+    const api = createMemoryApi();
+    await expect(api.deleteProject('widget', '다른 이름')).rejects.toBeInstanceOf(RuleError);
+    const p = await api.deleteProject('widget', '하루콩 위젯');
+    expect(Math.round((Date.parse(p.purgeAt!) - Date.parse(p.deletedAt!)) / 86_400_000)).toBe(30);
+    expect((await api.restoreProject('widget')).deletedAt).toBeUndefined();
   });
 });

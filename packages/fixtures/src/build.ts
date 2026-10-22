@@ -5,11 +5,14 @@ import type {
   CaseResult,
   Defect,
   ExecStep,
+  Invitation,
+  Member,
   PointResult,
   PrepFlow,
   Project,
   QADocument,
   Requirement,
+  Role,
   Run,
   Screenshot,
   SpecQuestion,
@@ -225,7 +228,132 @@ export const SPEC_INPUT = { spec: SPEC, rows, previousThen: PREVIOUS_THEN, requi
 const NEW_IN_130 = new Set(['TS-037', 'TS-038', 'EC-021', 'EC-022']);
 const HELD = new Set(['TS-023', 'TS-038']);
 
-export const project: Project = { id: 'haru', name: '하루콩', appName: '하루콩', packageName: 'com.example.harukong' };
+export const project: Project = {
+  id: 'haru',
+  name: '하루콩',
+  appName: '하루콩',
+  packageName: 'com.example.harukong',
+  createdBy: PEOPLE.lead,
+  createdAt: T(1, 9),
+};
+
+// ---------------------------------------------------------------- 프로젝트·멤버·초대 (F-TM-09~13)
+
+/** GitHub 사용자명 (로그인·초대 기준) */
+export const GITHUB: Record<string, string> = {
+  [PEOPLE.lead]: 'jaesung-lee',
+  [PEOPLE.qa]: 'minji-kim',
+  [PEOPLE.planner]: 'doyoon-park',
+  [PEOPLE.dev]: 'seojun-choi',
+};
+
+/**
+ * 하루콩 외의 프로젝트: 빈 프로젝트(Admin), 내가 Viewer인 프로젝트, 삭제 예정 프로젝트, 아직 멤버가 아닌 프로젝트(초대 대기).
+ * 데이터(QA 문서·사이클)는 하루콩에만 있다.
+ */
+export const otherProjects: Project[] = [
+  {
+    id: 'widget',
+    name: '하루콩 위젯',
+    appName: '하루콩 위젯',
+    packageName: 'com.example.harukong.widget',
+    createdBy: PEOPLE.lead,
+    createdAt: T(18, 11),
+  },
+  {
+    id: 'roomie',
+    name: 'Roomie',
+    appName: '루미',
+    packageName: 'com.roomie.app',
+    createdBy: PEOPLE.dev,
+    createdAt: T(5, 14),
+  },
+  {
+    id: 'old-poc',
+    name: '하루콩 PoC',
+    appName: '하루콩 PoC',
+    packageName: 'com.example.harukong.poc',
+    createdBy: PEOPLE.lead,
+    createdAt: T(2, 10),
+    deletedAt: T(17, 18),
+    purgeAt: '2026-11-16T18:00:00+09:00',
+  },
+  {
+    id: 'atlas',
+    name: 'Atlas',
+    appName: '아틀라스',
+    packageName: 'com.atlas.trip',
+    createdBy: PEOPLE.dev,
+    createdAt: T(8, 9),
+  },
+];
+
+const member = (projectId: string, user: string, role: Role, joinedAt: string): Member => ({
+  projectId,
+  user,
+  github: GITHUB[user]!,
+  role,
+  joinedAt,
+  dataNoticeAckAt: joinedAt,
+});
+
+export const members: Member[] = [
+  member('haru', PEOPLE.lead, 'admin', T(1, 9)),
+  member('haru', PEOPLE.qa, 'qa', T(1, 11)),
+  member('haru', PEOPLE.dev, 'qa', T(2, 10)),
+  member('haru', PEOPLE.planner, 'viewer', T(3, 15)),
+  member('widget', PEOPLE.lead, 'admin', T(18, 11)),
+  member('roomie', PEOPLE.dev, 'admin', T(5, 14)),
+  member('roomie', PEOPLE.lead, 'viewer', T(6, 10)),
+  member('old-poc', PEOPLE.lead, 'admin', T(2, 10)),
+  member('atlas', PEOPLE.dev, 'admin', T(8, 9)),
+];
+
+/** 초대 링크는 `/invite/<token>`. 만료 판단은 지금 시각과 expiresAt 비교 */
+export const invitations: Invitation[] = [
+  {
+    id: 'inv-1',
+    projectId: 'haru',
+    role: 'qa',
+    invitedBy: PEOPLE.lead,
+    github: 'hyejin-han',
+    token: 'haru-hyejin',
+    createdAt: T(20, 10),
+    expiresAt: '2026-12-31T23:59:00+09:00',
+    status: 'pending',
+  },
+  {
+    id: 'inv-2',
+    projectId: 'haru',
+    role: 'viewer',
+    invitedBy: PEOPLE.lead,
+    token: 'haru-link',
+    createdAt: T(21, 16),
+    expiresAt: '2026-12-31T23:59:00+09:00',
+    status: 'pending',
+  },
+  {
+    id: 'inv-3',
+    projectId: 'haru',
+    role: 'qa',
+    invitedBy: PEOPLE.qa,
+    github: 'jiwoo-seo',
+    token: 'haru-expired',
+    createdAt: T(1, 12),
+    expiresAt: T(8, 12),
+    status: 'pending',
+  },
+  {
+    id: 'inv-4',
+    projectId: 'atlas',
+    role: 'qa',
+    invitedBy: PEOPLE.dev,
+    token: 'atlas-join',
+    createdAt: T(21, 9),
+    expiresAt: '2026-12-31T23:59:00+09:00',
+    status: 'pending',
+  },
+];
 
 function requirements(): Requirement[] {
   return raw.requirements.map((r) => ({
@@ -1065,6 +1193,7 @@ export type ConsoleQueueItem = {
 };
 
 export type ConsoleSession = {
+  projectId: string;
   cycleId: string;
   cycleName: string;
   build: Build;
@@ -1185,6 +1314,7 @@ function consoleSession(): ConsoleSession {
   });
   const doneTokens = results130.filter((r) => r.deviceId === P8.id).reduce((n, r) => n + (r.tokens ?? 0), 0);
   return {
+    projectId: project.id,
     cycleId: cycle130.id,
     cycleName: cycle130.name,
     build: builds[1]!,
@@ -1220,6 +1350,8 @@ function consoleSession(): ConsoleSession {
 
 export type FixtureDb = {
   projects: Project[];
+  members: Member[];
+  invitations: Invitation[];
   qaDocs: QADocument[];
   builds: Build[];
   cycles: TestCycle[];
@@ -1233,7 +1365,9 @@ export type FixtureDb = {
 /** 매번 새 사본을 만든다 (메모리 구현이 수정해도 원본이 바뀌지 않게). */
 export function createFixtureDb(): FixtureDb {
   return structuredClone({
-    projects: [project],
+    projects: [project, ...otherProjects],
+    members,
+    invitations,
     qaDocs: [qaDocV130, qaDocV120],
     builds,
     cycles: [cycle130, cycle121],

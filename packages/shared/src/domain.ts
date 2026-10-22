@@ -3,13 +3,66 @@ import { Verdict } from './verdict';
 
 /** 도메인 스키마 (PRD §6.4). Firestore 문서·fixture·LLM 구조화 출력이 같은 정의를 쓴다. */
 
+/** 프로젝트 = QA 대시보드 1개(앱 하나). 멤버·권한·데이터의 단위 (F-TM-02) */
 export const Project = z.object({
   id: z.string(),
   name: z.string(),
   appName: z.string(),
   packageName: z.string(),
+  createdBy: z.string().optional(),
+  createdAt: z.string().optional(),
+  /** 삭제 요청 시각. 유예 기간 동안은 복구할 수 있다 (F-TM-12) */
+  deletedAt: z.string().optional(),
+  /** 이 시각이 지나면 데이터·비밀값을 영구 삭제한다 */
+  purgeAt: z.string().optional(),
 });
 export type Project = z.infer<typeof Project>;
+
+/** 역할 (F-TM-03). 프로젝트에는 Admin이 항상 1명 이상 */
+export const Role = z.enum(['admin', 'qa', 'viewer']);
+export type Role = z.infer<typeof Role>;
+export const ROLE_LABEL: Record<Role, string> = { admin: 'Admin', qa: 'QA', viewer: 'Viewer' };
+export const ROLE_DESCRIPTION: Record<Role, string> = {
+  admin: '멤버·초대·프로젝트 설정과 삭제',
+  qa: 'QA 문서 편집·승인, 실행, 판정 확정',
+  viewer: '조회만',
+};
+
+export const Member = z.object({
+  projectId: z.string(),
+  /** 표시 이름 */
+  user: z.string(),
+  github: z.string(),
+  role: Role,
+  joinedAt: z.string(),
+  /** 데이터 처리 안내를 확인한 시각 (F-TM-13) */
+  dataNoticeAckAt: z.string(),
+});
+export type Member = z.infer<typeof Member>;
+
+/** 초대 (F-TM-10). GitHub 사용자명으로 보내거나 링크로 나눈다. 만료는 expiresAt으로 판단한다 */
+export const Invitation = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  role: Role,
+  invitedBy: z.string(),
+  /** 없으면 링크 초대 (링크를 가진 사람 누구나 수락) */
+  github: z.string().optional(),
+  token: z.string(),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  status: z.enum(['pending', 'accepted', 'revoked']),
+});
+export type Invitation = z.infer<typeof Invitation>;
+
+/** 초대 만료 기본값 (PRD §13 — 확정 전 기본값) */
+export const INVITE_TTL_DAYS = 7;
+/** 프로젝트 삭제 유예 기간 (PRD §13 — 확정 전 기본값) */
+export const DELETE_GRACE_DAYS = 30;
+
+/** 프로젝트 생성·초대 수락 때 확인받는 데이터 처리 안내 (F-TM-13, PRD §8) */
+export const DATA_NOTICE =
+  '스펙 문서와 실행 중 디바이스 화면(스크린샷·화면 구조)은 실행한 사람 본인의 Claude 계정으로 Anthropic에 전송되고, 그 계정의 데이터 정책(개인정보 설정)을 따릅니다. 개인 플랜에는 데이터 미보존(ZDR)이 없으니, Claude 설정에서 학습 사용을 끄는 것을 권합니다.';
 
 /** 원본 스펙 근거: 스펙 파일·헤딩 경로·줄 범위 (F-QD-02) */
 export const SpecRef = z.object({

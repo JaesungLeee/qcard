@@ -1,6 +1,7 @@
 import { Navigate, createBrowserRouter } from 'react-router';
 import { UiCatalog } from './dev/UiCatalog';
 import { ConsolePage } from './features/console';
+import { InvitePage, NewProjectPage, ProjectListPage, ProjectSettingsPage } from './features/projects';
 import { PrepFlowPage, QaDocListPage, QaDocReviewPage } from './features/qa-doc';
 import { CycleListPage, QaSheetPage, TracePage } from './features/qa-sheet';
 import { AppShell } from './shell/AppShell';
@@ -11,7 +12,10 @@ import { AppShell } from './shell/AppShell';
  * - QA 문서 검토: `?tab=cases|questions|suggestions|traceability&case=<TC ID>`
  */
 export const router = createBrowserRouter([
-  { path: '/', element: <Navigate to="/p/haru/cycles" replace /> },
+  { path: '/', element: <Navigate to="/projects" replace /> },
+  { path: '/projects', element: <ProjectListPage /> },
+  { path: '/projects/new', element: <NewProjectPage /> },
+  { path: '/invite/:token', element: <InvitePage /> },
   {
     path: '/p/:projectId',
     element: <AppShell />,
@@ -23,6 +27,7 @@ export const router = createBrowserRouter([
       { path: 'docs', element: <QaDocListPage /> },
       { path: 'docs/:docId', element: <QaDocReviewPage /> },
       { path: 'prep-flows', element: <PrepFlowPage /> },
+      { path: 'settings', element: <ProjectSettingsPage /> },
     ],
   },
   { path: '/console', element: <ConsolePage /> },

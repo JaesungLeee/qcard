@@ -1,7 +1,8 @@
 import type { CaseBody } from '@qcard/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useContext } from 'react';
-import type { ConfirmVerdictInput, QcardApi, QuestionResolution } from './api';
+import type { ConfirmVerdictInput, NewProjectInput, QcardApi, QuestionResolution } from './api';
+import type { Role } from '@qcard/shared';
 
 export const ApiContext = createContext<QcardApi | null>(null);
 
@@ -14,6 +15,10 @@ export function useApi(): QcardApi {
 export const keys = {
   projects: ['projects'] as const,
   project: (id: string) => ['project', id] as const,
+  myRole: (id: string) => ['myRole', id] as const,
+  members: (id: string) => ['members', id] as const,
+  invitations: (id: string) => ['invitations', id] as const,
+  invitation: (token: string) => ['invitation', token] as const,
   qaDocs: (projectId: string) => ['qaDocs', projectId] as const,
   qaDoc: (docId: string) => ['qaDoc', docId] as const,
   prepFlows: (projectId: string) => ['prepFlows', projectId] as const,
@@ -26,6 +31,61 @@ export function useProject(projectId: string) {
   const api = useApi();
   return useQuery({ queryKey: keys.project(projectId), queryFn: () => api.getProject(projectId) });
 }
+
+export function useMyProjects() {
+  const api = useApi();
+  return useQuery({ queryKey: keys.projects, queryFn: () => api.listMyProjects() });
+}
+
+export function useMyRole(projectId: string) {
+  const api = useApi();
+  return useQuery({ queryKey: keys.myRole(projectId), queryFn: async () => (await api.myRole(projectId)) ?? null });
+}
+
+export function useMembers(projectId: string) {
+  const api = useApi();
+  return useQuery({ queryKey: keys.members(projectId), queryFn: () => api.listMembers(projectId) });
+}
+
+export function useInvitations(projectId: string, enabled = true) {
+  const api = useApi();
+  return useQuery({ queryKey: keys.invitations(projectId), queryFn: () => api.listInvitations(projectId), enabled });
+}
+
+export function useInvitation(token: string) {
+  const api = useApi();
+  return useQuery({ queryKey: keys.invitation(token), queryFn: () => api.getInvitation(token) });
+}
+
+/** 프로젝트·멤버·초대를 바꾸는 mutation은 관련 조회를 모두 다시 읽는다 */
+function useProjectMutation<T, R = unknown>(fn: (api: QcardApi, input: T) => Promise<R>) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: T) => fn(api, input),
+    onSettled: () => {
+      for (const k of ['projects', 'project', 'myRole', 'members', 'invitations', 'invitation']) {
+        void qc.invalidateQueries({ queryKey: [k] });
+      }
+    },
+  });
+}
+
+export const useCreateProject = () => useProjectMutation((api, v: NewProjectInput) => api.createProject(v));
+export const useSetMemberRole = (projectId: string) =>
+  useProjectMutation((api, v: { user: string; role: Role }) => api.setMemberRole(projectId, v.user, v.role));
+export const useRemoveMember = (projectId: string) =>
+  useProjectMutation((api, user: string) => api.removeMember(projectId, user));
+export const useCreateInvitation = (projectId: string) =>
+  useProjectMutation((api, v: { role: Role; github?: string }) => api.createInvitation(projectId, v));
+export const useRevokeInvitation = (projectId: string) =>
+  useProjectMutation((api, id: string) => api.revokeInvitation(projectId, id));
+export const useAcceptInvitation = (token: string) =>
+  useProjectMutation((api, v: { dataNoticeAck: boolean }) => api.acceptInvitation(token, v));
+export const useLeaveProject = (projectId: string) => useProjectMutation((api) => api.leaveProject(projectId));
+export const useDeleteProject = (projectId: string) =>
+  useProjectMutation((api, confirmName: string) => api.deleteProject(projectId, confirmName));
+export const useRestoreProject = (projectId: string) => useProjectMutation((api) => api.restoreProject(projectId));
 
 export function useQaDocs(projectId: string) {
   const api = useApi();

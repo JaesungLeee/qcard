@@ -1,0 +1,10 @@
+[
+  { "name": "projects-list", "path": "/projects", "waitFor": "하루콩 위젯" },
+  { "name": "projects-new", "path": "/projects/new", "waitFor": "데이터 처리 안내" },
+  { "name": "projects-settings", "path": "/p/haru/settings", "waitFor": "@hyejin-han" },
+  { "name": "projects-settings-viewer", "path": "/p/roomie/settings", "waitFor": "초대와 역할 변경은 Admin" },
+  { "name": "projects-settings-deleted", "path": "/p/old-poc/settings", "waitFor": "삭제 예정인 프로젝트입니다" },
+  { "name": "projects-no-access", "path": "/p/atlas/cycles", "waitFor": "이 프로젝트를 볼 수 없습니다" },
+  { "name": "projects-invite", "path": "/invite/atlas-join", "waitFor": "Atlas에 초대받았습니다" },
+  { "name": "projects-invite-member", "path": "/invite/haru-link", "waitFor": "이미 이 프로젝트의 멤버입니다" }
+]

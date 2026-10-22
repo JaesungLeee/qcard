@@ -5,7 +5,10 @@ import type {
   PrepFlow,
   CaseResult,
   Defect,
+  Invitation,
+  Member,
   Project,
+  Role,
   QADocument,
   Run,
   TestCase,
@@ -20,8 +23,36 @@ import type {
 export interface QcardApi {
   readonly currentUser: string;
 
-  listProjects(): Promise<Project[]>;
+  /** 내가 멤버인 프로젝트 (F-TM-02). 다른 프로젝트는 보이지 않는다 */
+  listMyProjects(): Promise<ProjectSummary[]>;
+  /** 멤버가 아니면 `PermissionError` */
   getProject(projectId: string): Promise<Project>;
+  /** 누구나 만들 수 있고 만든 사람이 Admin (F-TM-09). 데이터 처리 안내 확인 필수 (F-TM-13) */
+  createProject(input: NewProjectInput): Promise<Project>;
+
+  /** 내 역할 (멤버가 아니면 undefined) */
+  myRole(projectId: string): Promise<Role | undefined>;
+  listMembers(projectId: string): Promise<Member[]>;
+  /** Admin만. Admin이 0명이 되면 `RuleError` (F-TM-03) */
+  setMemberRole(projectId: string, user: string, role: Role): Promise<void>;
+  /** Admin만 다른 멤버를 내보낸다. 남긴 판정·이력은 보존 */
+  removeMember(projectId: string, user: string): Promise<void>;
+
+  /** 대기 중 초대 (만료 포함, Admin만) */
+  listInvitations(projectId: string): Promise<Invitation[]>;
+  /** Admin만. github가 없으면 링크 초대 (F-TM-10) */
+  createInvitation(projectId: string, input: { role: Role; github?: string }): Promise<Invitation>;
+  revokeInvitation(projectId: string, invitationId: string): Promise<void>;
+  /** 초대 링크로 들어온 사람에게 보여 줄 정보 */
+  getInvitation(token: string): Promise<InvitationView>;
+  /** 데이터 처리 안내 확인 후 수락하면 멤버가 된다. 만료·취소·다른 사람 앞 초대는 `RuleError` */
+  acceptInvitation(token: string, input: { dataNoticeAck: boolean }): Promise<Project>;
+
+  /** 탈퇴 (F-TM-11). 마지막 Admin은 Admin을 넘긴 뒤에만, 혼자면 탈퇴 대신 삭제 */
+  leaveProject(projectId: string): Promise<void>;
+  /** Admin만, 이름을 입력해 확인. 유예 기간 동안 삭제 예정으로 남는다 (F-TM-12) */
+  deleteProject(projectId: string, confirmName: string): Promise<Project>;
+  restoreProject(projectId: string): Promise<Project>;
 
   listQaDocs(projectId: string): Promise<QaDocSummary[]>;
   getQaDoc(docId: string): Promise<QADocument>;
@@ -42,6 +73,22 @@ export interface QcardApi {
   /** 로컬 콘솔 (호스트 에이전트가 제공할 데이터) */
   getConsoleSession(): Promise<ConsoleSession>;
 }
+
+export type ProjectSummary = {
+  project: Project;
+  role: Role;
+  memberCount: number;
+  activeCycles: number;
+};
+
+export type NewProjectInput = { name: string; appName: string; packageName: string; dataNoticeAck: boolean };
+
+export type InvitationView = {
+  invitation: Invitation;
+  project: Project;
+  /** pending 중에서도 지금 수락할 수 있는지: 만료·취소·이미 멤버·다른 사람 앞 */
+  state: 'pending' | 'expired' | 'revoked' | 'accepted' | 'member' | 'other-user';
+};
 
 export type QaDocSummary = {
   id: string;
@@ -97,3 +144,9 @@ export class ConflictError extends Error {
 }
 
 export class NotFoundError extends Error {}
+
+/** 권한이 없다 (멤버가 아니거나 역할이 부족). Firestore 보안 규칙이 같은 규칙을 강제한다 */
+export class PermissionError extends Error {}
+
+/** 규칙에 어긋난 요청 (마지막 Admin, 만료된 초대 등). 메시지를 그대로 화면에 보여 준다 */
+export class RuleError extends Error {}
