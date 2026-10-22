@@ -10,6 +10,7 @@ import {
   projectIdFor,
   removal,
   requireAdmin,
+  requireEditor,
   requireMember,
   restoration,
   type Actor,
@@ -32,8 +33,10 @@ import {
   cycleSummary,
   isActiveCycle,
   nextCase,
+  qaDocRequest,
   qaDocSummary,
   resolveQuestionIn,
+  retriedJob,
 } from '@qcard/data';
 
 export { countVerdicts, passRate } from '@qcard/data';
@@ -298,6 +301,41 @@ export function createMemoryApi(
       if (i < 0) throw new NotFoundError(`결과 없음: ${input.tcId} × ${input.deviceId}`);
       results[i] = confirmedResult(results[i]!, input, currentUser, now());
       return wait(results[i]);
+    },
+
+    // ------------------------------------------------------------ QA 문서 생성 작업
+    // 메모리 구현에는 호스트가 없어 요청한 작업은 "호스트 대기"로 남는다
+    async requestQaDoc(projectId, input) {
+      return rules(() => {
+        requireEditor(membersOf(projectId), actor().uid);
+        const n = db.jobs.length + 1;
+        const { job } = qaDocRequest(projectId, input, actor(), now(), { bundleId: `bundle-m${n}`, jobId: `job-m${n}` });
+        db.jobs.unshift(job);
+        return job;
+      });
+    },
+    async listJobs(projectId) {
+      return wait(db.jobs.filter((j) => j.projectId === projectId));
+    },
+    async retryJob(projectId, jobId) {
+      return rules(() => {
+        requireEditor(membersOf(projectId), actor().uid);
+        const i = db.jobs.findIndex((j) => j.id === jobId);
+        if (i < 0) throw new NotFoundError(`작업 없음: ${jobId}`);
+        db.jobs[i] = retriedJob(db.jobs[i]!, actor().uid);
+      });
+    },
+    async myHosts() {
+      // 시연: 이재성만 호스트 에이전트를 켜 두었다 (다른 사용자로 바꾸면 "호스트 꺼짐" 안내를 볼 수 있다)
+      if (currentUser !== PEOPLE.lead) return wait([]);
+      return wait([
+        {
+          id: 'macbook-pro',
+          name: '이재성의 MacBook Pro',
+          lastSeen: now(),
+          claudeCode: { version: '2.1.308', loggedIn: true, subscriptionType: 'max' },
+        },
+      ]);
     },
 
     async screenshotUrl(path) {

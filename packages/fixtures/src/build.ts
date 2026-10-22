@@ -6,6 +6,7 @@ import type {
   Defect,
   ExecStep,
   Invitation,
+  Job,
   Member,
   PointResult,
   PrepFlow,
@@ -1337,6 +1338,56 @@ function consoleSession(): ConsoleSession {
 
 // ---------------------------------------------------------------- 내보내기
 
+// ---------------------------------------------------------------- QA 문서 생성 작업 (PRD §5.2, §6.2)
+
+/** 완료(1.3.0 문서를 만든 작업), 생성 중(1.4.0), 플랜 한도로 일시정지(1.3.1) */
+export const jobs: Job[] = [
+  {
+    id: 'job-140',
+    projectId: project.id,
+    kind: 'qa_doc_generate',
+    requestedBy: GITHUB[PEOPLE.lead]!,
+    requestedByName: PEOPLE.lead,
+    createdAt: T(21, 16, 40),
+    status: 'running',
+    input: { bundleId: 'bundle-140', appVersion: '1.4.0', prevDocId: qaDocV130.id },
+    host: '이재성의 MacBook Pro',
+    startedAt: T(21, 16, 41),
+    progress: { phase: 'cases', done: 16, total: 40, spec: 'onboarding-flow' },
+  },
+  {
+    id: 'job-131',
+    projectId: project.id,
+    kind: 'qa_doc_generate',
+    requestedBy: GITHUB[PEOPLE.dev]!,
+    requestedByName: PEOPLE.dev,
+    createdAt: T(18, 14, 5),
+    status: 'paused',
+    input: { bundleId: 'bundle-131', appVersion: '1.3.1', prevDocId: qaDocV130.id },
+    host: '최서준의 MacBook Air',
+    startedAt: T(18, 14, 6),
+    progress: { phase: 'cases', done: 8, total: 12, spec: 'onboarding-flow' },
+    error: {
+      kind: 'plan_limit',
+      message: 'Claude 플랜 사용 한도(5시간)에 닿았습니다. 한도가 풀린 뒤 다시 시도하면 끝난 호출은 건너뜁니다.',
+    },
+  },
+  {
+    id: 'job-130',
+    projectId: project.id,
+    kind: 'qa_doc_generate',
+    requestedBy: GITHUB[PEOPLE.qa]!,
+    requestedByName: PEOPLE.qa,
+    createdAt: T(15, 10, 2),
+    status: 'done',
+    input: { bundleId: 'bundle-130', appVersion: '1.3.0', prevDocId: 'doc-120' },
+    host: '김민지의 MacBook Pro',
+    startedAt: T(15, 10, 3),
+    finishedAt: T(15, 10, 20),
+    result: { docId: 'doc-130', cases: 62, generated: 7, questions: 2, newPrepFlows: 0, tokens: 41_200, costUsd: 0.38 },
+  },
+];
+
 export type FixtureDb = {
   projects: Project[];
   members: Member[];
@@ -1348,6 +1399,7 @@ export type FixtureDb = {
   defects: Record<string, Defect[]>;
   runs: Record<string, Run[]>;
   prepFlows: PrepFlow[];
+  jobs: Job[];
   console: ConsoleSession;
 };
 
@@ -1364,6 +1416,7 @@ export function createFixtureDb(): FixtureDb {
     defects: { [cycle130.id]: defects130, [cycle121.id]: defects121 },
     runs: { [cycle130.id]: runs130, [cycle121.id]: [] },
     prepFlows: PREP_FLOWS,
+    jobs,
     console: consoleSession(),
   });
 }

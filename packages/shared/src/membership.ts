@@ -39,6 +39,13 @@ export function requireAdmin(members: Member[], uid: string): Member {
   return m;
 }
 
+/** QA 데이터 쓰기 (F-TM-03): Admin·QA만. Viewer는 조회만 */
+export function requireEditor(members: Member[], uid: string): Member {
+  const m = requireMember(members, uid);
+  if (m.role === 'viewer') throw permission('Viewer는 조회만 할 수 있습니다. Admin·QA에게 요청하세요.');
+  return m;
+}
+
 const adminCount = (members: Member[]) => members.filter((m) => m.role === 'admin').length;
 
 const PACKAGE = /^[a-zA-Z][\w]*(\.[a-zA-Z][\w]*)+$/;

@@ -7,6 +7,7 @@
   },
   "scripts": {
     "run-cycle": "tsx src/cli.ts",
+    "serve": "tsx src/serve.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "node ../functions/scripts/emulators.mjs test 'vitest run'"
   },
@@ -16,7 +17,9 @@
     "@qcard/device": "workspace:*",
     "@qcard/fixtures": "workspace:*",
     "@qcard/llm": "workspace:*",
+    "@qcard/qadoc": "workspace:*",
     "@qcard/shared": "workspace:*",
+    "@qcard/spec": "workspace:*",
     "firebase": "13.0.0"
   },
   "devDependencies": {

@@ -3,7 +3,9 @@ import type {
   Build,
   CaseResult,
   Defect,
+  Host,
   Invitation,
+  Job,
   Member,
   PrepFlow,
   Project,
@@ -27,7 +29,7 @@ import {
   type DocumentData,
   type Firestore,
 } from 'firebase/firestore';
-import { getBytes, ref, type FirebaseStorage } from 'firebase/storage';
+import { getBytes, ref, uploadString, type FirebaseStorage } from 'firebase/storage';
 import {
   ConflictError,
   NotFoundError,
@@ -44,7 +46,9 @@ import {
   cycleSummary,
   isActiveCycle,
   nextCase,
+  qaDocRequest,
   qaDocSummary,
+  retriedJob,
   resolveQuestionIn,
 } from './logic';
 
@@ -88,8 +92,8 @@ const resultId = (tcId: string, deviceId: string) => `${tcId}__${deviceId}`;
 /** Firebase 오류 → 화면용 오류 (규칙 위반 메시지는 그대로 보인다) */
 export function fromFirebase(e: unknown): unknown {
   if (!(e instanceof FirebaseError)) return e;
-  const code = e.code.replace(/^(functions|firestore)\//, '');
-  if (code === 'permission-denied') {
+  const code = e.code.replace(/^(functions|firestore|storage)\//, '');
+  if (code === 'permission-denied' || code === 'unauthorized') {
     return new PermissionError(
       e.code.startsWith('functions/') ? e.message : '권한이 없습니다. 이 프로젝트의 멤버이고 역할이 맞는지 확인하세요.',
     );
@@ -338,6 +342,45 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
           return next;
         }),
       ),
+
+    // ------------------------------------------------------------ QA 문서 생성 작업 (PRD §5.2, §6.2)
+    requestQaDoc: (projectId, input) =>
+      guard(async () => {
+        if (!deps.storage) throw new NotFoundError('스펙을 올릴 저장소가 연결되지 않았습니다');
+        const jobRef = doc(collection(db, P(projectId), 'jobs'));
+        // 사람이 알아볼 수 있게 버전을 넣는다 (뒤는 겹치지 않게 자동 id 일부)
+        const slug = input.appVersion.trim().replace(/[^\w.-]+/g, '-');
+        const bundleRef = doc(db, P(projectId), 'specBundles', `bundle-${slug}-${jobRef.id.slice(0, 6)}`);
+        const { bundle, uploads, job } = qaDocRequest(projectId, input, me(), now(), {
+          bundleId: bundleRef.id,
+          jobId: jobRef.id,
+        });
+        // 스냅샷 파일을 먼저 올리고, 다 올라간 뒤에 묶음·작업을 만든다 (호스트가 덜 올라간 묶음을 집지 않게)
+        for (const u of uploads) {
+          await uploadString(ref(deps.storage, u.path), u.content, 'raw', { contentType: 'text/markdown; charset=utf-8' });
+        }
+        const batch = writeBatch(db);
+        batch.set(bundleRef, clean(bundle));
+        batch.set(jobRef, clean(job));
+        await batch.commit();
+        return job;
+      }),
+    listJobs: (projectId) =>
+      guard(async () => {
+        const snap = await getDocs(collection(db, P(projectId), 'jobs'));
+        return snap.docs.map((d) => d.data() as Job).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      }),
+    retryJob: (projectId, jobId) =>
+      guard(() =>
+        runTransaction(db, async (tx) => {
+          const r = doc(db, P(projectId), 'jobs', jobId);
+          const snap = await tx.get(r);
+          if (!snap.exists()) throw new NotFoundError(`작업 없음: ${jobId}`);
+          tx.set(r, clean(retriedJob(snap.data() as Job, me().uid)));
+        }),
+      ),
+    myHosts: () =>
+      guard(async () => (await getDocs(collection(db, 'users', me().uid, 'hosts'))).docs.map((d) => d.data() as Host)),
 
     screenshotUrl: (path) =>
       guard(async () => {

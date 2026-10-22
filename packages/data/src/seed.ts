@@ -24,6 +24,7 @@ export function seedDocs(opts: { deviceCycle?: boolean } = {}): [string, Record<
   }
   // 준비 플로우는 하루콩 스펙에서 나온 것
   db.prepFlows.forEach((f, i) => put(`projects/haru/prepFlows/${f.id}`, { ...f, _i: i }));
+  for (const j of db.jobs) put(`projects/${j.projectId}/jobs/${j.id}`, j);
   for (const c of db.cycles) {
     const base = `projects/${c.projectId}/cycles/${c.id}`;
     put(base, c);

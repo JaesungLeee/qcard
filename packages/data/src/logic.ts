@@ -3,13 +3,25 @@ import {
   CaseBody,
   type Build,
   type CaseResult,
+  type Job,
+  type SpecBundle,
   type QADocument,
   type Run,
   type TestCase,
   type TestCycle,
   type Verdict,
 } from '@qcard/shared';
-import type { ConfirmVerdictInput, CycleSummary, QaDocSummary, QuestionResolution, VerdictCounts } from './api';
+import { readBundle } from '@qcard/spec';
+import {
+  PermissionError,
+  RuleError,
+  type ConfirmVerdictInput,
+  type CycleSummary,
+  type QaDocSummary,
+  type QuestionResolution,
+  type RequestQaDocInput,
+  type VerdictCounts,
+} from './api';
 
 /*
  * QcardApi 구현(메모리·Firestore)이 함께 쓰는 순수 계산. 저장은 각 구현이 한다.
@@ -146,3 +158,67 @@ export function cycleSummary(
 
 /** 진행 중 사이클: 끝나지 않았고 로컬 실행 묶음이 아닌 것 */
 export const isActiveCycle = (c: TestCycle) => !c.period.end && c.origin !== 'local_run';
+
+/**
+ * QA 문서 생성 요청 (PRD §5.2) → 올릴 파일·스펙 묶음·Job. 메모리·Firestore 구현이 같이 쓴다.
+ * `<스펙>/spec.md`만 올리고(F-IN-08), 스펙이 하나도 없거나 버전이 비면 `RuleError`.
+ */
+export function qaDocRequest(
+  projectId: string,
+  input: RequestQaDocInput,
+  user: { uid: string; name: string },
+  now: string,
+  ids: { bundleId: string; jobId: string },
+): { bundle: SpecBundle; uploads: { path: string; content: string }[]; job: Job } {
+  const appVersion = input.appVersion.trim();
+  if (!appVersion) throw new RuleError('앱 버전을 입력하세요.');
+  const parsed = readBundle(input.files);
+  if (!parsed.specs.length) {
+    throw new RuleError('`<스펙 이름>/spec.md` 파일이 없습니다. docs/specs 폴더나 그 폴더를 묶은 ZIP을 올리세요.');
+  }
+  // 같은 폴더의 plan.md 등은 빼고 spec.md만 스펙 이름으로 찾는다
+  const byName = new Map(
+    input.files.flatMap((f) => {
+      const parts = f.path.replace(/\\/g, '/').split('/').filter(Boolean);
+      return parts.at(-1) === 'spec.md' ? [[parts.at(-2) ?? '', f] as const] : [];
+    }),
+  );
+  const uploads = parsed.specs.map((s) => ({
+    path: `projects/${projectId}/specBundles/${ids.bundleId}/${s.name}/spec.md`,
+    content: byName.get(s.name)!.content,
+  }));
+  const bundle: SpecBundle = {
+    id: ids.bundleId,
+    projectId,
+    appVersion,
+    uploadedBy: user.name,
+    uploadedAt: now,
+    specs: parsed.specs.map((s, i) => ({
+      name: s.name,
+      title: s.title,
+      ...(s.version ? { version: s.version } : {}),
+      path: uploads[i]!.path,
+      contentHash: hash(uploads[i]!.content),
+    })),
+    ignored: parsed.ignored,
+  };
+  const job: Job = {
+    id: ids.jobId,
+    projectId,
+    kind: 'qa_doc_generate',
+    requestedBy: user.uid,
+    requestedByName: user.name,
+    createdAt: now,
+    status: 'queued',
+    input: { bundleId: ids.bundleId, appVersion, ...(input.prevDocId ? { prevDocId: input.prevDocId } : {}) },
+  };
+  return { bundle, uploads, job };
+}
+
+/** 다시 시도: 실패·일시정지한 작업만, 요청자 본인만 */
+export function retriedJob(job: Job, uid: string): Job {
+  if (job.requestedBy !== uid) throw new PermissionError('요청한 사람만 다시 시도할 수 있습니다.');
+  if (job.status !== 'failed' && job.status !== 'paused') throw new RuleError('실패하거나 일시정지한 작업만 다시 시도합니다.');
+  const { error: _e, progress: _p, host: _h, ...rest } = job;
+  return { ...rest, status: 'queued' };
+}

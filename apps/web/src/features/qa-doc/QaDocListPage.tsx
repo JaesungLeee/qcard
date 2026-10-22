@@ -11,13 +11,14 @@ import {
   textClass,
   token,
 } from '@qcard/ui';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
 import { fmtDateTime } from '../../components/format';
 import type { QaDocSummary } from '../../data/api';
-import { useQaDocs } from '../../data/hooks';
+import { useJobs, useMyRole, useQaDocs } from '../../data/hooks';
 import { Progress, Tag } from './Badges';
+import { HostStatus, JobList } from './Jobs';
 import './qa-doc.css';
 
 const CHANGES: CaseChange[] = ['new', 'changed', 'removed', 'same'];
@@ -25,7 +26,11 @@ const CHANGES: CaseChange[] = ['new', 'changed', 'removed', 'same'];
 /** QA 문서 목록 (PRD §5.2): 앱 버전마다 하나씩. */
 export function QaDocListPage() {
   const { projectId = '' } = useParams();
+  const navigate = useNavigate();
   const docs = useQaDocs(projectId);
+  const jobs = useJobs(projectId);
+  const role = useMyRole(projectId);
+  const canEdit = role.data === 'admin' || role.data === 'qa';
   return (
     <div className="qc-page">
       <PageHeader
@@ -33,15 +38,23 @@ export function QaDocListPage() {
         meta="앱 버전마다 스펙 묶음에서 QA 문서를 하나 만듭니다. 승인된 케이스만 테스트 사이클에서 실행됩니다."
         actions={
           <div className="qd-stack" style={{ gap: token('space-4'), alignItems: 'flex-end' }}>
-            <Button variant="solid" color="primary" leadingContent={<Icons.IconUpload />} disabled>
+            <Button
+              variant="solid"
+              color="primary"
+              leadingContent={<Icons.IconUpload />}
+              disabled={!canEdit}
+              onClick={() => void navigate(`/p/${projectId}/docs/new`)}
+            >
               스펙 업로드 · QA 문서 생성
             </Button>
             <span className={textClass('caption1')} style={{ color: token('foreground-neutral-tertiary') }}>
-              호스트 연결 후 사용 · 내 Claude 플랜으로 생성
+              {canEdit ? '내 호스트 에이전트가 내 Claude 플랜으로 생성' : 'Admin·QA만 요청할 수 있습니다'}
             </span>
           </div>
         }
       />
+      {canEdit && <HostStatus />}
+      {jobs.data && <JobList jobs={jobs.data} projectId={projectId} canEdit={canEdit} />}
       <QueryState query={docs}>
         {(list) => {
           const sorted = [...list].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));

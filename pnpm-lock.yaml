@@ -81,9 +81,15 @@ importers:
       '@qcard/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@qcard/qadoc':
+        specifier: workspace:*
+        version: link:../../packages/qadoc
       '@qcard/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@qcard/spec':
+        specifier: workspace:*
+        version: link:../../packages/spec
       firebase:
         specifier: 13.0.0
         version: 13.0.0
@@ -115,6 +121,9 @@ importers:
       '@qcard/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@qcard/spec':
+        specifier: workspace:*
+        version: link:../../packages/spec
       '@qcard/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -127,6 +136,9 @@ importers:
       ag-grid-react:
         specifier: 36.2.0
         version: 36.2.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       firebase:
         specifier: 13.0.0
         version: 13.0.0
@@ -207,6 +219,9 @@ importers:
       '@qcard/shared':
         specifier: workspace:*
         version: link:../shared
+      '@qcard/spec':
+        specifier: workspace:*
+        version: link:../spec
       firebase:
         specifier: 13.0.0
         version: 13.0.0
@@ -2771,6 +2786,9 @@ packages:
   fetch-blob@3.2.0:
     resolution: {integrity: sha512-7yAQpD2UMJzLi1Dqv7qFYnPbaPx7ZfFK6PiIxQ4PfkGPyNyl2Ugx+a/umUonmKqjhM4DnfbMvdX6otXq83soQQ==}
     engines: {node: ^12.20 || >= 14.13}
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   fill-range@7.1.1:
     resolution: {integrity: sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==}
@@ -7122,6 +7140,8 @@ snapshots:
     dependencies:
       node-domexception: 1.0.0
       web-streams-polyfill: 3.3.3
+
+  fflate@0.8.3: {}
 
   fill-range@7.1.1:
     dependencies:

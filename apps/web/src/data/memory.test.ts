@@ -231,3 +231,53 @@ describe('프로젝트·멤버·초대 (F-TM-09~13)', () => {
     expect((await api.restoreProject('widget')).deletedAt).toBeUndefined();
   });
 });
+
+describe('QA 문서 생성 요청 (PRD §5.2)', () => {
+  const SPEC = `# 스펙 명세서: 샘플
+
+### 유저 플로우 1 - 연다
+
+| ID | 시나리오 | Given | When | Then | 관련 FR |
+|---|---|---|---|---|---|
+| TS-001 | 첫 화면 | 설치함 | 연다 | 보인다 | FR-001 |
+
+- **FR-001**: 첫 화면을 보여 준다.
+`;
+  const files = [
+    { path: 'specs/sample/spec.md', content: SPEC },
+    { path: 'specs/sample/plan.md', content: '# 계획' },
+  ];
+
+  it('spec.md만 묶음으로 삼아 내 작업을 대기열에 넣는다', async () => {
+    const api = createMemoryApi();
+    const job = await api.requestQaDoc('haru', { appVersion: ' 1.4.1 ', files, prevDocId: 'doc-130' });
+    expect(job).toMatchObject({
+      status: 'queued',
+      requestedBy: GITHUB[PEOPLE.lead],
+      input: { appVersion: '1.4.1', prevDocId: 'doc-130' },
+    });
+    expect((await api.listJobs('haru'))[0]?.id).toBe(job.id);
+  });
+
+  it('Viewer·빈 폴더·버전 없음은 요청할 수 없다', async () => {
+    const api = createMemoryApi({ currentUser: PEOPLE.planner });
+    await expect(api.requestQaDoc('haru', { appVersion: '1.4.1', files })).rejects.toBeInstanceOf(PermissionError);
+    api.switchUser(PEOPLE.lead);
+    await expect(
+      api.requestQaDoc('haru', { appVersion: '1.4.1', files: [{ path: 'a/plan.md', content: '' }] }),
+    ).rejects.toBeInstanceOf(RuleError);
+    await expect(api.requestQaDoc('haru', { appVersion: ' ', files })).rejects.toBeInstanceOf(RuleError);
+  });
+
+  it('일시정지한 작업은 요청자만 다시 시도한다', async () => {
+    const api = createMemoryApi();
+    // job-131은 최서준이 요청했다
+    await expect(api.retryJob('haru', 'job-131')).rejects.toBeInstanceOf(PermissionError);
+    api.switchUser(PEOPLE.dev);
+    await api.retryJob('haru', 'job-131');
+    const job = (await api.listJobs('haru')).find((j) => j.id === 'job-131');
+    expect(job).toMatchObject({ status: 'queued' });
+    expect(job).not.toHaveProperty('error');
+    await expect(api.retryJob('haru', 'job-130')).rejects.toBeInstanceOf(PermissionError);
+  });
+});

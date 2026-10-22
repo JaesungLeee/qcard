@@ -57,6 +57,12 @@ service cloud.firestore {
         allow read: if isMember(p);
         allow write: if canEdit(p);
       }
+      // 스펙 묶음: 업로드한 버전 스냅샷 (F-IN-03). 만든 뒤에는 바꾸지 않는다
+      match /specBundles/{id} {
+        allow read: if isMember(p);
+        allow create: if canEdit(p);
+        allow update, delete: if false;
+      }
       // QA 문서 생성 등 호스트 에이전트가 처리할 작업 (PRD §6.2). 요청자 본인 것만 만든다
       match /jobs/{id} {
         allow read: if isMember(p);
@@ -72,6 +78,11 @@ service cloud.firestore {
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
     }
 
+    // 호스트 에이전트가 "내 작업"을 찾는다 (컬렉션 그룹 조회 where requestedBy == 나)
+    match /{path=**}/jobs/{id} {
+      allow read: if signedIn() && resource.data.requestedBy == request.auth.uid;
+    }
+
     // 초대 토큰 → 초대 위치. Functions만 읽는다 (토큰을 모르는 사람이 초대를 찾지 못하게)
     match /invitationTokens/{token} {
       allow read, write: if false;
@@ -81,6 +92,11 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
       allow write: if false;
+
+      // 내 호스트 에이전트 연결 상태 (호스트가 주기적으로 갱신, 웹이 읽는다)
+      match /hosts/{hostId} {
+        allow read, write: if signedIn() && request.auth.uid == uid;
+      }
     }
   }
 }

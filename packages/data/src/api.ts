@@ -5,7 +5,9 @@ import type {
   PrepFlow,
   CaseResult,
   Defect,
+  Host,
   Invitation,
+  Job,
   InvitationState,
   Member,
   NewProjectInput,
@@ -71,6 +73,18 @@ export interface QcardApi {
   commentQuestion(ref: DocRef, questionId: string, text: string): Promise<void>;
   listPrepFlows(projectId: string): Promise<PrepFlow[]>;
 
+  /**
+   * QA 문서 생성 요청 (PRD §5.2): 스펙 묶음(`<스펙>/spec.md`만)을 변경 불가 스냅샷으로 올리고 Job을 만든다.
+   * 처리는 요청자 본인의 호스트 에이전트가 본인 Claude 플랜으로 한다. Admin·QA만
+   */
+  requestQaDoc(projectId: string, input: RequestQaDocInput): Promise<Job>;
+  /** 최근 작업 (새것 먼저) */
+  listJobs(projectId: string): Promise<Job[]>;
+  /** 실패·일시정지한 내 작업을 다시 대기열에 넣는다 */
+  retryJob(projectId: string, jobId: string): Promise<void>;
+  /** 내 호스트 에이전트 (연결 상태는 `lastSeen`으로 판단, HOST_ONLINE_MS) */
+  myHosts(): Promise<Host[]>;
+
   listCycles(projectId: string): Promise<CycleSummary[]>;
   getCycle(ref: CycleRef): Promise<CycleDetail>;
   /** 사람 확정·오버라이드 (F-RP-04). 판정 변경 이력이 쌓인다. */
@@ -82,6 +96,14 @@ export interface QcardApi {
   /** 로컬 콘솔 (호스트 에이전트가 제공할 데이터) */
   getConsoleSession(): Promise<ConsoleSession>;
 }
+
+/** 업로드한 파일 (폴더·ZIP에서 읽은 상대 경로 + 내용). `<스펙>/spec.md`가 아닌 파일은 올리지 않는다 */
+export type RequestQaDocInput = {
+  appVersion: string;
+  files: { path: string; content: string }[];
+  /** 비교할 이전 QA 문서 (없으면 모든 케이스가 신규) */
+  prevDocId?: string;
+};
 
 /** QA 문서·사이클은 프로젝트 아래에 있다 (Firestore `projects/{p}/qaDocs/{d}`) */
 export type DocRef = { projectId: string; docId: string };

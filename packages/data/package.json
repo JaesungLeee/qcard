@@ -14,6 +14,7 @@
   "dependencies": {
     "@qcard/fixtures": "workspace:*",
     "@qcard/shared": "workspace:*",
+    "@qcard/spec": "workspace:*",
     "firebase": "13.0.0"
   },
   "devDependencies": {

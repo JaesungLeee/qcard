@@ -473,3 +473,109 @@ export const ThoughtEntry = z.object({
   text: z.string(),
 });
 export type ThoughtEntry = z.infer<typeof ThoughtEntry>;
+
+/**
+ * 스펙 묶음 (F-IN-03·08): 앱 버전 하나의 스펙 폴더 스냅샷. 업로드 후 바꾸지 않는다.
+ * 입력으로 쓰는 `<스펙 이름>/spec.md`만 Storage(`projects/{p}/specBundles/{id}/<스펙>/spec.md`)에 올린다.
+ */
+export const SpecBundle = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  appVersion: z.string(),
+  uploadedBy: z.string(),
+  uploadedAt: z.string(),
+  specs: z.array(
+    z.object({
+      name: z.string(),
+      title: z.string(),
+      version: z.string().optional(),
+      /** Storage 경로 */
+      path: z.string(),
+      contentHash: z.string(),
+    }),
+  ),
+  /** 입력으로 쓰지 않은 파일 수 (plan·tasks 등) */
+  ignored: z.number(),
+});
+export type SpecBundle = z.infer<typeof SpecBundle>;
+
+/** 작업 실패·일시정지 이유. 플랜 한도·Claude Code 문제는 해결 후 다시 시도한다 (F-EX-17) */
+export const JobErrorKind = z.enum(['plan_limit', 'not_logged_in', 'claude_outdated', 'failed']);
+export type JobErrorKind = z.infer<typeof JobErrorKind>;
+export const JOB_ERROR_LABEL: Record<JobErrorKind, string> = {
+  plan_limit: '플랜 한도',
+  not_logged_in: 'Claude Code 로그인 필요',
+  claude_outdated: 'Claude Code 업데이트 필요',
+  failed: '오류',
+};
+
+export const JobStatus = z.enum(['queued', 'running', 'done', 'failed', 'paused']);
+export type JobStatus = z.infer<typeof JobStatus>;
+export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
+  queued: '호스트 대기',
+  running: '생성 중',
+  done: '완료',
+  failed: '실패',
+  paused: '일시정지',
+};
+
+/**
+ * 호스트 에이전트가 처리할 작업 (PRD §6.2·6.4). 웹에서 요청하면 **요청자 본인의 호스트**가 받아
+ * 본인 Claude 플랜으로 처리한다. 다른 사람의 호스트는 가져가지 않는다.
+ */
+export const Job = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  kind: z.literal('qa_doc_generate'),
+  /** 요청자 uid (이 사용자의 호스트만 처리한다) */
+  requestedBy: z.string(),
+  requestedByName: z.string(),
+  createdAt: z.string(),
+  status: JobStatus,
+  input: z.object({ bundleId: z.string(), appVersion: z.string(), prevDocId: z.string().optional() }),
+  /** 처리 중인 호스트 */
+  host: z.string().optional(),
+  startedAt: z.string().optional(),
+  finishedAt: z.string().optional(),
+  progress: z
+    .object({
+      phase: z.enum(['plan', 'cases', 'save']),
+      done: z.number(),
+      total: z.number(),
+      spec: z.string().optional(),
+    })
+    .optional(),
+  result: z
+    .object({
+      docId: z.string(),
+      cases: z.number(),
+      generated: z.number(),
+      questions: z.number(),
+      newPrepFlows: z.number(),
+      tokens: z.number(),
+      costUsd: z.number(),
+    })
+    .optional(),
+  error: z.object({ kind: JobErrorKind, message: z.string() }).optional(),
+});
+export type Job = z.infer<typeof Job>;
+
+/**
+ * 호스트 에이전트 연결 상태 (PRD §6.4 Host, F-DB-09). 실행 중인 호스트가 주기적으로 `lastSeen`을 갱신한다.
+ * `users/{uid}/hosts/{hostId}` — 본인만 읽고 쓴다.
+ */
+export const Host = z.object({
+  id: z.string(),
+  name: z.string(),
+  lastSeen: z.string(),
+  claudeCode: z
+    .object({
+      version: z.string().optional(),
+      loggedIn: z.boolean(),
+      subscriptionType: z.string().optional(),
+    })
+    .optional(),
+});
+export type Host = z.infer<typeof Host>;
+/** 이 시간 안에 신호가 있으면 연결된 것으로 본다 (호스트는 30초마다 갱신) */
+export const HOST_ONLINE_MS = 90_000;

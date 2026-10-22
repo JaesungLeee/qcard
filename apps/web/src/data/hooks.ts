@@ -1,7 +1,14 @@
 import type { CaseBody } from '@qcard/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createContext, useContext } from 'react';
-import type { ConfirmVerdictInput, DocRef, NewProjectInput, QcardApi, QuestionResolution } from './api';
+import { createContext, useContext, useEffect, useRef } from 'react';
+import type {
+  ConfirmVerdictInput,
+  DocRef,
+  NewProjectInput,
+  QcardApi,
+  QuestionResolution,
+  RequestQaDocInput,
+} from './api';
 import type { Role } from '@qcard/shared';
 
 export const ApiContext = createContext<QcardApi | null>(null);
@@ -25,6 +32,8 @@ export const keys = {
   cycles: (projectId: string) => ['cycles', projectId] as const,
   cycle: (projectId: string, cycleId: string) => ['cycle', projectId, cycleId] as const,
   console: ['console'] as const,
+  jobs: (projectId: string) => ['jobs', projectId] as const,
+  hosts: ['hosts'] as const,
 };
 
 export function useProject(projectId: string) {
@@ -92,9 +101,13 @@ export function useQaDocs(projectId: string) {
   return useQuery({ queryKey: keys.qaDocs(projectId), queryFn: () => api.listQaDocs(projectId) });
 }
 
-export function useQaDoc(projectId: string, docId: string) {
+export function useQaDoc(projectId: string, docId: string, enabled = true) {
   const api = useApi();
-  return useQuery({ queryKey: keys.qaDoc(projectId, docId), queryFn: () => api.getQaDoc({ projectId, docId }) });
+  return useQuery({
+    queryKey: keys.qaDoc(projectId, docId),
+    queryFn: () => api.getQaDoc({ projectId, docId }),
+    enabled: enabled && !!docId,
+  });
 }
 
 export function usePrepFlows(projectId: string) {
@@ -166,5 +179,53 @@ export function useConfirmVerdict() {
       void qc.invalidateQueries({ queryKey: keys.cycle(input.projectId, input.cycleId) });
       void qc.invalidateQueries({ queryKey: ['cycles'] });
     },
+  });
+}
+
+// ---------------------------------------------------------------- QA 문서 생성 작업 (PRD §5.2)
+
+/** 대기·생성 중인 작업이 있으면 3초마다 다시 읽는다 (호스트가 진행률을 갱신한다) */
+export function useJobs(projectId: string) {
+  const api = useApi();
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: keys.jobs(projectId),
+    queryFn: () => api.listJobs(projectId),
+    refetchInterval: (q) =>
+      q.state.data?.some((j) => j.status === 'queued' || j.status === 'running') ? 3000 : false,
+  });
+  // 작업이 끝나 새 문서·준비 플로우가 생기면 목록을 다시 읽는다
+  const done = (q.data ?? []).filter((j) => j.status === 'done').map((j) => j.id).join(',');
+  const seen = useRef(done);
+  useEffect(() => {
+    if (seen.current === done) return;
+    seen.current = done;
+    void qc.invalidateQueries({ queryKey: keys.qaDocs(projectId) });
+    void qc.invalidateQueries({ queryKey: keys.prepFlows(projectId) });
+  }, [done, projectId, qc]);
+  return q;
+}
+
+/** 내 호스트 에이전트 연결 상태 (15초마다) */
+export function useMyHosts() {
+  const api = useApi();
+  return useQuery({ queryKey: keys.hosts, queryFn: () => api.myHosts(), refetchInterval: 15_000 });
+}
+
+export function useRequestQaDoc(projectId: string) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RequestQaDocInput) => api.requestQaDoc(projectId, input),
+    onSettled: () => void qc.invalidateQueries({ queryKey: keys.jobs(projectId) }),
+  });
+}
+
+export function useRetryJob(projectId: string) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (jobId: string) => api.retryJob(projectId, jobId),
+    onSettled: () => void qc.invalidateQueries({ queryKey: keys.jobs(projectId) }),
   });
 }

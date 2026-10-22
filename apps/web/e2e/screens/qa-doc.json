@@ -1,5 +1,6 @@
 [
   { "name": "qa-doc-list", "path": "/p/haru/docs", "waitFor": "QA 문서 1.3.0" },
+  { "name": "qa-doc-new", "path": "/p/haru/docs/new", "waitFor": "1. 스펙 폴더" },
   { "name": "qa-doc-cases", "path": "/p/haru/docs/doc-130", "waitFor": "TC-ONBOARDING-001" },
   { "name": "qa-doc-case-changed", "path": "/p/haru/docs/doc-130?tab=cases&case=TC-ONBOARDING-008", "waitFor": "이전 버전 대비 변경" },
   { "name": "qa-doc-case-held", "path": "/p/haru/docs/doc-130?case=TC-ONBOARDING-030", "waitFor": "승인 보류" },
