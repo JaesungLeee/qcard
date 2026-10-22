@@ -20,7 +20,8 @@ import {
 import { suggestionsText } from './SuggestionsTab';
 
 const api = () => createMemoryApi();
-const doc130 = () => api().getQaDoc('doc-130');
+const DOC130 = { projectId: 'haru', docId: 'doc-130' };
+const doc130 = () => api().getQaDoc(DOC130);
 
 describe('doc-130 fixture 전제', () => {
   it('62개: 동일 54 · 변경 3 · 신규 4 · 삭제 1', async () => {
@@ -130,16 +131,16 @@ describe('편집 검증', () => {
 describe('낙관적 잠금 + 다시 적용 (F-QD-09)', () => {
   it('같은 rev로 두 번 저장하면 두 번째는 ConflictError, 내 편집을 최신 위에 다시 적용해 저장한다', async () => {
     const shared = api();
-    const d = await shared.getQaDoc('doc-130');
+    const d = await shared.getQaDoc(DOC130);
     const c = d.cases.find((x) => x.sourceId.endsWith('TS-008'))!;
     const base = toBody(c);
 
     // 상대: 우선순위를 바꿔 먼저 저장
-    await shared.updateCase('doc-130', c.tcId, { ...base, priority: 'high' }, c.rev);
+    await shared.updateCase(DOC130, c.tcId, { ...base, priority: 'high' }, c.rev);
 
     // 나: 같은 rev에서 제목을 바꿔 저장 → 충돌
     const mine: CaseBody = { ...base, title: `${base.title} (수정)` };
-    const err = await shared.updateCase('doc-130', c.tcId, mine, c.rev).catch((e: unknown) => e);
+    const err = await shared.updateCase(DOC130, c.tcId, mine, c.rev).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ConflictError);
     const latest = (err as ConflictError).latest;
     expect(latest.rev).toBe(c.rev + 1);
@@ -150,7 +151,7 @@ describe('낙관적 잠금 + 다시 적용 (F-QD-09)', () => {
     expect(r.body.priority).toBe('high'); // 상대 변경 유지
     expect(r.body.title).toBe(mine.title); // 내 변경 다시 적용
 
-    const saved = await shared.updateCase('doc-130', c.tcId, r.body, latest.rev);
+    const saved = await shared.updateCase(DOC130, c.tcId, r.body, latest.rev);
     expect(saved).toMatchObject({ rev: c.rev + 2, title: mine.title, priority: 'high' });
   });
 
@@ -173,9 +174,9 @@ describe('낙관적 잠금 + 다시 적용 (F-QD-09)', () => {
 
   it('승인된 케이스 내용을 바꾸면 미승인으로 돌아간다', async () => {
     const shared = api();
-    const d = await shared.getQaDoc('doc-130');
+    const d = await shared.getQaDoc(DOC130);
     const c = d.cases.find((x) => x.approval.status === 'approved' && x.change === 'same')!;
-    const saved = await shared.updateCase('doc-130', c.tcId, { ...toBody(c), title: 'x' }, c.rev);
+    const saved = await shared.updateCase(DOC130, c.tcId, { ...toBody(c), title: 'x' }, c.rev);
     expect(saved.approval.status).toBe('pending');
   });
 });

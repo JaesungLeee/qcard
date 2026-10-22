@@ -11,6 +11,8 @@
     "test": "turbo run test",
     "tokens": "pnpm --filter @qcard/ui tokens",
     "dev": "pnpm --filter @qcard/web dev",
+    "dev:firebase": "pnpm --filter @qcard/web dev:firebase",
+    "emu": "pnpm --filter @qcard/functions emulators",
     "ui:snap": "pnpm --filter @qcard/web ui:snap",
     "format": "prettier --write .",
     "device:record": "pnpm --filter @qcard/device record",

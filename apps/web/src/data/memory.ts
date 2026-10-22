@@ -1,43 +1,42 @@
-import { createFixtureDb, GITHUB, hash, PEOPLE, type FixtureDb } from '@qcard/fixtures';
+import { createFixtureDb, GITHUB, PEOPLE, type FixtureDb } from '@qcard/fixtures';
 import {
-  CaseBody,
-  DELETE_GRACE_DAYS,
-  INVITE_TTL_DAYS,
-  type CaseResult,
-  type Invitation,
-  type Project,
-  type TestCase,
-  type Verdict,
+  accepting,
+  changeRole,
+  deletion,
+  invitationState,
+  leaving,
+  newInvitation,
+  newProject,
+  projectIdFor,
+  removal,
+  requireAdmin,
+  requireMember,
+  restoration,
+  type Actor,
+  type Member,
 } from '@qcard/shared';
 import {
   ConflictError,
   NotFoundError,
-  PermissionError,
-  RuleError,
+  toApiError,
   type ConfirmVerdictInput,
   type CycleDetail,
   type CycleSummary,
-  type InvitationView,
   type ProjectSummary,
-  type QaDocSummary,
   type QcardApi,
-  type VerdictCounts,
 } from './api';
 import { localRunCycle, type LocalRun } from './localRuns';
+import {
+  approvalFor,
+  confirmedResult,
+  cycleSummary,
+  isActiveCycle,
+  nextCase,
+  qaDocSummary,
+  resolveQuestionIn,
+} from '@qcard/data';
 
-const VERDICTS: Verdict[] = ['pass', 'fail', 'blocked', 'check', 'nt', 'na'];
-
-export function countVerdicts(results: CaseResult[]): VerdictCounts {
-  const counts = Object.fromEntries(VERDICTS.map((v) => [v, 0])) as VerdictCounts;
-  for (const r of results) counts[r.verdict]++;
-  return counts;
-}
-
-/** 통과율 = Pass / (수행 완료 칸 − N/A). N/T는 분모에서 뺀다. */
-export function passRate(counts: VerdictCounts): number {
-  const done = counts.pass + counts.fail + counts.blocked + counts.check;
-  return done === 0 ? 0 : counts.pass / done;
-}
+export { countVerdicts, passRate } from '@qcard/data';
 
 const clone = <T>(v: T): T => structuredClone(v);
 
@@ -71,7 +70,6 @@ export function createMemoryApi(
   let currentUser: string = options.currentUser ?? PEOPLE.lead;
   const latency = options.latencyMs ?? 0;
   const now = () => new Date().toISOString();
-  const days = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString();
   const wait = <T>(v: T): Promise<T> =>
     latency ? new Promise((r) => setTimeout(() => r(clone(v)), latency)) : Promise.resolve(clone(v));
 
@@ -87,32 +85,43 @@ export function createMemoryApi(
   };
   const build = (buildId: string) => db.builds.find((b) => b.id === buildId)!;
 
-  // ------------------------------------------------------------ 프로젝트·멤버·초대 규칙 (F-TM-09~13)
-  // 4단계에서 Firestore 보안 규칙·Functions가 같은 규칙을 강제한다.
+  // ------------------------------------------------------------ 프로젝트·멤버·초대 (F-TM-09~13)
+  // 규칙은 @qcard/shared membership — Cloud Functions도 같은 함수를 쓴다.
   const project = (projectId: string) => {
     const p = db.projects.find((x) => x.id === projectId);
     if (!p) throw new NotFoundError(`프로젝트 없음: ${projectId}`);
     return p;
   };
+  const actor = (): Actor => {
+    const gh = GITHUB[currentUser] ?? currentUser;
+    return { uid: gh, name: currentUser, github: gh };
+  };
   const membersOf = (projectId: string) => db.members.filter((m) => m.projectId === projectId);
-  const me = (projectId: string) => membersOf(projectId).find((m) => m.user === currentUser);
-  const requireMember = (projectId: string) => {
-    const m = me(projectId);
-    if (!m) throw new PermissionError('이 프로젝트의 멤버가 아닙니다. 초대를 받아야 볼 수 있습니다.');
-    return m;
+  const invitationsOf = (projectId: string) => db.invitations.filter((i) => i.projectId === projectId);
+  const me = (projectId: string) => membersOf(projectId).find((m) => m.uid === actor().uid);
+  const replaceMember = (m: Member) => {
+    const i = db.members.findIndex((x) => x.projectId === m.projectId && x.uid === m.uid);
+    if (i >= 0) db.members[i] = m;
+    else db.members.push(m);
   };
-  const requireAdmin = (projectId: string) => {
-    const m = requireMember(projectId);
-    if (m.role !== 'admin') throw new PermissionError('Admin만 할 수 있습니다.');
-    return m;
+  const dropMember = (m: Member) => {
+    db.members = db.members.filter((x) => !(x.projectId === m.projectId && x.uid === m.uid));
   };
-  const adminCount = (projectId: string) => membersOf(projectId).filter((m) => m.role === 'admin').length;
-  const expired = (inv: Invitation) => inv.expiresAt < now();
-  const github = (user: string) => GITHUB[user] ?? user;
+  /** 공용 규칙의 오류를 화면용 오류로 바꾼다 */
+  const rules = async <T>(fn: () => T): Promise<T> => {
+    try {
+      return wait(fn());
+    } catch (e) {
+      throw toApiError(e);
+    }
+  };
 
   return {
     get currentUser() {
       return currentUser;
+    },
+    get currentUid() {
+      return actor().uid;
     },
     users: Object.values(PEOPLE),
     switchUser(user: string) {
@@ -122,274 +131,132 @@ export function createMemoryApi(
     async listMyProjects() {
       await ensureLocal();
       const out: ProjectSummary[] = db.members
-        .filter((m) => m.user === currentUser)
+        .filter((m) => m.uid === actor().uid)
         .map((m) => ({
           project: project(m.projectId),
           role: m.role,
           memberCount: membersOf(m.projectId).length,
-          activeCycles: db.cycles.filter(
-            (c) => c.projectId === m.projectId && !c.period.end && c.origin !== 'local_run',
-          ).length,
+          activeCycles: db.cycles.filter((c) => c.projectId === m.projectId && isActiveCycle(c)).length,
         }));
       return wait(out);
     },
     async getProject(projectId) {
       const p = project(projectId);
-      requireMember(projectId);
-      return wait(p);
+      return rules(() => (requireMember(membersOf(projectId), actor().uid), p));
     },
     async createProject(input) {
-      if (!input.dataNoticeAck) throw new RuleError('데이터 처리 안내를 확인해야 프로젝트를 만들 수 있습니다.');
-      const name = input.name.trim();
-      if (!name || !input.appName.trim() || !input.packageName.trim()) {
-        throw new RuleError('프로젝트 이름, 앱 이름, 패키지명을 모두 입력하세요.');
-      }
-      if (!/^[a-zA-Z][\w]*(\.[a-zA-Z][\w]*)+$/.test(input.packageName.trim())) {
-        throw new RuleError('패키지명은 com.example.app 형식이어야 합니다.');
-      }
-      const base =
-        name
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '') || 'project';
-      let id = base;
-      for (let i = 2; db.projects.some((p) => p.id === id); i++) id = `${base}-${i}`;
-      const at = now();
-      const p: Project = {
-        id,
-        name,
-        appName: input.appName.trim(),
-        packageName: input.packageName.trim(),
-        createdBy: currentUser,
-        createdAt: at,
-      };
-      db.projects.push(p);
-      db.members.push({
-        projectId: id,
-        user: currentUser,
-        github: github(currentUser),
-        role: 'admin',
-        joinedAt: at,
-        dataNoticeAckAt: at,
+      return rules(() => {
+        const id = projectIdFor(input.name, (x) => db.projects.some((p) => p.id === x));
+        const { project: p, member } = newProject(input, actor(), id, now());
+        db.projects.push(p);
+        db.members.push(member);
+        return p;
       });
-      return wait(p);
     },
 
     async myRole(projectId) {
       return wait(me(projectId)?.role);
     },
     async listMembers(projectId) {
-      requireMember(projectId);
-      return wait(membersOf(projectId));
+      return rules(() => (requireMember(membersOf(projectId), actor().uid), membersOf(projectId)));
     },
-    async setMemberRole(projectId, user, role) {
-      requireAdmin(projectId);
-      const m = membersOf(projectId).find((x) => x.user === user);
-      if (!m) throw new NotFoundError(`멤버 없음: ${user}`);
-      if (m.role === 'admin' && role !== 'admin' && adminCount(projectId) === 1) {
-        throw new RuleError('프로젝트에는 Admin이 1명 이상 있어야 합니다. 다른 멤버를 먼저 Admin으로 지정하세요.');
-      }
-      m.role = role;
-      return wait(undefined);
+    async setMemberRole(projectId, uid, role) {
+      return rules(() => replaceMember(changeRole(membersOf(projectId), actor(), uid, role)));
     },
-    async removeMember(projectId, user) {
-      requireAdmin(projectId);
-      if (user === currentUser) throw new RuleError('본인은 내보낼 수 없습니다. 탈퇴를 사용하세요.');
-      const m = membersOf(projectId).find((x) => x.user === user);
-      if (!m) throw new NotFoundError(`멤버 없음: ${user}`);
-      if (m.role === 'admin' && adminCount(projectId) === 1) {
-        throw new RuleError('프로젝트에는 Admin이 1명 이상 있어야 합니다.');
-      }
-      db.members.splice(db.members.indexOf(m), 1);
-      return wait(undefined);
+    async removeMember(projectId, uid) {
+      return rules(() => dropMember(removal(membersOf(projectId), actor(), uid)));
     },
 
     async listInvitations(projectId) {
-      requireAdmin(projectId);
-      return wait(db.invitations.filter((i) => i.projectId === projectId && i.status === 'pending'));
+      return rules(() => {
+        requireAdmin(membersOf(projectId), actor().uid);
+        return invitationsOf(projectId).filter((i) => i.status === 'pending');
+      });
     },
     async createInvitation(projectId, input) {
-      requireAdmin(projectId);
-      const gh = input.github?.trim().replace(/^@/, '') || undefined;
-      if (gh && !/^[a-zA-Z\d](?:[a-zA-Z\d]|-(?=[a-zA-Z\d])){0,38}$/.test(gh)) {
-        throw new RuleError('GitHub 사용자명 형식이 아닙니다.');
-      }
-      if (gh && membersOf(projectId).some((m) => m.github === gh)) throw new RuleError(`@${gh}은 이미 멤버입니다.`);
-      if (
-        gh &&
-        db.invitations.some(
-          (i) => i.projectId === projectId && i.github === gh && i.status === 'pending' && !expired(i),
-        )
-      ) {
-        throw new RuleError(`@${gh}에게 보낸 초대가 이미 대기 중입니다.`);
-      }
-      const id = `inv-${db.invitations.length + 1}-${Date.now().toString(36)}`;
-      const inv: Invitation = {
-        id,
-        projectId,
-        role: input.role,
-        invitedBy: currentUser,
-        ...(gh ? { github: gh } : {}),
-        token: `${projectId}-${Math.random().toString(36).slice(2, 10)}`,
-        createdAt: now(),
-        expiresAt: days(INVITE_TTL_DAYS),
-        status: 'pending',
-      };
-      db.invitations.push(inv);
-      return wait(inv);
+      return rules(() => {
+        const ids = {
+          id: `inv-${db.invitations.length + 1}-${Date.now().toString(36)}`,
+          token: `${projectId}-${Math.random().toString(36).slice(2, 10)}`,
+        };
+        const inv = newInvitation(membersOf(projectId), invitationsOf(projectId), actor(), input, ids, now());
+        db.invitations.push(inv);
+        return inv;
+      });
     },
     async revokeInvitation(projectId, invitationId) {
-      requireAdmin(projectId);
-      const inv = db.invitations.find((i) => i.id === invitationId && i.projectId === projectId);
-      if (!inv) throw new NotFoundError(`초대 없음: ${invitationId}`);
-      inv.status = 'revoked';
-      return wait(undefined);
+      return rules(() => {
+        requireAdmin(membersOf(projectId), actor().uid);
+        const inv = invitationsOf(projectId).find((i) => i.id === invitationId);
+        if (!inv) throw new NotFoundError(`초대 없음: ${invitationId}`);
+        inv.status = 'revoked';
+      });
     },
     async getInvitation(token) {
       const inv = db.invitations.find((i) => i.token === token);
       if (!inv) throw new NotFoundError('초대를 찾을 수 없습니다. 링크를 다시 확인하세요.');
-      const state: InvitationView['state'] =
-        inv.status !== 'pending'
-          ? inv.status
-          : me(inv.projectId)
-            ? 'member'
-            : expired(inv)
-              ? 'expired'
-              : inv.github && inv.github !== github(currentUser)
-                ? 'other-user'
-                : 'pending';
+      const state = invitationState(inv, actor(), !!me(inv.projectId), now());
       return wait({ invitation: inv, project: project(inv.projectId), state });
     },
     async acceptInvitation(token, input) {
       const inv = db.invitations.find((i) => i.token === token);
       if (!inv) throw new NotFoundError('초대를 찾을 수 없습니다.');
-      if (inv.status === 'revoked') throw new RuleError('취소된 초대입니다.');
-      if (inv.status === 'accepted') throw new RuleError('이미 사용된 초대입니다.');
-      if (expired(inv)) throw new RuleError('만료된 초대입니다. 초대한 사람에게 새 초대를 요청하세요.');
-      if (inv.github && inv.github !== github(currentUser)) throw new RuleError(`@${inv.github}에게 보낸 초대입니다.`);
-      if (me(inv.projectId)) throw new RuleError('이미 이 프로젝트의 멤버입니다.');
-      if (!input.dataNoticeAck) throw new RuleError('데이터 처리 안내를 확인해야 참여할 수 있습니다.');
-      const at = now();
-      db.members.push({
-        projectId: inv.projectId,
-        user: currentUser,
-        github: github(currentUser),
-        role: inv.role,
-        joinedAt: at,
-        dataNoticeAckAt: at,
+      return rules(() => {
+        const r = accepting(inv, actor(), !!me(inv.projectId), input.dataNoticeAck, now());
+        db.members.push(r.member);
+        inv.status = r.invitationStatus;
+        return project(inv.projectId);
       });
-      // 사용자명 초대는 한 번 쓰면 끝, 링크 초대는 만료·취소 전까지 여러 사람이 쓴다
-      if (inv.github) inv.status = 'accepted';
-      return wait(project(inv.projectId));
     },
 
     async leaveProject(projectId) {
-      const m = requireMember(projectId);
-      const all = membersOf(projectId);
-      if (all.length === 1) throw new RuleError('혼자 남은 멤버는 탈퇴할 수 없습니다. 프로젝트를 삭제하세요.');
-      if (m.role === 'admin' && adminCount(projectId) === 1) {
-        throw new RuleError('마지막 Admin입니다. 다른 멤버를 Admin으로 지정한 뒤 탈퇴하세요.');
-      }
-      db.members.splice(db.members.indexOf(m), 1);
-      return wait(undefined);
+      return rules(() => dropMember(leaving(membersOf(projectId), actor())));
     },
     async deleteProject(projectId, confirmName) {
-      requireAdmin(projectId);
       const p = project(projectId);
-      if (confirmName.trim() !== p.name) throw new RuleError('프로젝트 이름이 일치하지 않습니다.');
-      p.deletedAt = now();
-      p.purgeAt = days(DELETE_GRACE_DAYS);
-      return wait(p);
+      return rules(() => Object.assign(p, deletion(p, membersOf(projectId), actor(), confirmName, now())));
     },
     async restoreProject(projectId) {
-      requireAdmin(projectId);
       const p = project(projectId);
-      delete p.deletedAt;
-      delete p.purgeAt;
-      return wait(p);
+      return rules(() => {
+        restoration(membersOf(projectId), actor());
+        delete p.deletedAt;
+        delete p.purgeAt;
+        return p;
+      });
     },
 
     async listQaDocs(projectId) {
       const docs = db.qaDocs.filter((d) => d.projectId === projectId);
-      const summaries: QaDocSummary[] = docs.map((d) => {
-        const changeCounts = { new: 0, changed: 0, removed: 0, same: 0 };
-        const approvalCounts = { pending: 0, approved: 0, rejected: 0, held: 0 };
-        for (const c of d.cases) {
-          changeCounts[c.change]++;
-          approvalCounts[c.approval.status]++;
-        }
-        return {
-          id: d.id,
-          appVersion: d.appVersion,
-          createdAt: d.createdAt,
-          prevAppVersion: docs.find((x) => x.id === d.prevDocId)?.appVersion,
-          caseCount: d.cases.length,
-          changeCounts,
-          approvalCounts,
-          openQuestions: d.questions.filter((q) => q.status === 'open').length,
-        };
-      });
-      return wait(summaries);
+      return wait(docs.map((d) => qaDocSummary(d, docs)));
     },
-    async getQaDoc(docId) {
+    async getQaDoc({ docId }) {
       return wait(doc(docId));
     },
-    async updateCase(docId, tcId, input, expectedRev) {
-      // 케이스 전체 객체를 넘겨도 본문 필드만 남긴다 (해시·저장 대상)
-      const body = CaseBody.parse(input);
+    async updateCase({ docId }, tcId, input, expectedRev) {
       const d = doc(docId);
       const i = d.cases.findIndex((c) => c.tcId === tcId);
       const current = d.cases[i];
       if (!current) throw new NotFoundError(`케이스 없음: ${tcId}`);
       if (current.rev !== expectedRev) throw new ConflictError(clone(current));
-      const contentHash = hash(body);
-      const changed = contentHash !== current.contentHash;
-      const next: TestCase = {
-        ...current,
-        ...body,
-        contentHash,
-        rev: current.rev + 1,
-        updatedBy: currentUser,
-        updatedAt: now(),
-        // 내용이 바뀌면 자동 미승인 (F-QD-10)
-        approval: changed && current.approval.status === 'approved' ? { status: 'pending' } : current.approval,
-      };
-      d.cases[i] = next;
-      return wait(next);
+      d.cases[i] = nextCase(current, input, currentUser, now());
+      return wait(d.cases[i]);
     },
-    async setApproval(docId, tcIds, status) {
-      const d = doc(docId);
-      for (const c of d.cases) {
-        if (!tcIds.includes(c.tcId)) continue;
-        c.approval =
-          status === 'approved'
-            ? { status, by: currentUser, at: now(), contentHash: c.contentHash }
-            : status === 'rejected'
-              ? { status, by: currentUser, at: now() }
-              : { status };
+    async setApproval({ docId }, tcIds, status) {
+      for (const c of doc(docId).cases) {
+        if (tcIds.includes(c.tcId)) c.approval = approvalFor(c, status, currentUser, now());
       }
       return wait(undefined);
     },
-    async resolveQuestion(docId, questionId, resolution) {
+    async resolveQuestion({ docId }, questionId, resolution) {
       const d = doc(docId);
-      const q = d.questions.find((x) => x.id === questionId);
-      if (!q) throw new NotFoundError(`질문 없음: ${questionId}`);
-      q.status = resolution.kind === 'answer' ? 'answered' : 'proceed';
-      if (resolution.kind === 'answer') q.answer = resolution.text;
-      q.comments.push({
-        by: currentUser,
-        at: now(),
-        text: resolution.kind === 'answer' ? resolution.text : '현 스펙대로 진행합니다.',
-      });
-      // 열린 질문이 더 없는 보류 케이스는 미승인으로 돌아간다
-      for (const c of d.cases) {
-        if (c.approval.status !== 'held') continue;
-        const stillOpen = d.questions.some((x) => x.status === 'open' && x.caseIds.includes(c.tcId));
-        if (!stillOpen) c.approval = { status: 'pending' };
-      }
+      const r = resolveQuestionIn(d, questionId, resolution, currentUser, now());
+      if (!r) throw new NotFoundError(`질문 없음: ${questionId}`);
+      d.questions = r.questions;
+      for (const c of d.cases) if (r.released.includes(c.tcId)) c.approval = { status: 'pending' };
       return wait(undefined);
     },
-    async commentQuestion(docId, questionId, text) {
+    async commentQuestion({ docId }, questionId, text) {
       const q = doc(docId).questions.find((x) => x.id === questionId);
       if (!q) throw new NotFoundError(`질문 없음: ${questionId}`);
       q.comments.push({ by: currentUser, at: now(), text });
@@ -403,23 +270,12 @@ export function createMemoryApi(
       await ensureLocal();
       const out: CycleSummary[] = db.cycles
         .filter((c) => c.projectId === projectId)
-        .map((c) => {
-          const results = db.results[c.id] ?? [];
-          const counts = countVerdicts(results);
-          return {
-            cycle: c,
-            build: build(c.buildId),
-            docVersion: doc(c.docId).appVersion,
-            counts,
-            total: results.length,
-            done: results.length - counts.nt,
-            passRate: passRate(counts),
-            activeRuns: (db.runs[c.id] ?? []).filter((r) => r.status === 'running' || r.status === 'paused'),
-          };
-        });
+        .map((c) =>
+          cycleSummary(c, build(c.buildId), doc(c.docId).appVersion, db.results[c.id] ?? [], db.runs[c.id] ?? []),
+        );
       return wait(out);
     },
-    async getCycle(cycleId) {
+    async getCycle({ cycleId }) {
       await ensureLocal();
       const c = cycle(cycleId);
       const d = doc(c.docId);
@@ -438,21 +294,14 @@ export function createMemoryApi(
     async confirmVerdict(input: ConfirmVerdictInput) {
       await ensureLocal();
       const results = db.results[input.cycleId] ?? [];
-      const r = results.find((x) => x.tcId === input.tcId && x.deviceId === input.deviceId);
-      if (!r) throw new NotFoundError(`결과 없음: ${input.tcId} × ${input.deviceId}`);
-      if (r.verdict !== input.verdict || input.note) {
-        r.history.push({ at: now(), by: currentUser, from: r.verdict, to: input.verdict, note: input.note });
-      }
-      r.verdict = input.verdict;
-      r.decidedBy = { kind: 'human', name: currentUser };
-      r.autoConfirmed = false;
-      if (input.actualSummary !== undefined) r.actualSummary = input.actualSummary;
-      if (input.note !== undefined) r.note = input.note;
-      if (!r.executedAt) {
-        r.executedAt = now();
-        r.executor = currentUser;
-      }
-      return wait(r);
+      const i = results.findIndex((x) => x.tcId === input.tcId && x.deviceId === input.deviceId);
+      if (i < 0) throw new NotFoundError(`결과 없음: ${input.tcId} × ${input.deviceId}`);
+      results[i] = confirmedResult(results[i]!, input, currentUser, now());
+      return wait(results[i]);
+    },
+
+    async screenshotUrl(path) {
+      throw new NotFoundError(`메모리 구현에는 Storage가 없습니다: ${path}`);
     },
 
     async getConsoleSession() {

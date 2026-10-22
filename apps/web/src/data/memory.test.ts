@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { PEOPLE } from '@qcard/fixtures';
+import { GITHUB, PEOPLE } from '@qcard/fixtures';
 import { ConflictError, PermissionError, RuleError } from './api';
 import type { LocalRun } from './localRuns';
 import { createMemoryApi, passRate } from './memory';
 
-const DOC = 'doc-130';
-const CYCLE = 'cycle-130-1';
+const DOC = { projectId: 'haru', docId: 'doc-130' };
+const CYCLE = { projectId: 'haru', cycleId: 'cycle-130-1' };
 
 describe('QA 문서 편집·승인', () => {
   it('rev가 맞으면 저장되고 rev가 오른다', async () => {
@@ -60,7 +60,7 @@ describe('사이클 판정', () => {
     const { results } = await api.getCycle(CYCLE);
     const check = results.find((r) => r.verdict === 'check')!;
     const r = await api.confirmVerdict({
-      cycleId: CYCLE,
+      ...CYCLE,
       tcId: check.tcId,
       deviceId: check.deviceId,
       verdict: 'pass',
@@ -88,7 +88,7 @@ describe('로컬 실행', () => {
     finishedAt: '2026-10-20T08:28:30.000Z',
     device: { model: 'SM-S711N', osMajor: 16, size: { w: 1080, h: 2340 } },
     appPackage: 'com.example.harukong.qa',
-    docId: DOC,
+    docId: DOC.docId,
     results: [
       {
         tcId: 'TC-ONBOARDING-001',
@@ -113,13 +113,14 @@ describe('로컬 실행', () => {
     expect(local.cycle.targets.map((t) => t.id)).toEqual(['SM-S711N-16']);
     expect(local).toMatchObject({ total: 1, done: 1, passRate: 1 });
     expect(local.build.packageName).toBe('com.example.harukong.qa');
-    const detail = await api.getCycle(local.cycle.id);
+    const detail = await api.getCycle({ projectId: 'haru', cycleId: local.cycle.id });
     expect(detail.cases.map((c) => c.tcId)).toEqual(['TC-ONBOARDING-001']);
   });
 
   it('로컬 실행 결과도 사람이 확정할 수 있다', async () => {
     const api = createMemoryApi({ localRuns: async () => [run()] });
     const r = await api.confirmVerdict({
+      projectId: 'haru',
       cycleId: 'run-2026-10-20T08-26-50-756Z',
       tcId: 'TC-ONBOARDING-001',
       deviceId: 'SM-S711N-16',
@@ -171,9 +172,9 @@ describe('프로젝트·멤버·초대 (F-TM-09~13)', () => {
 
   it('Admin이 0명이 되는 역할 변경·탈퇴는 막는다', async () => {
     const api = createMemoryApi();
-    await expect(api.setMemberRole('haru', PEOPLE.lead, 'qa')).rejects.toBeInstanceOf(RuleError);
+    await expect(api.setMemberRole('haru', GITHUB[PEOPLE.lead]!, 'qa')).rejects.toBeInstanceOf(RuleError);
     await expect(api.leaveProject('haru')).rejects.toThrow('마지막 Admin');
-    await api.setMemberRole('haru', PEOPLE.qa, 'admin');
+    await api.setMemberRole('haru', GITHUB[PEOPLE.qa]!, 'admin');
     await api.leaveProject('haru');
     expect(await api.myRole('haru')).toBeUndefined();
   });
@@ -186,7 +187,7 @@ describe('프로젝트·멤버·초대 (F-TM-09~13)', () => {
     const api = as(PEOPLE.qa);
     await expect(api.listInvitations('haru')).rejects.toBeInstanceOf(PermissionError);
     await expect(api.createInvitation('haru', { role: 'viewer' })).rejects.toBeInstanceOf(PermissionError);
-    await expect(api.removeMember('haru', PEOPLE.planner)).rejects.toBeInstanceOf(PermissionError);
+    await expect(api.removeMember('haru', GITHUB[PEOPLE.planner]!)).rejects.toBeInstanceOf(PermissionError);
     await expect(api.deleteProject('haru', '하루콩')).rejects.toBeInstanceOf(PermissionError);
   });
 

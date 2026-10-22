@@ -30,6 +30,8 @@ export const ROLE_DESCRIPTION: Record<Role, string> = {
 
 export const Member = z.object({
   projectId: z.string(),
+  /** 로그인 사용자 id (Firebase Auth uid). 멤버를 가리키는 키 */
+  uid: z.string(),
   /** 표시 이름 */
   user: z.string(),
   github: z.string(),
@@ -55,9 +57,9 @@ export const Invitation = z.object({
 });
 export type Invitation = z.infer<typeof Invitation>;
 
-/** 초대 만료 기본값 (PRD §13 — 확정 전 기본값) */
+/** 초대 만료 (F-TM-10) */
 export const INVITE_TTL_DAYS = 7;
-/** 프로젝트 삭제 유예 기간 (PRD §13 — 확정 전 기본값) */
+/** 프로젝트 삭제 유예 기간 (F-TM-12) */
 export const DELETE_GRACE_DAYS = 30;
 
 /** 프로젝트 생성·초대 수락 때 확인받는 데이터 처리 안내 (F-TM-13, PRD §8) */
@@ -271,6 +273,8 @@ export type TargetDevice = z.infer<typeof TargetDevice>;
 /** 스크린샷: 실제 이미지(Storage URL, w·h는 디바이스 px) 또는 fixture용 목업 화면 키 */
 export const Screenshot = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('url'), url: z.string(), w: z.number().optional(), h: z.number().optional() }),
+  /** Cloud Storage 경로. 보안 규칙(멤버만)을 거쳐 로그인 상태로 읽는다 — 토큰이 든 다운로드 URL을 남기지 않는다 */
+  z.object({ kind: z.literal('storage'), path: z.string(), w: z.number().optional(), h: z.number().optional() }),
   z.object({ kind: z.literal('mock'), screen: z.string(), state: z.record(z.string(), z.string()).optional() }),
 ]);
 export type Screenshot = z.infer<typeof Screenshot>;
@@ -419,13 +423,14 @@ export const Defect = z.object({
 export type Defect = z.infer<typeof Defect>;
 
 /** Run 일시정지 이유 (F-EX-13·17). 플랜 한도·로그인은 실행자의 Claude Code 상태 */
-export const PauseReason = z.enum(['executor', 'network', 'plan_limit', 'not_logged_in']);
+export const PauseReason = z.enum(['executor', 'network', 'plan_limit', 'not_logged_in', 'claude_outdated']);
 export type PauseReason = z.infer<typeof PauseReason>;
 export const PAUSE_REASON_LABEL: Record<PauseReason, string> = {
   executor: '실행자',
   network: '네트워크 끊김',
   plan_limit: '플랜 한도',
   not_logged_in: 'Claude Code 로그인 필요',
+  claude_outdated: 'Claude Code 업데이트 필요',
 };
 
 export const Run = z.object({

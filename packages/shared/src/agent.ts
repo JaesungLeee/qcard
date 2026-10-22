@@ -92,7 +92,10 @@ export type VerifierOutput = z.infer<typeof VerifierOutput>;
 export const LocateOutput = z.object({
   /** found: 찾음 · absent: 화면에 없음 · unclear: 화면만으로 알 수 없음(판단불가) */
   status: z.enum(['found', 'absent', 'unclear']),
-  element_ref: z.string().nullable().describe('찾은 요소 참조(관찰 번호가 붙은 o7.e6 형태 그대로). found가 아니면 null'),
+  element_ref: z
+    .string()
+    .nullable()
+    .describe('찾은 요소 참조(관찰 번호가 붙은 o7.e6 형태 그대로). found가 아니면 null'),
   reason: z.string(),
 });
 export type LocateOutput = z.infer<typeof LocateOutput>;

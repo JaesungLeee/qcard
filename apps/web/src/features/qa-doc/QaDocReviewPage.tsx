@@ -18,7 +18,7 @@ import './qa-doc.css';
 /** QA 문서 검토·승인 (PRD §5.2) */
 export function QaDocReviewPage() {
   const { projectId = '', docId = '' } = useParams();
-  const doc = useQaDoc(docId);
+  const doc = useQaDoc(projectId, docId);
   return (
     <div className="qc-page">
       <QueryState query={doc}>{(d) => <Review doc={d} projectId={projectId} />}</QueryState>
@@ -30,7 +30,7 @@ function Review({ doc, projectId }: { doc: QADocument; projectId: string }) {
   const { tab, set } = useDocParams();
   const docs = useQaDocs(projectId);
   const prepFlows = usePrepFlows(projectId);
-  const setApproval = useSetApproval(doc.id);
+  const setApproval = useSetApproval(doc);
   const [selected, setSelected] = useState<string[]>([]);
   const [selectionKey, setSelectionKey] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);

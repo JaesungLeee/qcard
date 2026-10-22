@@ -46,7 +46,7 @@ export function CaseDetail({
 }) {
   const { edit, set } = useDocParams();
   const href = useDocHref();
-  const setApproval = useSetApproval(doc.id);
+  const setApproval = useSetApproval(doc);
   const prepName = useMemo(() => {
     const byId = new Map(prepFlows.map((p) => [p.id, p.name]));
     return (id: string) => byId.get(id) ?? id;

@@ -40,8 +40,8 @@ import { Card, KV, Mono, RunState, traceUrl } from './parts';
 import './qa-sheet.css';
 
 export function TracePage() {
-  const { cycleId = '' } = useParams();
-  const cycle = useCycle(cycleId);
+  const { projectId = '', cycleId = '' } = useParams();
+  const cycle = useCycle(projectId, cycleId);
   return (
     <div className="qc-page">
       <QueryState query={cycle}>{(d) => <Trace d={d} />}</QueryState>

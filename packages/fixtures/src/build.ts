@@ -24,6 +24,7 @@ import type {
   VerificationPoint,
   Verdict,
 } from '@qcard/shared';
+import { hash } from '@qcard/shared';
 import raw from './data/onboarding-flow.json';
 import generatedPoints from './data/onboarding-points.json';
 import { SCREENS, element, type MockElement } from './screens';
@@ -59,25 +60,8 @@ const T = (day: number, hh = 10, mm = 0) =>
 
 // ---------------------------------------------------------------- 유틸
 
-/** 키 순서와 무관한 JSON (undefined 필드는 뺀다) */
-function canonical(value: unknown): string {
-  return JSON.stringify(value, (_k, v: unknown) =>
-    v && typeof v === 'object' && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1)))
-      : v,
-  );
-}
-
-/** FNV-1a 32bit — fixture·메모리 구현용 결정적 내용 해시 */
-export function hash(value: unknown): string {
-  const s = canonical(value);
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return (h >>> 0).toString(16).padStart(8, '0');
-}
+/** 결정적 내용 해시 (@qcard/shared). fixture 이용처를 위해 다시 내보낸다 */
+export { hash };
 
 const reqId = (id: string) => `${SPEC}/${id}`;
 const tcIdOf = (n: number) => `TC-ONBOARDING-${String(n).padStart(3, '0')}`;
@@ -290,6 +274,7 @@ export const otherProjects: Project[] = [
 
 const member = (projectId: string, user: string, role: Role, joinedAt: string): Member => ({
   projectId,
+  uid: GITHUB[user]!,
   user,
   github: GITHUB[user]!,
   role,

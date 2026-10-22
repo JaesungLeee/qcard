@@ -7,27 +7,33 @@
 
 pnpm workspace + Turborepo, TypeScript 단일 언어.
 
-| 경로                    | 내용                                                                                                                                                                                           |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web`              | 웹 대시보드 (React 18 + Vite + react-router 7 + TanStack Query). `/__ui`는 UI 카탈로그                                                                                                         |
-| `apps/web/src/data`     | 데이터 접근 인터페이스 `QcardApi`(`api.ts`)와 fixture 메모리 구현(`memory.ts`), 훅(`hooks.ts`)                                                                                                 |
-| `apps/web/src/features` | 화면 단위 폴더: `qa-sheet`(사이클·QA 시트·판정 추적), `qa-doc`(QA 문서 검토·승인), `console`(로컬 콘솔)                                                                                        |
-| `packages/ui`           | 디자인 시스템 "Montage for qcard" — Montage 컴포넌트 재수출, `--qc-*` 토큰, `VerdictBadge`                                                                                                     |
-| `packages/shared`       | 도메인 스키마(Zod, PRD §6.4)와 표시용 라벨                                                                                                                                                     |
-| `packages/fixtures`     | 하루콩 onboarding-flow 스펙에서 만든 결정적 데이터(QA 문서·사이클·결과·콘솔 세션)와 목업 디바이스 화면 배치                                                                                      |
-| `packages/device`       | `DeviceDriver` 인터페이스, 접근성 트리 파서, `AdbDriver`·녹화(`@qcard/device/node`), `FakeDevice`(화면 + 전환 규칙 상태 기계)                                                                  |
-| `packages/llm`          | `LlmClient`(SDK 타입 그대로), 실제 호출 구현 2개(본인 Claude Code `claude -p` = 기본·제품 경로 / API 키 = 개발용), 녹화·재생(cassette), 사용량·한도, 비밀값 검사, strict 도구·출력 스키마 변환 |
-| `packages/agent`        | Executor 루프(`runSteps`), 검증 포인트 판정(`verifyPoints`·`settle`), 판정 집계(`judge`), 케이스 실행(`runCase`). `e2e/`는 합성 온보딩 앱 + 실제 모델 녹화 재생                                |
+| 경로                    | 내용                                                                                                                                                                                                                         |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`              | 웹 대시보드 (React 18 + Vite + react-router 7 + TanStack Query). `/__ui`는 UI 카탈로그                                                                                                                                       |
+| `apps/web/src/data`     | fixture 메모리 구현(`memory.ts`), 브라우저 Firebase 연결(`firebaseClient.ts`), 훅(`hooks.ts`). `api.ts`는 `@qcard/data` 재수출                                                                                               |
+| `apps/web/src/features` | 화면 단위 폴더: `qa-sheet`(사이클·QA 시트·판정 추적), `qa-doc`(QA 문서 검토·승인), `console`(로컬 콘솔)                                                                                                                      |
+| `packages/ui`           | 디자인 시스템 "Montage for qcard" — Montage 컴포넌트 재수출, `--qc-*` 토큰, `VerdictBadge`                                                                                                                                   |
+| `packages/shared`       | 도메인 스키마(Zod, PRD §6.4)와 표시용 라벨                                                                                                                                                                                   |
+| `packages/fixtures`     | 하루콩 onboarding-flow 스펙에서 만든 결정적 데이터(QA 문서·사이클·결과·콘솔 세션)와 목업 디바이스 화면 배치                                                                                                                    |
+| `packages/device`       | `DeviceDriver` 인터페이스, 접근성 트리 파서, `AdbDriver`·녹화(`@qcard/device/node`), `FakeDevice`(화면 + 전환 규칙 상태 기계)                                                                                                |
+| `packages/llm`          | `LlmClient`(SDK 타입 그대로), 실제 호출 구현 2개(본인 Claude Code `claude -p` = 기본·제품 경로 / API 키 = 개발용), 녹화·재생(cassette), 사용량·한도, 비밀값 검사, strict 도구·출력 스키마 변환                               |
+| `packages/agent`        | Executor 루프(`runSteps`), 검증 포인트 판정(`verifyPoints`·`settle`), 판정 집계(`judge`), 케이스 실행(`runCase`). `e2e/`는 합성 온보딩 앱 + 실제 모델 녹화 재생                                                              |
+| `apps/functions`        | Cloud Functions: 프로젝트·멤버·초대 쓰기(callable, `@qcard/shared` membership 규칙을 트랜잭션에서 강제), 삭제 유예 지난 프로젝트 영구 삭제. LLM은 부르지 않는다. 보안 규칙은 `firebase/firestore.rules`, 테스트는 에뮬레이터 |
+| `apps/host-agent`       | 호스트 에이전트: 사이클 케이스를 실기기에서 `runCase`로 실행하고 Run 진행·결과를 Firestore, 스크린샷을 Storage에 올린다(`runCycle`·`firestoreSink`). 플랜 한도·로그인 문제면 Run 일시정지                                    |
+| `packages/data`         | 데이터 접근 인터페이스 `QcardApi`·오류(`api.ts`), 구현 공용 계산(`logic.ts`), Firestore 구현(`@qcard/data/firebase`), 에뮬레이터 시드(`@qcard/data/seed`). 웹·호스트 에이전트·테스트가 함께 쓴다                             |
 
-예정: `apps/functions`, `apps/host-agent`(`@qcard/agent`를 실기기·Firestore에 연결하는 프로세스). Agent 도구·Verifier 출력 스키마는 `packages/shared/src/agent.ts`, 온보딩 합성 시나리오(FakeDevice용)는 `packages/fixtures/src/device.ts`.
+Agent 도구·Verifier 출력 스키마는 `packages/shared/src/agent.ts`, 온보딩 합성 시나리오(FakeDevice용)는 `packages/fixtures/src/device.ts`.
 
-화면은 `QcardApi`만 알고, 지금은 메모리 구현이 fixture를 돌려준다(새로고침하면 초기화). Firestore 구현은 같은 인터페이스로 끼운다. fixture와 `packages/agent/cassettes/`는 하루콩 팀 스펙에서 파생됐으므로 저장소를 공개하기 전에 빼야 한다.
+화면은 `QcardApi`만 알고, 구현은 둘이다: 메모리(`memory.ts`, fixture, 새로고침하면 초기화)와 Firestore(`firebase.ts`, 읽기는 Firestore·프로젝트/멤버/초대 쓰기는 callable 함수). 두 구현이 함께 쓰는 계산은 `data/logic.ts`, 프로젝트·멤버·초대 규칙은 `@qcard/shared` membership. Firestore 구현은 `apps/functions/test/web-api.test.ts`가 에뮬레이터에서 메모리 구현과 결과를 비교한다. fixture와 `packages/agent/cassettes/`는 하루콩 팀 스펙에서 파생됐으므로 저장소를 공개하기 전에 빼야 한다.
 
 ## 명령
 
 pnpm이 전역에 없으면 `npx -y pnpm@10.34.6 <명령>`으로 실행한다.
 
-- `pnpm verify` — 타입 검사 + 테스트 + 색 하드코딩 검사. **작업을 끝내기 전에 반드시 통과**(Stop 훅이 강제한다)
+- `pnpm verify` — 타입 검사 + 테스트 + 색 하드코딩 검사. **작업을 끝내기 전에 반드시 통과**(Stop 훅이 강제한다). Functions·보안 규칙 테스트는 Firestore 에뮬레이터를 띄워 돈다 — **Java 21 이상 필요**(`brew install openjdk@21`, `apps/functions/scripts/emulators.mjs`가 찾아 쓴다)
+- `pnpm emu` — 함수를 번들해 Auth·Firestore·Functions 에뮬레이터를 띄우고 fixture를 시드한다(프로젝트 `demo-qcard`, 실제 Firebase와 연결되지 않음, Ctrl+C로 종료). 시드 사용자 비밀번호 `qcard-dev`
+- `pnpm --filter @qcard/host-agent run-cycle --project haru --cycle cycle-130-device --user jaesung-lee [TC-ID…] [--package com.example.harukong.qa]` — 연결된 실기기에서 사이클 케이스를 실행해 에뮬레이터에 올린다(웹 QA 시트에 바로 보임, 플랜 사용량 차감). 디바이스가 사이클 대상(모델 + OS 메이저)이어야 한다 — 개발 시드의 `cycle-130-device`는 SM-S711N 대상. `pnpm emu`가 떠 있어야 한다. 결과·증거는 업로드 큐(`~/.qcard/upload-queue`)를 거쳐 끊겨도 다음 실행 때 이어 보낸다. `--resume <run id>`로 일시정지 후 재개
+- `pnpm dev:firebase` — 웹을 Firebase 모드(`VITE_DATA=firebase`)로 띄운다. `pnpm emu`가 떠 있어야 하고, 로그인 화면에서 시드 사용자를 고른다. `pnpm dev`·`ui:snap`은 계속 메모리 구현을 쓴다
 - `pnpm ui:snap` — `/__ui` 등 화면을 데스크톱·좁은 폭 × 라이트·다크로 찍어 `apps/web/.snap/*.png`에 저장
 - `pnpm tokens` — `packages/ui/tokens/tokens.json` → `src/generated/` 재생성
 - `pnpm dev` — 웹 개발 서버 (http://localhost:5173). `packages/agent/runs/`의 실기기 실행을 "로컬 실행" 사이클로 함께 보여 준다(`apps/web/vite/local-runs.ts`, 개발 서버 전용)

@@ -10,6 +10,19 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
+    },
+    "@qcard/functions#test": {
+      "dependsOn": ["^typecheck"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/firebase/**",
+        "$TURBO_ROOT$/firebase.json",
+        "$TURBO_ROOT$/firebase.test.json"
+      ]
+    },
+    "@qcard/host-agent#test": {
+      "dependsOn": ["^typecheck", "@qcard/functions#test"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/firebase/**", "$TURBO_ROOT$/firebase.test.json"]
     }
   }
 }

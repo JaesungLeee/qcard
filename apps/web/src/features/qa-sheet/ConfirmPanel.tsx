@@ -3,6 +3,7 @@
 import { VERDICT_LABEL, type CaseResult, type Verdict } from '@qcard/shared';
 import { Button, SectionMessage, SegmentedControl, SegmentedControlItem, TextArea, textClass, token } from '@qcard/ui';
 import { useId, useState } from 'react';
+import { useParams } from 'react-router';
 import { useApi, useConfirmVerdict } from '../../data/hooks';
 import { Card } from './parts';
 
@@ -11,6 +12,7 @@ const CHOICES: Verdict[] = ['pass', 'fail', 'blocked', 'na'];
 export function ConfirmPanel({ cycleId, result, manual }: { cycleId: string; result: CaseResult; manual: boolean }) {
   const api = useApi();
   const confirm = useConfirmVerdict();
+  const { projectId = '' } = useParams();
   const id = useId();
   const needsHuman = result.verdict === 'fail' || result.verdict === 'blocked' || result.verdict === 'check';
   const overridable = result.verdict === 'pass' || result.verdict === 'na';
@@ -30,6 +32,7 @@ export function ConfirmPanel({ cycleId, result, manual }: { cycleId: string; res
     if (verdict === '') return;
     confirm.mutate(
       {
+        projectId,
         cycleId,
         tcId: result.tcId,
         deviceId: result.deviceId,

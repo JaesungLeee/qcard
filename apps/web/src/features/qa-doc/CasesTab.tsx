@@ -1,5 +1,6 @@
 import { CHANGE_LABEL, type PrepFlow, PRIORITY_LABEL, type QADocument, type TestCase } from '@qcard/shared';
-import { Button, Checkbox, Chip, Icons, TextField, TextFieldContent, textClass, token } from '@qcard/ui';
+import { Button, Chip, Icons, TextField, TextFieldContent, textClass, token } from '@qcard/ui';
+import { CheckLabel } from '../../components/CheckLabel';
 import type {
   CellClickedEvent,
   ColDef,
@@ -218,14 +219,14 @@ export function CasesTab({
               <span className="qc-mono">{k === 'all' ? doc.cases.length : (changeCounts[k] ?? 0)}</span>
             </Chip>
           ))}
-          <label className={`${textClass('label1')} qd-check`} style={{ marginLeft: token('space-8') }}>
-            <Checkbox
-              size="small"
-              checked={filter.unapprovedOnly}
-              onCheckedChange={(v) => setFilter((f) => ({ ...f, unapprovedOnly: v }))}
-            />
+          <CheckLabel
+            className={`${textClass('label1')} qd-check`}
+            style={{ marginLeft: token('space-8') }}
+            checked={filter.unapprovedOnly}
+            onCheckedChange={(v) => setFilter((f) => ({ ...f, unapprovedOnly: v }))}
+          >
             미승인만
-          </label>
+          </CheckLabel>
         </div>
         <div style={{ flex: '0 1 300px', minWidth: 200 }}>
           <TextField

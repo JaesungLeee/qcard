@@ -1,0 +1,86 @@
+rules_version = '2';
+
+// qcard Firestore 보안 규칙 (PRD §5.9, §8)
+// - 읽기는 프로젝트 멤버만. 프로젝트 간 데이터는 서로 보이지 않는다
+// - 프로젝트·멤버·초대 쓰기는 Cloud Functions(Admin SDK)만 한다 — "Admin 1명 이상", 초대 확인 같은
+//   규칙은 @qcard/shared membership에 있고 Functions가 강제한다
+// - QA 데이터 쓰기는 Admin·QA만, Viewer는 조회만 (F-TM-03)
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function memberDoc(p) {
+      return /databases/$(database)/documents/projects/$(p)/members/$(request.auth.uid);
+    }
+    function isMember(p) {
+      return signedIn() && exists(memberDoc(p));
+    }
+    function role(p) {
+      return get(memberDoc(p)).data.role;
+    }
+    function canEdit(p) {
+      return isMember(p) && role(p) in ['admin', 'qa'];
+    }
+
+    match /projects/{p} {
+      allow read: if isMember(p);
+      allow write: if false;
+
+      match /members/{uid} {
+        allow read: if isMember(p);
+        allow write: if false;
+      }
+      match /invitations/{id} {
+        allow read: if isMember(p) && role(p) == 'admin';
+        allow write: if false;
+      }
+
+      // QA 문서·케이스, 준비 플로우, 빌드, 테스트 사이클·Run·결과, 결함
+      match /qaDocs/{rest=**} {
+        allow read: if isMember(p);
+        allow write: if canEdit(p);
+      }
+      match /prepFlows/{rest=**} {
+        allow read: if isMember(p);
+        allow write: if canEdit(p);
+      }
+      match /builds/{rest=**} {
+        allow read: if isMember(p);
+        allow write: if canEdit(p);
+      }
+      match /cycles/{rest=**} {
+        allow read: if isMember(p);
+        allow write: if canEdit(p);
+      }
+      match /defects/{rest=**} {
+        allow read: if isMember(p);
+        allow write: if canEdit(p);
+      }
+      // QA 문서 생성 등 호스트 에이전트가 처리할 작업 (PRD §6.2). 요청자 본인 것만 만든다
+      match /jobs/{id} {
+        allow read: if isMember(p);
+        allow create: if canEdit(p) && request.resource.data.requestedBy == request.auth.uid;
+        allow update: if canEdit(p) && resource.data.requestedBy == request.auth.uid;
+        allow delete: if false;
+      }
+    }
+
+    // 내 멤버 문서 (컬렉션 그룹 조회로 "내 프로젝트 목록"을 만든다)
+    // 질의 조건(where uid == 나)으로 증명할 수 있게 문서 id가 아니라 필드로 비교한다
+    match /{path=**}/members/{memberId} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // 초대 토큰 → 초대 위치. Functions만 읽는다 (토큰을 모르는 사람이 초대를 찾지 못하게)
+    match /invitationTokens/{token} {
+      allow read, write: if false;
+    }
+
+    // 사용자 프로필 (표시 이름·GitHub 사용자명). GitHub로 확인한 값만 Functions가 쓴다
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+  }
+}

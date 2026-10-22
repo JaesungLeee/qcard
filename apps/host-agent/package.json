@@ -1,0 +1,29 @@
+{
+  "name": "@qcard/host-agent",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "run-cycle": "tsx src/cli.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node ../functions/scripts/emulators.mjs test 'vitest run'"
+  },
+  "dependencies": {
+    "@qcard/agent": "workspace:*",
+    "@qcard/data": "workspace:*",
+    "@qcard/device": "workspace:*",
+    "@qcard/fixtures": "workspace:*",
+    "@qcard/llm": "workspace:*",
+    "@qcard/shared": "workspace:*",
+    "firebase": "13.0.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "6.0.0",
+    "@types/node": "24.19.0",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}

@@ -46,8 +46,8 @@ export function QuestionsTab({ doc }: { doc: QADocument }) {
 
 function QuestionCard({ doc, q, current }: { doc: QADocument; q: SpecQuestion; current: boolean }) {
   const href = useDocHref();
-  const resolve = useResolveQuestion(doc.id);
-  const comment = useCommentQuestion(doc.id);
+  const resolve = useResolveQuestion(doc);
+  const comment = useCommentQuestion(doc);
   const [answer, setAnswer] = useState('');
   const [note, setNote] = useState('');
   const ref = useRef<HTMLElement>(null);
@@ -131,7 +131,7 @@ function QuestionCard({ doc, q, current }: { doc: QADocument; q: SpecQuestion; c
       {q.status === 'open' && (
         <div className="qd-stack" style={{ gap: token('space-8') }}>
           <TextArea
- width="100%"
+            width="100%"
             aria-label={`${q.id} 답변`}
             placeholder="답변을 입력하면 연결된 케이스의 보류가 풀립니다"
             minRows={2}
@@ -179,7 +179,7 @@ function QuestionCard({ doc, q, current }: { doc: QADocument; q: SpecQuestion; c
       >
         <div className="qd-grow">
           <TextArea
- width="100%"
+            width="100%"
             aria-label={`${q.id} 코멘트`}
             placeholder="코멘트 남기기"
             minRows={1}

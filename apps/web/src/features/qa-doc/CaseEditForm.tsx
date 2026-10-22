@@ -14,7 +14,6 @@ import {
 } from '@qcard/shared';
 import {
   Button,
-  Checkbox,
   IconButton,
   Icons,
   Option,
@@ -28,6 +27,7 @@ import {
   textClass,
   token,
 } from '@qcard/ui';
+import { CheckLabel } from '../../components/CheckLabel';
 import { useMemo, useState, type ReactNode } from 'react';
 import { fmtDateTime } from '../../components/format';
 import { ConflictError } from '../../data/api';
@@ -95,7 +95,7 @@ export function CaseEditForm({
   prepFlows: PrepFlow[];
   onDone: () => void;
 }) {
-  const update = useUpdateCase(doc.id);
+  const update = useUpdateCase(doc);
   /** 편집을 시작한 기준 본문과 rev. 충돌 후 "다시 적용"하면 최신으로 바뀐다. */
   const [base, setBase] = useState(() => ({ body: toBody(c), rev: c.rev }));
   const [draft, setDraft] = useState<CaseBody>(() => toBody(c));
@@ -261,39 +261,37 @@ export function CaseEditForm({
           {prepFlows.map((pf) => {
             const on = draft.prepFlowIds.includes(pf.id);
             return (
-              <label
+              <CheckLabel
                 key={pf.id}
                 className={`${textClass('label1')} qd-check`}
                 style={{ alignItems: 'flex-start', whiteSpace: 'normal' }}
+                checked={on}
+                onCheckedChange={(v) =>
+                  patch({
+                    // 준비 플로우 목록 순서(수행 순서)를 유지한다
+                    prepFlowIds: prepFlows
+                      .map((x) => x.id)
+                      .filter((id) => (id === pf.id ? v : draft.prepFlowIds.includes(id))),
+                  })
+                }
               >
-                <Checkbox
-                  size="small"
-                  checked={on}
-                  onCheckedChange={(v) =>
-                    patch({
-                      // 준비 플로우 목록 순서(수행 순서)를 유지한다
-                      prepFlowIds: prepFlows
-                        .map((x) => x.id)
-                        .filter((id) => (id === pf.id ? v : draft.prepFlowIds.includes(id))),
-                    })
-                  }
-                />
-                <span style={{ paddingTop: 2 }}>
-                  {pf.name}
-                  <span className={`${textClass('caption1')} qd-faint`} style={{ display: 'block' }}>
-                    확인: {pf.check}
-                  </span>
+                <span style={{ display: 'block', paddingTop: 2 }}>{pf.name}</span>
+                <span className={`${textClass('caption1')} qd-faint`} style={{ display: 'block' }}>
+                  확인: {pf.check}
                 </span>
-              </label>
+              </CheckLabel>
             );
           })}
         </div>
       </Field>
 
-      <label className={`${textClass('label1')} qd-check`}>
-        <Checkbox size="small" checked={draft.cleanState} onCheckedChange={(v) => patch({ cleanState: v })} />
+      <CheckLabel
+        className={`${textClass('label1')} qd-check`}
+        checked={draft.cleanState}
+        onCheckedChange={(v) => patch({ cleanState: v })}
+      >
         클린 상태 필요 (시작 전 앱 데이터 초기화)
-      </label>
+      </CheckLabel>
 
       <div className="qd-form-grid">
         <Field label="테스트 데이터">
@@ -320,16 +318,16 @@ export function CaseEditForm({
             <div key={i} className="qd-edit-item">
               <div className="qd-edit-line">
                 <span className={`${textClass('label2', 'medium')} qc-mono qd-faint`}>{i + 1}</span>
-                <label className={`${textClass('label2')} qd-check`} style={{ marginLeft: 'auto' }}>
-                  <Checkbox
-                    size="small"
-                    checked={s.manual}
-                    onCheckedChange={(v) =>
-                      patch({ steps: draft.steps.map((x, j) => (j === i ? { ...x, manual: v } : x)) })
-                    }
-                  />
+                <CheckLabel
+                  className={`${textClass('label2')} qd-check`}
+                  style={{ marginLeft: 'auto' }}
+                  checked={s.manual}
+                  onCheckedChange={(v) =>
+                    patch({ steps: draft.steps.map((x, j) => (j === i ? { ...x, manual: v } : x)) })
+                  }
+                >
                   수동
-                </label>
+                </CheckLabel>
                 <IconButton
                   type="button"
                   aria-label={`단계 ${i + 1} 삭제`}

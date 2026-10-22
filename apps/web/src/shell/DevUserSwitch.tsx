@@ -1,8 +1,9 @@
-import { Option, Select, textClass, token } from '@qcard/ui';
+import { Option, Select, TextButton, textClass, token } from '@qcard/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useApi } from '../data/hooks';
 import { isMemoryApi } from '../data/memory';
+import { useAuth } from './AuthGate';
 
 /**
  * 로그인한 사용자 이름. 메모리 구현(로그인 없음)에서는 개발용으로 사용자를 바꿀 수 있다 —
@@ -11,11 +12,20 @@ import { isMemoryApi } from '../data/memory';
 export function CurrentUser() {
   const api = useApi();
   const qc = useQueryClient();
+  const auth = useAuth();
   const [user, setUser] = useState(api.currentUser);
   if (!isMemoryApi(api)) {
     return (
-      <div className={textClass('label2')} style={{ color: token('foreground-neutral-secondary') }}>
+      <div
+        className={textClass('label2')}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, color: token('foreground-neutral-secondary') }}
+      >
         {user}
+        {auth && (
+          <TextButton size="small" color="assistive" onClick={() => void auth.signOut()}>
+            로그아웃
+          </TextButton>
+        )}
       </div>
     );
   }

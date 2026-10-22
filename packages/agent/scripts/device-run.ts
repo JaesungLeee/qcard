@@ -162,7 +162,7 @@ const diff = (a: UsageTotals, b: UsageTotals) => ({
 
 let envErrors = 0;
 let stopped: string | undefined;
-let paused: { reason: 'plan_limit' | 'not_logged_in' | 'not_installed'; message: string } | undefined;
+let paused: { reason: 'plan_limit' | ClaudeCodeSetupError['reason']; message: string } | undefined;
 /** 플랜 한도·로그인 오류면 일시정지로 기록하고 undefined, 아니면 다시 던진다 */
 const pauseOn = (e: unknown): undefined => {
   if (e instanceof PlanLimitError) paused = { reason: 'plan_limit', message: e.message };
@@ -261,7 +261,7 @@ if (paused) {
   log(
     `\n일시정지: ${paused.message}\n해결한 뒤 이어서 실행: device-run … --resume ${id} · 환산 합계 $${total.toFixed(2)}`,
   );
-  notify(`실행 일시정지: ${paused.reason === 'plan_limit' ? '플랜 사용 한도' : 'Claude Code 로그인 필요'}`);
+  notify(`실행 일시정지: ${paused.reason === 'plan_limit' ? '플랜 사용 한도' : paused.reason === 'outdated' ? 'Claude Code 업데이트 필요' : 'Claude Code 로그인 필요'}`);
 } else {
   await writeMeta({
     status: stopped ? 'stopped' : 'done',

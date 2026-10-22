@@ -51,7 +51,7 @@ export function PrepFlowPage() {
 }
 
 function FlowsWithDoc({ flows, docId, projectId }: { flows: PrepFlow[]; docId: string; projectId: string }) {
-  const doc = useQaDoc(docId);
+  const doc = useQaDoc(projectId, docId);
   return <FlowCards flows={flows} doc={doc.data} projectId={projectId} />;
 }
 

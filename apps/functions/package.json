@@ -1,0 +1,33 @@
+{
+  "name": "@qcard/functions",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=esm --outfile=lib/index.js --external:firebase-admin --external:firebase-functions",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node scripts/emulators.mjs test 'vitest run'",
+    "emulators": "pnpm build && node scripts/emulators.mjs dev 'tsx scripts/seed.ts --wait'"
+  },
+  "dependencies": {
+    "firebase-admin": "14.5.0",
+    "firebase-functions": "7.4.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "6.0.0",
+    "@qcard/data": "workspace:*",
+    "@qcard/fixtures": "workspace:*",
+    "@qcard/shared": "workspace:*",
+    "@types/node": "24.19.0",
+    "esbuild": "0.28.2",
+    "firebase": "13.0.0",
+    "firebase-tools": "15.33.0",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11",
+    "zod": "4.6.5"
+  }
+}

@@ -22,7 +22,7 @@ export class LlmOutputError extends Error {
 export class ClaudeCodeSetupError extends Error {
   override name = 'ClaudeCodeSetupError';
   constructor(
-    readonly reason: 'not_installed' | 'not_logged_in',
+    readonly reason: 'not_installed' | 'not_logged_in' | 'outdated',
     message: string,
   ) {
     super(message);

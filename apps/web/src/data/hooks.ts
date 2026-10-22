@@ -1,7 +1,7 @@
 import type { CaseBody } from '@qcard/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useContext } from 'react';
-import type { ConfirmVerdictInput, NewProjectInput, QcardApi, QuestionResolution } from './api';
+import type { ConfirmVerdictInput, DocRef, NewProjectInput, QcardApi, QuestionResolution } from './api';
 import type { Role } from '@qcard/shared';
 
 export const ApiContext = createContext<QcardApi | null>(null);
@@ -20,10 +20,10 @@ export const keys = {
   invitations: (id: string) => ['invitations', id] as const,
   invitation: (token: string) => ['invitation', token] as const,
   qaDocs: (projectId: string) => ['qaDocs', projectId] as const,
-  qaDoc: (docId: string) => ['qaDoc', docId] as const,
+  qaDoc: (projectId: string, docId: string) => ['qaDoc', projectId, docId] as const,
   prepFlows: (projectId: string) => ['prepFlows', projectId] as const,
   cycles: (projectId: string) => ['cycles', projectId] as const,
-  cycle: (cycleId: string) => ['cycle', cycleId] as const,
+  cycle: (projectId: string, cycleId: string) => ['cycle', projectId, cycleId] as const,
   console: ['console'] as const,
 };
 
@@ -73,9 +73,9 @@ function useProjectMutation<T, R = unknown>(fn: (api: QcardApi, input: T) => Pro
 
 export const useCreateProject = () => useProjectMutation((api, v: NewProjectInput) => api.createProject(v));
 export const useSetMemberRole = (projectId: string) =>
-  useProjectMutation((api, v: { user: string; role: Role }) => api.setMemberRole(projectId, v.user, v.role));
+  useProjectMutation((api, v: { uid: string; role: Role }) => api.setMemberRole(projectId, v.uid, v.role));
 export const useRemoveMember = (projectId: string) =>
-  useProjectMutation((api, user: string) => api.removeMember(projectId, user));
+  useProjectMutation((api, uid: string) => api.removeMember(projectId, uid));
 export const useCreateInvitation = (projectId: string) =>
   useProjectMutation((api, v: { role: Role; github?: string }) => api.createInvitation(projectId, v));
 export const useRevokeInvitation = (projectId: string) =>
@@ -92,9 +92,9 @@ export function useQaDocs(projectId: string) {
   return useQuery({ queryKey: keys.qaDocs(projectId), queryFn: () => api.listQaDocs(projectId) });
 }
 
-export function useQaDoc(docId: string) {
+export function useQaDoc(projectId: string, docId: string) {
   const api = useApi();
-  return useQuery({ queryKey: keys.qaDoc(docId), queryFn: () => api.getQaDoc(docId) });
+  return useQuery({ queryKey: keys.qaDoc(projectId, docId), queryFn: () => api.getQaDoc({ projectId, docId }) });
 }
 
 export function usePrepFlows(projectId: string) {
@@ -107,9 +107,9 @@ export function useCycles(projectId: string) {
   return useQuery({ queryKey: keys.cycles(projectId), queryFn: () => api.listCycles(projectId) });
 }
 
-export function useCycle(cycleId: string) {
+export function useCycle(projectId: string, cycleId: string) {
   const api = useApi();
-  return useQuery({ queryKey: keys.cycle(cycleId), queryFn: () => api.getCycle(cycleId) });
+  return useQuery({ queryKey: keys.cycle(projectId, cycleId), queryFn: () => api.getCycle({ projectId, cycleId }) });
 }
 
 export function useConsoleSession() {
@@ -118,39 +118,42 @@ export function useConsoleSession() {
 }
 
 /** QA 문서를 바꾸는 mutation은 문서·문서 목록을 모두 다시 읽는다. */
-function useDocMutation<T>(docId: string, fn: (api: QcardApi, input: T) => Promise<unknown>) {
+type DocLike = { id: string; projectId: string };
+
+function useDocMutation<T>(doc: DocLike, fn: (api: QcardApi, ref: DocRef, input: T) => Promise<unknown>) {
   const api = useApi();
   const qc = useQueryClient();
+  const ref = { projectId: doc.projectId, docId: doc.id };
   return useMutation({
-    mutationFn: (input: T) => fn(api, input),
+    mutationFn: (input: T) => fn(api, ref, input),
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: keys.qaDoc(docId) });
+      void qc.invalidateQueries({ queryKey: keys.qaDoc(ref.projectId, ref.docId) });
       void qc.invalidateQueries({ queryKey: ['qaDocs'] });
     },
   });
 }
 
-export function useUpdateCase(docId: string) {
-  return useDocMutation(docId, (api, v: { tcId: string; body: CaseBody; expectedRev: number }) =>
-    api.updateCase(docId, v.tcId, v.body, v.expectedRev),
+export function useUpdateCase(doc: DocLike) {
+  return useDocMutation(doc, (api, ref, v: { tcId: string; body: CaseBody; expectedRev: number }) =>
+    api.updateCase(ref, v.tcId, v.body, v.expectedRev),
   );
 }
 
-export function useSetApproval(docId: string) {
-  return useDocMutation(docId, (api, v: { tcIds: string[]; status: 'approved' | 'rejected' | 'pending' }) =>
-    api.setApproval(docId, v.tcIds, v.status),
+export function useSetApproval(doc: DocLike) {
+  return useDocMutation(doc, (api, ref, v: { tcIds: string[]; status: 'approved' | 'rejected' | 'pending' }) =>
+    api.setApproval(ref, v.tcIds, v.status),
   );
 }
 
-export function useResolveQuestion(docId: string) {
-  return useDocMutation(docId, (api, v: { questionId: string; resolution: QuestionResolution }) =>
-    api.resolveQuestion(docId, v.questionId, v.resolution),
+export function useResolveQuestion(doc: DocLike) {
+  return useDocMutation(doc, (api, ref, v: { questionId: string; resolution: QuestionResolution }) =>
+    api.resolveQuestion(ref, v.questionId, v.resolution),
   );
 }
 
-export function useCommentQuestion(docId: string) {
-  return useDocMutation(docId, (api, v: { questionId: string; text: string }) =>
-    api.commentQuestion(docId, v.questionId, v.text),
+export function useCommentQuestion(doc: DocLike) {
+  return useDocMutation(doc, (api, ref, v: { questionId: string; text: string }) =>
+    api.commentQuestion(ref, v.questionId, v.text),
   );
 }
 
@@ -160,7 +163,7 @@ export function useConfirmVerdict() {
   return useMutation({
     mutationFn: (input: ConfirmVerdictInput) => api.confirmVerdict(input),
     onSettled: (_r, _e, input) => {
-      void qc.invalidateQueries({ queryKey: keys.cycle(input.cycleId) });
+      void qc.invalidateQueries({ queryKey: keys.cycle(input.projectId, input.cycleId) });
       void qc.invalidateQueries({ queryKey: ['cycles'] });
     },
   });

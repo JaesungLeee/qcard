@@ -93,12 +93,12 @@ function MembersSection({ projectId, admin }: { projectId: string; admin: boolea
           <div className="qp-list" role="list" aria-label="멤버">
             {list.map((m) => (
               <MemberRow
-                key={m.user}
+                key={m.uid}
                 m={m}
-                me={m.user === api.currentUser}
+                me={m.uid === api.currentUid}
                 admin={admin}
-                onRole={(r) => setRole.mutate({ user: m.user, role: r })}
-                onRemove={() => remove.mutate(m.user)}
+                onRole={(r) => setRole.mutate({ uid: m.uid, role: r })}
+                onRemove={() => remove.mutate(m.uid)}
               />
             ))}
           </div>

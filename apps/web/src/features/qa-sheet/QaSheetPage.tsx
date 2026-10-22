@@ -19,7 +19,7 @@ export type SheetProps = { d: CycleDetail; index: ResultIndex; projectId: string
 
 export function QaSheetPage() {
   const { projectId = '', cycleId = '' } = useParams();
-  const cycle = useCycle(cycleId);
+  const cycle = useCycle(projectId, cycleId);
   return (
     <div className="qc-page">
       <QueryState query={cycle}>{(d) => <Sheet d={d} projectId={projectId} />}</QueryState>

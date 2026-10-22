@@ -2,15 +2,30 @@ import { DEVICE_SIZE, SCREENS, type MockElement } from '@qcard/fixtures';
 import type { Bounds, ExecStep, Screenshot } from '@qcard/shared';
 import { STEP_ACTION_LABEL } from '@qcard/shared';
 import { token } from '@qcard/ui';
+import { useQuery } from '@tanstack/react-query';
 import { Fragment, type CSSProperties, type ReactNode } from 'react';
+import { useApi } from '../data/hooks';
 
 /**
  * 디바이스 스크린샷 자리. fixture의 목업 화면(`kind: 'mock'`)은 요소 배치대로 그리고,
- * 실제 이미지(`kind: 'url'`)는 그대로 보여준다. 실제 이미지는 w·h(디바이스 px)가 있으면 그 비율을 쓴다. 디바이스 화면은 qcard 테마와 무관해야 하므로
+ * 실제 이미지(`kind: 'url'`)는 그대로, Storage 이미지(`kind: 'storage'`)는 로그인 상태로 받아 보여준다. 실제 이미지는 w·h(디바이스 px)가 있으면 그 비율을 쓴다. 디바이스 화면은 qcard 테마와 무관해야 하므로
  * 테마에 따라 바뀌지 않는 atomic·static 토큰만 쓴다.
  *
  * `action`을 주면 액션 표시(탭 위치·대상 박스·스와이프 화살표·액션 배지)를 겹쳐 그린다 (F-EX-06, F-DB-03).
  */
+/** 실제 이미지 주소. Storage 이미지는 보안 규칙을 거쳐 받은 뒤 같은 경로는 다시 받지 않는다 */
+function useImageSrc(screenshot: Screenshot): string | undefined {
+  const api = useApi();
+  const path = screenshot.kind === 'storage' ? screenshot.path : '';
+  const stored = useQuery({
+    queryKey: ['screenshot', path],
+    queryFn: () => api.screenshotUrl(path),
+    enabled: path !== '',
+    staleTime: Infinity,
+  });
+  return screenshot.kind === 'url' ? screenshot.url : stored.data;
+}
+
 export function MockScreen({
   screenshot,
   width,
@@ -27,8 +42,9 @@ export function MockScreen({
   /** 스크린 리더용 설명 */
   label?: string;
 }) {
+  const src = useImageSrc(screenshot);
   const size =
-    screenshot.kind === 'url' && screenshot.w && screenshot.h ? { w: screenshot.w, h: screenshot.h } : DEVICE_SIZE;
+    screenshot.kind !== 'mock' && screenshot.w && screenshot.h ? { w: screenshot.w, h: screenshot.h } : DEVICE_SIZE;
   const scale = width / size.w;
   const height = Math.round(size.h * scale);
   // 액션 표시·강조 박스는 디바이스 좌표로 그린 뒤 화면 크기에 맞춰 줄인다
@@ -63,9 +79,9 @@ export function MockScreen({
         margin: Math.max(2, 10 * scale),
       }}
     >
-      {screenshot.kind === 'url' ? (
+      {screenshot.kind !== 'mock' ? (
         <>
-          <img src={screenshot.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          {src && <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
           {(highlight || action) && <div style={{ ...layer, pointerEvents: 'none' }}>{overlay}</div>}
         </>
       ) : (

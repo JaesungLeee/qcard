@@ -20,7 +20,7 @@ import {
   worstVerdict,
 } from './model';
 
-const load = (id = 'cycle-130-1') => createMemoryApi({ db: createFixtureDb() }).getCycle(id);
+const load = (id = 'cycle-130-1') => createMemoryApi({ db: createFixtureDb() }).getCycle({ projectId: 'haru', cycleId: id });
 const bySrc = (cases: { sourceId: string; tcId: string }[], id: string) =>
   cases.find((c) => c.sourceId === `onboarding-flow/${id}`)!.tcId;
 

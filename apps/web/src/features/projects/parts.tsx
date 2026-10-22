@@ -1,7 +1,8 @@
 // 프로젝트·멤버·초대 화면이 함께 쓰는 조각.
 import { DATA_NOTICE, ROLE_LABEL, type Role } from '@qcard/shared';
-import { Checkbox, ContentBadge, Icons, SectionMessage, textClass } from '@qcard/ui';
-import { useId, type ReactNode } from 'react';
+import { ContentBadge, Icons, SectionMessage, textClass } from '@qcard/ui';
+import type { ReactNode } from 'react';
+import { CheckLabel } from '../../components/CheckLabel';
 
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: ReactNode }) {
   return (
@@ -29,7 +30,6 @@ export function RoleBadge({ role }: { role: Role }) {
 
 /** 데이터 처리 안내 확인 (F-TM-13). 프로젝트 생성·초대 수락 때 받는다 */
 export function DataNotice({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  const labelId = useId();
   return (
     <div className="qp-notice">
       <div className="qp-row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
@@ -39,13 +39,9 @@ export function DataNotice({ checked, onChange }: { checked: boolean; onChange: 
           <span className={`${textClass('label2')} qp-muted`}>{DATA_NOTICE}</span>
         </div>
       </div>
-      {/* Montage Checkbox는 <label>로 감싸면 글자를 눌러도 켜지지 않아 글자에 직접 연결한다 */}
-      <span className={`${textClass('label1', 'medium')} qp-check`}>
-        <Checkbox size="small" checked={checked} onCheckedChange={onChange} aria-labelledby={labelId} />
-        <span id={labelId} onClick={() => onChange(!checked)}>
-          확인했습니다
-        </span>
-      </span>
+      <CheckLabel className={`${textClass('label1', 'medium')} qp-check`} checked={checked} onCheckedChange={onChange}>
+        확인했습니다
+      </CheckLabel>
     </div>
   );
 }

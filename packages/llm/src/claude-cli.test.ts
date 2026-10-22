@@ -140,6 +140,13 @@ describe('createClaudeCliLlm', () => {
     expect(await run({ is_error: true, result: 'Not logged in · Please run /login' })).toBeInstanceOf(
       ClaudeCodeSetupError,
     );
+    expect(
+      await run({
+        is_error: true,
+        result:
+          "API Error: 400 Claude Code 2.1.185 does not support this model; version 2.1.280 or newer is required. Run 'claude update'",
+      }),
+    ).toMatchObject({ name: 'ClaudeCodeSetupError', reason: 'outdated' });
     expect(await run({ is_error: true, api_error_status: 429, result: 'limit' })).toBeInstanceOf(PlanLimitError);
     expect(await run({ is_error: true, result: '알 수 없음' })).toBeInstanceOf(LlmOutputError);
     expect(await run('exit')).toBeInstanceOf(LlmOutputError);

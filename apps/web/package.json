@@ -8,17 +8,20 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests --dir src",
-    "ui:snap": "playwright test"
+    "ui:snap": "playwright test",
+    "dev:firebase": "VITE_DATA=firebase VITE_FIREBASE_EMULATOR=true vite"
   },
   "dependencies": {
+    "@qcard/data": "workspace:*",
+    "@qcard/fixtures": "workspace:*",
     "@qcard/shared": "workspace:*",
     "@qcard/ui": "workspace:*",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "@qcard/fixtures": "workspace:*",
     "@tanstack/react-query": "5.104.1",
     "ag-grid-community": "36.2.0",
     "ag-grid-react": "36.2.0",
+    "firebase": "13.0.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "react-router": "7.18.4"
   },
   "devDependencies": {

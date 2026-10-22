@@ -200,6 +200,10 @@ export function cliError(r: CliResult): Error {
   if (/not logged in|\/login|invalid api key|oauth token/i.test(text)) {
     return new ClaudeCodeSetupError('not_logged_in', `Claude Code에 로그인되어 있지 않습니다: ${text}`);
   }
+  // 새 모델은 Claude Code 최소 버전이 있다 (예: "does not support this model; version 2.1.280 or newer is required")
+  if (/does not support this model|or newer is required|claude update/i.test(text)) {
+    return new ClaudeCodeSetupError('outdated', `Claude Code 업데이트가 필요합니다(터미널에서 claude update): ${text}`);
+  }
   if (r.api_error_status === 429 || /usage limit|limit reached|hit your limit|rate.?limit/i.test(text)) {
     return new PlanLimitError(`Claude 플랜 사용 한도에 닿았습니다: ${text}`);
   }
