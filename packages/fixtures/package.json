@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@qcard/device": "workspace:*",
-    "@qcard/shared": "workspace:*"
+    "@qcard/shared": "workspace:*",
+    "@qcard/spec": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.9.3",

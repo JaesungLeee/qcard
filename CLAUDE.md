@@ -21,6 +21,7 @@ pnpm workspace + Turborepo, TypeScript 단일 언어.
 | `apps/functions`        | Cloud Functions: 프로젝트·멤버·초대 쓰기(callable, `@qcard/shared` membership 규칙을 트랜잭션에서 강제), 삭제 유예 지난 프로젝트 영구 삭제. LLM은 부르지 않는다. 보안 규칙은 `firebase/firestore.rules`, 테스트는 에뮬레이터 |
 | `apps/host-agent`       | 호스트 에이전트: 사이클 케이스를 실기기에서 `runCase`로 실행하고 Run 진행·결과를 Firestore, 스크린샷을 Storage에 올린다(`runCycle`·`firestoreSink`). 플랜 한도·로그인 문제면 Run 일시정지                                    |
 | `packages/data`         | 데이터 접근 인터페이스 `QcardApi`·오류(`api.ts`), 구현 공용 계산(`logic.ts`), Firestore 구현(`@qcard/data/firebase`), 에뮬레이터 시드(`@qcard/data/seed`). 웹·호스트 에이전트·테스트가 함께 쓴다                             |
+| `packages/spec`         | 스펙 파서(`spec.md` → 요구사항·TS/EC 행·출처 위치·행 해시)와 버전 매칭(출처 ID로 동일·변경·신규·삭제, TC ID 이어받기, F-QD-08). LLM 없음                                                                                     |
 
 Agent 도구·Verifier 출력 스키마는 `packages/shared/src/agent.ts`, 온보딩 합성 시나리오(FakeDevice용)는 `packages/fixtures/src/device.ts`.
 
@@ -33,6 +34,7 @@ pnpm이 전역에 없으면 `npx -y pnpm@10.34.6 <명령>`으로 실행한다.
 - `pnpm verify` — 타입 검사 + 테스트 + 색 하드코딩 검사. **작업을 끝내기 전에 반드시 통과**(Stop 훅이 강제한다). Functions·보안 규칙 테스트는 Firestore 에뮬레이터를 띄워 돈다 — **Java 21 이상 필요**(`brew install openjdk@21`, `apps/functions/scripts/emulators.mjs`가 찾아 쓴다)
 - `pnpm emu` — 함수를 번들해 Auth·Firestore·Functions 에뮬레이터를 띄우고 fixture를 시드한다(프로젝트 `demo-qcard`, 실제 Firebase와 연결되지 않음, Ctrl+C로 종료). 시드 사용자 비밀번호 `qcard-dev`
 - `pnpm --filter @qcard/host-agent run-cycle --project haru --cycle cycle-130-device --user jaesung-lee [TC-ID…] [--package com.example.harukong.qa]` — 연결된 실기기에서 사이클 케이스를 실행해 에뮬레이터에 올린다(웹 QA 시트에 바로 보임, 플랜 사용량 차감). 디바이스가 사이클 대상(모델 + OS 메이저)이어야 한다 — 개발 시드의 `cycle-130-device`는 SM-S711N 대상. `pnpm emu`가 떠 있어야 한다. 결과·증거는 업로드 큐(`~/.qcard/upload-queue`)를 거쳐 끊겨도 다음 실행 때 이어 보낸다. `--resume <run id>`로 일시정지 후 재개
+- `pnpm --filter @qcard/spec check <docs/specs 폴더> [--prev <이전 버전 폴더>]` — 실제 스펙 폴더를 파싱해 개수·경고와 이전 버전 대비 동일·변경·신규·삭제를 보인다(읽기 전용, LLM 없음). 하루콩 스펙은 저장소 밖 `../qcard-specs/`에 둔다(커밋하지 않음)
 - `pnpm dev:firebase` — 웹을 Firebase 모드(`VITE_DATA=firebase`)로 띄운다. `pnpm emu`가 떠 있어야 하고, 로그인 화면에서 시드 사용자를 고른다. `pnpm dev`·`ui:snap`은 계속 메모리 구현을 쓴다
 - `pnpm ui:snap` — `/__ui` 등 화면을 데스크톱·좁은 폭 × 라이트·다크로 찍어 `apps/web/.snap/*.png`에 저장
 - `pnpm tokens` — `packages/ui/tokens/tokens.json` → `src/generated/` 재생성

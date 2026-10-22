@@ -25,6 +25,7 @@ import type {
   Verdict,
 } from '@qcard/shared';
 import { hash } from '@qcard/shared';
+import { rowHash } from '@qcard/spec';
 import raw from './data/onboarding-flow.json';
 import generatedPoints from './data/onboarding-points.json';
 import { SCREENS, element, type MockElement } from './screens';
@@ -371,6 +372,8 @@ function buildCases(version: '1.2.0' | '1.3.0'): TestCase[] {
     const change: TestCase['change'] =
       version === '1.2.0' ? 'same' : NEW_IN_130.has(row.id) ? 'new' : previous ? 'changed' : 'same';
     const contentHash = hash(body);
+    // 1.2.0의 변경 행은 이전 Then으로 만든 케이스다
+    const sourceHash = rowHash(version === '1.2.0' && prevThen ? { ...row, then: prevThen } : row, raw.requirements);
     const status =
       version === '1.2.0' || change === 'same' || row.id === 'EC-021'
         ? HELD.has(row.id) && version === '1.3.0'
@@ -383,6 +386,7 @@ function buildCases(version: '1.2.0' | '1.3.0'): TestCase[] {
       ...body,
       tcId,
       sourceId: `${SPEC}/${row.id}`,
+      sourceHash,
       requirementIds: row.frs.map(reqId),
       feature: FEATURE,
       subFeature: row.flow,

@@ -189,6 +189,8 @@ export const TestCase = CaseBody.extend({
   tcId: z.string(),
   /** 출처 ID: `<스펙 이름>/TS-xxx` · `EC-xxx` */
   sourceId: z.string(),
+  /** 출처 행(+관련 요구사항) 내용 해시. 다음 버전에서 같으면 이 케이스를 그대로 복사한다 (F-QD-08) */
+  sourceHash: z.string().optional(),
   requirementIds: z.array(z.string()),
   /** 기능(스펙) / 세부 기능(유저 플로우) */
   feature: z.string(),
