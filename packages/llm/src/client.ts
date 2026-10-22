@@ -37,8 +37,11 @@ export function llmProviderFromEnv(value = process.env.LLM_PROVIDER): LlmProvide
 }
 
 /** 실제 호출 구현. claude-cli는 세션 프로세스를 닫을 수 있게 `close`를 함께 돌려준다 */
-export function createLiveLlm(provider = llmProviderFromEnv()): LlmClient & { close?: () => void } {
-  return provider === 'api' ? createAnthropicLlm() : createClaudeCliLlm();
+export function createLiveLlm(
+  provider = llmProviderFromEnv(),
+  options: { turnTimeoutMs?: number } = {},
+): LlmClient & { close?: () => void } {
+  return provider === 'api' ? createAnthropicLlm() : createClaudeCliLlm(options);
 }
 
 /**

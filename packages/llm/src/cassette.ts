@@ -26,23 +26,27 @@ export const requestKey = (req: LlmRequest) => sha256(canonicalJson(redactImages
 
 const fileOf = (dir: string, key: string) => join(dir, `${key.slice(0, 16)}.json`);
 
+/**
+ * replay: 녹화만 재생 (없으면 실패) · record: 항상 실제로 부르고 녹화 ·
+ * resume: 녹화가 있으면 재생, 없으면 실제로 부르고 녹화 (중단된 작업을 이어 할 때 끝난 호출을 다시 부르지 않는다)
+ */
 export function createCassetteLlm(
-  options: { dir: string; mode: 'replay' } | { dir: string; mode: 'record'; inner: LlmClient },
+  options: { dir: string; mode: 'replay' } | { dir: string; mode: 'record' | 'resume'; inner: LlmClient },
 ): LlmClient {
   const { dir } = options;
   return {
     async create(req, meta) {
       const key = requestKey(req);
       const file = fileOf(dir, key);
-      if (options.mode === 'replay') {
+      if (options.mode !== 'record') {
         const raw = await readFile(file, 'utf8').catch(() => undefined);
         const cassette = raw ? (JSON.parse(raw) as Cassette) : undefined;
-        if (!cassette || cassette.key !== key) {
+        if (cassette?.key === key) return cassette.response;
+        if (options.mode === 'replay') {
           throw new CassetteMissError(
             `LLM 녹화 없음: ${key.slice(0, 16)} (${meta.role}${meta.caseId ? ` · ${meta.caseId}` : ''}). 요청이 바뀌었으면 LLM_MODE=record로 다시 녹화하세요`,
           );
         }
-        return cassette.response;
       }
       const response = await options.inner.create(req, meta);
       const cassette: Cassette = {

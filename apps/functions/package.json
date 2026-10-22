@@ -10,7 +10,8 @@
     "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=esm --outfile=lib/index.js --external:firebase-admin --external:firebase-functions",
     "typecheck": "tsc -p tsconfig.json",
     "test": "node scripts/emulators.mjs test 'vitest run'",
-    "emulators": "pnpm build && node scripts/emulators.mjs dev 'tsx scripts/seed.ts --wait'"
+    "emulators": "pnpm build && node scripts/emulators.mjs dev 'tsx scripts/seed.ts --wait'",
+    "seed-generated": "tsx scripts/seed-generated.ts"
   },
   "dependencies": {
     "firebase-admin": "14.5.0",

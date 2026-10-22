@@ -74,7 +74,10 @@ function Review({ doc, projectId }: { doc: QADocument; projectId: string }) {
             <span>
               <span className="qd-faint">스펙 묶음</span>
               <span className="qc-mono">{doc.specBundleId}</span>
-              <span className="qd-faint">({doc.specs.map((s) => s.name).join(', ')})</span>
+              {/* 스펙이 많으면 이름 대신 개수 (이름은 툴팁) */}
+              <span className="qd-faint" title={doc.specs.map((s) => s.name).join(', ')}>
+                ({doc.specs.length > 3 ? `스펙 ${doc.specs.length}개` : doc.specs.map((s) => s.name).join(', ')})
+              </span>
             </span>
             <span>
               <span className="qd-faint">생성</span>

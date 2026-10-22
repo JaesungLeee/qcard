@@ -1,7 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
 /** 호출 목적. 사용량을 역할별로 나눠 보고, 녹화 파일에도 남긴다. */
-export type LlmRole = 'executor' | 'verifier' | 'locator' | 'helper';
+export type LlmRole = 'executor' | 'verifier' | 'locator' | 'helper' | 'generator';
 export type LlmCallMeta = { role: LlmRole; caseId?: string };
 
 export type LlmRequest = Anthropic.MessageCreateParamsNonStreaming;
@@ -23,4 +23,6 @@ export const MODELS: Record<LlmRole, string> = {
   verifier: 'claude-sonnet-5-5',
   locator: 'claude-sonnet-5-5',
   helper: 'claude-haiku-5-5',
+  /** QA Doc Generator (PRD §6.3) */
+  generator: 'claude-opus-5-5',
 };

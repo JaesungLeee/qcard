@@ -72,7 +72,7 @@ function QuestionCard({ doc, q, current }: { doc: QADocument; q: SpecQuestion; c
           <span className={`${textClass('label2')} qd-faint`} style={{ marginLeft: 'auto' }}>
             담당{' '}
             <span className={textClass('label2', 'medium')} style={{ color: token('foreground-neutral-secondary') }}>
-              {q.assignee}
+              {q.assignee || '미지정'}
             </span>
           </span>
         </div>

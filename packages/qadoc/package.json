@@ -1,0 +1,26 @@
+{
+  "name": "@qcard/qadoc",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "generate": "tsx scripts/generate.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@qcard/llm": "workspace:*",
+    "@qcard/shared": "workspace:*",
+    "@qcard/spec": "workspace:*",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "0.131.0",
+    "@types/node": "24.19.0",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}

@@ -80,6 +80,15 @@ describe('녹화·재생', () => {
     );
   });
 
+  it('resume: 녹화가 있는 요청은 재생하고 없는 요청만 실제로 부른다 (중단된 작업 이어 하기)', async () => {
+    const live = fakeLlm();
+    const llm = createCassetteLlm({ dir, mode: 'resume', inner: live.client });
+    await llm.create(req('a'), { role: 'generator' });
+    await llm.create(req('a'), { role: 'generator' });
+    await llm.create(req('b'), { role: 'generator' });
+    expect(live.calls()).toBe(2);
+  });
+
   it('키는 객체 키 순서와 무관하고, 내용·이미지가 바뀌면 달라진다', () => {
     const a = req('a');
     const reordered = { messages: a.messages, max_tokens: a.max_tokens, model: a.model } as LlmRequest;

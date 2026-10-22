@@ -29,12 +29,18 @@ import { useDocParams } from './params';
 
 const CHANGE_FILTERS: ChangeFilter[] = ['all', 'new', 'changed', 'removed', 'same'];
 
-/** 그리드 너비에 맞춰 열을 줄인다: 상세 패널이 열리거나 좁은 화면이면 상세에 다 나오는 열은 숨긴다. */
-function columnsFor(width: number): ColDef<GridRow>[] {
+/**
+ * 그리드 너비에 맞춰 열을 줄인다: 상세 패널이 열리거나 좁은 화면이면 상세에 다 나오는 열은 숨긴다.
+ * TC ID 열은 가장 긴 ID에 맞춘다 (접두어가 스펙 이름이라 `TC-HOME-DECK-EXPLORATION-051`처럼 길 수 있다).
+ */
+function columnsFor(width: number, longestId: number): ColDef<GridRow>[] {
   const narrow = width > 0 && width < 560;
   const compact = width > 0 && width < 820;
+  // 13px 고정폭 글꼴 한 글자 ≈ 7.5px + 칸 여백
+  const idWidth = Math.min(250, Math.max(BASE_COLUMNS[0]!.width!, Math.ceil(longestId * 7.5 + 32)));
   return BASE_COLUMNS.map((c) => {
-    if (c.colId === 'tcId') return { ...c, pinned: narrow ? null : 'left', width: compact ? 156 : c.width };
+    if (c.colId === 'tcId')
+      return { ...c, pinned: narrow ? null : 'left', width: narrow ? 156 : compact ? Math.min(idWidth, 200) : idWidth };
     if (c.colId === 'title') return { ...c, minWidth: compact ? 180 : 220 };
     if (c.colId === 'source') return { ...c, hide: narrow, width: compact ? 76 : c.width };
     if (c.colId === 'mode' || c.colId === 'priority') return { ...c, hide: compact };
@@ -186,7 +192,8 @@ export function CasesTab({
   const [filter, setFilter] = useState<CaseFilter>({ change: 'all', unapprovedOnly: false, q: '' });
   const apiRef = useRef<GridApi<GridRow> | null>(null);
   const [gridRef, gridWidth] = useWidth<HTMLDivElement>();
-  const columns = useMemo(() => columnsFor(gridWidth), [gridWidth]);
+  const longestId = useMemo(() => Math.max(0, ...doc.cases.map((c) => c.tcId.length)), [doc.cases]);
+  const columns = useMemo(() => columnsFor(gridWidth, longestId), [gridWidth, longestId]);
 
   const changeCounts = useMemo(() => countBy(doc.cases, (c) => c.change), [doc.cases]);
   const visible = useMemo(() => filterCases(doc.cases, filter), [doc.cases, filter]);
