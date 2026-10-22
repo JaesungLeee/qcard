@@ -1,5 +1,5 @@
 // QA 시트 화면들이 함께 쓰는 작은 조각.
-import { VERDICT_LABEL, type Verdict } from '@qcard/shared';
+import { PAUSE_REASON_LABEL, VERDICT_LABEL, type PauseReason, type Verdict } from '@qcard/shared';
 import { Icons, VerdictBadge, textClass, token } from '@qcard/ui';
 import type { ReactNode } from 'react';
 import type { VerdictCounts } from '../../data/api';
@@ -97,8 +97,8 @@ export function Mono({ children, className = '' }: { children: ReactNode; classN
   return <span className={`qc-mono ${className}`}>{children}</span>;
 }
 
-/** 실행 중 / 일시정지 표시 (아이콘 + 글자) */
-export function RunState({ paused }: { paused: boolean }) {
+/** 실행 중 / 일시정지 표시 (아이콘 + 글자). 일시정지면 이유를 붙인다 (F-DB-07) */
+export function RunState({ paused, reason }: { paused: boolean; reason?: PauseReason }) {
   return (
     <span
       className={`qs-row ${textClass('caption1', 'medium')}`}
@@ -108,7 +108,7 @@ export function RunState({ paused }: { paused: boolean }) {
       }}
     >
       {paused ? <Icons.IconPause aria-hidden /> : <Icons.IconPlay aria-hidden />}
-      {paused ? '일시정지' : '실행 중'}
+      {paused ? `일시정지${reason ? ` · ${PAUSE_REASON_LABEL[reason]}` : ''}` : '실행 중'}
     </span>
   );
 }
@@ -129,9 +129,5 @@ export const traceUrl = (projectId: string, cycleId: string, tcId: string, devic
 
 /** 탭 본문 래퍼 (탭 목록과 간격) */
 export function TabBody({ children }: { children: ReactNode }) {
-  return (
-    <div className="qs-stack">
-      {children}
-    </div>
-  );
+  return <div className="qs-stack">{children}</div>;
 }

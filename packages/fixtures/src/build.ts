@@ -943,6 +943,7 @@ export const runs130: Run[] = [
     executor: PEOPLE.lead,
     deviceId: P8.id,
     status: 'paused',
+    pauseReason: 'plan_limit',
     currentTcId: P8_CURRENT.tcId,
     startedAt: T(17, 14, 0),
   },
@@ -1081,6 +1082,18 @@ export type ConsoleSession = {
     pauseAt: number;
   };
   usage: { tokens: number; costUsd: number; caseTokenLimit: number };
+  /** 이 PC의 Claude Code 상태 (F-DB-09). 호스트 에이전트가 `claude --version`·`claude auth status`로 채운다 */
+  claudeCode: ClaudeCodeState;
+};
+
+export type ClaudeCodeState = {
+  installed: boolean;
+  version?: string;
+  loggedIn: boolean;
+  /** pro · max */
+  plan?: string;
+  /** 플랜 사용 한도에 닿았으면 풀리는 시각 */
+  limitedUntil?: string;
 };
 
 function thoughtsFor(steps: ExecStep[]): (ThoughtEntry & { stepIndex: number })[] {
@@ -1199,6 +1212,7 @@ function consoleSession(): ConsoleSession {
     queue,
     current: { tcId: tc.tcId, case: tc, steps, thoughts, pauseAt: steps.length },
     usage: { tokens: doneTokens, costUsd: Math.round(doneTokens * 0.0000042 * 100) / 100, caseTokenLimit: 60000 },
+    claudeCode: { installed: true, version: '2.1.185', loggedIn: true, plan: 'max' },
   };
 }
 

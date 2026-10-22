@@ -172,7 +172,7 @@ function Trace({ d }: { d: CycleDetail }) {
                 ['OS 빌드', r.osBuild ? <Mono>{r.osBuild}</Mono> : '—'],
                 ['결함', r.defectId ? <Mono>{r.defectId}</Mono> : '—'],
                 ...(r.tokens
-                  ? ([['토큰 · 비용', `${fmtNumber(r.tokens)} · $${r.costUsd?.toFixed(3) ?? '0'}`]] as [
+                  ? ([['토큰 · 환산 비용', `${fmtNumber(r.tokens)} · $${r.costUsd?.toFixed(3) ?? '0'}`]] as [
                       string,
                       string,
                     ][])
@@ -214,7 +214,7 @@ function Trace({ d }: { d: CycleDetail }) {
               <span className={`${textClass('label1')} qs-muted`}>
                 {running ? (
                   <span className="qs-row" style={{ gap: token('space-6'), justifyContent: 'center' }}>
-                    <RunState paused={running.status === 'paused'} />
+                    <RunState paused={running.status === 'paused'} reason={running.pauseReason} />
                     {running.executor}의 Run이 이 칸을 잡고 있습니다.
                   </span>
                 ) : (

@@ -232,7 +232,9 @@ function ResultCard({
         )}
         {r.tokens && (
           <>
-            <dt>토큰 · 비용</dt>
+            <dt title="API 단가로 계산한 참고값입니다. 실제로는 실행자의 Claude 플랜 사용량에서 차감됩니다.">
+              토큰 · 환산 비용
+            </dt>
             <dd>
               {fmtNumber(r.tokens)} · ${r.costUsd?.toFixed(3) ?? '0'}
             </dd>

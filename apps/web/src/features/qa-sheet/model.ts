@@ -3,6 +3,7 @@ import {
   AUTO_CONFIRM_LABEL,
   type AutoConfirmCondition,
   type CaseResult,
+  type PauseReason,
   type Requirement,
   type Run,
   type TargetDevice,
@@ -62,7 +63,14 @@ export function deviceStats(
 }
 
 export type CellState = 'done' | 'running' | 'remaining';
-export type MatrixCell = { tcId: string; state: CellState; verdict: Verdict; executor?: string; paused?: boolean };
+export type MatrixCell = {
+  tcId: string;
+  state: CellState;
+  verdict: Verdict;
+  executor?: string;
+  paused?: boolean;
+  pauseReason?: PauseReason;
+};
 export type MatrixRow = { device: TargetDevice; cells: MatrixCell[]; done: number; running: number; remaining: number };
 
 /** 진행 매트릭스 (F-CY-05): 케이스 × 대상 디바이스 칸을 완료 / 실행 중(실행자) / 남은 칸으로 나눈다. */
@@ -80,7 +88,14 @@ export function progressMatrix(
       const verdict = index.get(resultKey(tc.tcId, device.id))?.verdict ?? 'nt';
       const run = active.find((r) => r.currentTcId === tc.tcId);
       if (run)
-        return { tcId: tc.tcId, state: 'running', verdict, executor: run.executor, paused: run.status === 'paused' };
+        return {
+          tcId: tc.tcId,
+          state: 'running',
+          verdict,
+          executor: run.executor,
+          paused: run.status === 'paused',
+          pauseReason: run.pauseReason,
+        };
       return { tcId: tc.tcId, state: verdict === 'nt' ? 'remaining' : 'done', verdict };
     });
     const n = (s: CellState) => cells.filter((c) => c.state === s).length;

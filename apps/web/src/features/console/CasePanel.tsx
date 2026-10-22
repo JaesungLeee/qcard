@@ -241,7 +241,7 @@ export function UsageCard({
         <dd className="qcc-mono" style={{ textAlign: 'right' }}>
           {fmtNumber(runTokens)}
         </dd>
-        <dt>Run 비용</dt>
+        <dt title="API 단가로 계산한 참고값입니다. 실제로는 내 Claude 플랜 사용량에서 차감됩니다.">Run 환산 비용</dt>
         <dd className="qcc-mono" style={{ textAlign: 'right' }}>
           ${costUsd.toFixed(2)}
         </dd>
@@ -249,4 +249,3 @@ export function UsageCard({
     </section>
   );
 }
-

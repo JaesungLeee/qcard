@@ -1,4 +1,4 @@
-import type { Verdict } from '@qcard/shared';
+import { PauseReason, type Verdict } from '@qcard/shared';
 import {
   Button,
   Chip,
@@ -19,9 +19,22 @@ import {
   textClass,
   token,
 } from '@qcard/ui';
-import { createFixtureDb } from '@qcard/fixtures';
+import { createFixtureDb, type ClaudeCodeState } from '@qcard/fixtures';
 import type { CSSProperties, ReactNode } from 'react';
+import { ClaudeCodeChip } from '../features/console/TopBar';
+import '../features/console/console.css';
+import { RunState } from '../features/qa-sheet/parts';
+import '../features/qa-sheet/qa-sheet.css';
 import { MockScreen } from '../mock/MockScreen';
+
+/** 로컬 콘솔의 Claude Code 상태 (F-DB-09) */
+const CLAUDE_CODE_STATES: ClaudeCodeState[] = [
+  { installed: true, version: '2.1.185', loggedIn: true, plan: 'max' },
+  { installed: true, version: '2.1.185', loggedIn: true, plan: 'pro' },
+  { installed: true, version: '2.1.185', loggedIn: true, plan: 'max', limitedUntil: '2026-10-22T14:30:00+09:00' },
+  { installed: true, version: '2.1.185', loggedIn: false },
+  { installed: false, loggedIn: false },
+];
 
 const MOCK_STEPS = createFixtureDb().console.current.steps;
 
@@ -171,6 +184,21 @@ export function UiCatalog() {
                 {step.index}. {step.intent}
               </figcaption>
             </figure>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="실행 상태 · Claude Code">
+        <div style={row}>
+          <RunState paused={false} />
+          <RunState paused />
+          {PauseReason.options.map((r) => (
+            <RunState key={r} paused reason={r} />
+          ))}
+        </div>
+        <div style={row}>
+          {CLAUDE_CODE_STATES.map((s, i) => (
+            <ClaudeCodeChip key={i} state={s} />
           ))}
         </div>
       </Section>

@@ -37,7 +37,7 @@ export function QaDocListPage() {
               스펙 업로드 · QA 문서 생성
             </Button>
             <span className={textClass('caption1')} style={{ color: token('foreground-neutral-tertiary') }}>
-              서버 연결 후 사용할 수 있습니다
+              호스트 연결 후 사용 · 내 Claude 플랜으로 생성
             </span>
           </div>
         }

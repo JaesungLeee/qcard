@@ -1,4 +1,4 @@
-import type { ConsoleDevice, ConsoleSession } from '@qcard/fixtures';
+import type { ClaudeCodeState, ConsoleDevice, ConsoleSession } from '@qcard/fixtures';
 import { Button, Icons, Menu, MenuContent, MenuItem, MenuList, MenuTrigger, textClass, token } from '@qcard/ui';
 import { Link } from 'react-router';
 import { ThemeSwitch } from '../../shell/AppShell';
@@ -19,6 +19,7 @@ export function TopBar({ session }: { session: ConsoleSession }) {
           <span className="qcc-dot" style={{ background: token('foreground-positive-primary') }} />
           호스트 연결됨 · localhost:7420
         </span>
+        <ClaudeCodeChip state={session.claudeCode} />
       </div>
       <div className={`qcc-top-meta ${textClass('label1')}`}>
         <span className={textClass('label1', 'medium')} style={{ color: token('foreground-neutral-primary') }}>
@@ -33,7 +34,10 @@ export function TopBar({ session }: { session: ConsoleSession }) {
       </div>
       <div className="qcc-top-right">
         <DeviceMenu device={session.device} others={session.otherDevices} />
-        <Link className={`qcc-link ${textClass('label1', 'medium')}`} to={`/p/haru/cycles/${session.cycleId}`}>
+        <Link
+          className={`qcc-link ${textClass('label1', 'medium')}`}
+          to={`/p/haru/cycles/${session.cycleId}`}
+        >
           대시보드에서 보기
           <Icons.IconArrowUpRight aria-hidden style={{ width: 16, height: 16 }} />
         </Link>
@@ -44,6 +48,50 @@ export function TopBar({ session }: { session: ConsoleSession }) {
     </header>
   );
 }
+
+/**
+ * 이 PC의 Claude Code 상태 (F-DB-09). LLM 호출은 실행자 본인의 Claude Code·플랜으로 한다(PRD §8).
+ * 문제가 있으면 무엇을 해야 하는지 글로 알린다 — 색 점만으로 구분하지 않는다.
+ */
+export function ClaudeCodeChip({ state }: { state: ClaudeCodeState }) {
+  const plan = state.plan ? `${state.plan[0]!.toUpperCase()}${state.plan.slice(1)} 플랜` : '플랜';
+  const [ok, label, help] = !state.installed
+    ? [false, 'Claude Code 설치 필요', 'Claude Code를 설치하고 터미널에서 claude로 로그인하면 실행할 수 있습니다.']
+    : !state.loggedIn
+      ? [
+          false,
+          'Claude Code 로그인 필요',
+          '터미널에서 claude를 실행해 로그인하세요. 로그인하면 일시정지된 Run을 재개할 수 있습니다.',
+        ]
+      : state.limitedUntil
+        ? [
+            false,
+            `${plan} 한도 · ${fmtTime(state.limitedUntil)} 이후 재개`,
+            '플랜 사용 한도에 닿아 Run을 일시정지했습니다. 한도가 풀리면 재개하세요.',
+          ]
+        : [
+            true,
+            `Claude Code · ${plan}`,
+            `Claude Code ${state.version ?? ''} — LLM 사용량은 내 ${plan}에서 차감됩니다.`,
+          ];
+  return (
+    <span
+      className={`qcc-phase ${textClass('caption1', 'medium')}`}
+      style={{ background: token('surface-neutral-tertiary'), color: token('foreground-neutral-secondary') }}
+      title={help}
+      role="status"
+    >
+      <span
+        className="qcc-dot"
+        style={{ background: token(ok ? 'foreground-positive-primary' : 'foreground-cautionary-primary') }}
+      />
+      {label}
+    </span>
+  );
+}
+
+const fmtTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
 
 function DeviceMenu({ device, others }: { device: ConsoleDevice; others: ConsoleDevice[] }) {
   return (

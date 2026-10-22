@@ -24,6 +24,7 @@
 .qcc-brand {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--qc-space-8);
   white-space: nowrap;
 }

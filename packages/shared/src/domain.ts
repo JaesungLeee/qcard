@@ -365,12 +365,24 @@ export const Defect = z.object({
 });
 export type Defect = z.infer<typeof Defect>;
 
+/** Run 일시정지 이유 (F-EX-13·17). 플랜 한도·로그인은 실행자의 Claude Code 상태 */
+export const PauseReason = z.enum(['executor', 'network', 'plan_limit', 'not_logged_in']);
+export type PauseReason = z.infer<typeof PauseReason>;
+export const PAUSE_REASON_LABEL: Record<PauseReason, string> = {
+  executor: '실행자',
+  network: '네트워크 끊김',
+  plan_limit: '플랜 한도',
+  not_logged_in: 'Claude Code 로그인 필요',
+};
+
 export const Run = z.object({
   id: z.string(),
   cycleId: z.string(),
   executor: z.string(),
   deviceId: z.string(),
   status: z.enum(['running', 'paused', 'done', 'aborted']),
+  /** status가 paused일 때 */
+  pauseReason: PauseReason.optional(),
   currentTcId: z.string().optional(),
   startedAt: z.string(),
 });

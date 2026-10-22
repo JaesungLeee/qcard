@@ -1,5 +1,5 @@
 // ① 요약 (PRD §5.10, F-RP-01) + 진행 매트릭스 (F-CY-05)
-import { SEVERITY_LABEL, VERDICT_LABEL, type Defect, type Severity } from '@qcard/shared';
+import { PAUSE_REASON_LABEL, SEVERITY_LABEL, VERDICT_LABEL, type Defect, type Severity } from '@qcard/shared';
 import {
   ContentBadge,
   SectionMessage,
@@ -178,7 +178,6 @@ export function SummaryTab({ d, index, projectId, projectName }: SheetProps) {
             </ul>
           )}
         </Card>
-
       </div>
     </TabBody>
   );
@@ -231,7 +230,7 @@ function MatrixLine({
         </span>
         {running && (
           <span className={`qs-row ${textClass('caption1')}`} style={{ gap: token('space-4') }}>
-            <RunState paused={Boolean(running.paused)} />
+            <RunState paused={Boolean(running.paused)} reason={running.pauseReason} />
             <span className="qs-muted">{running.executor}</span>
           </span>
         )}
@@ -254,7 +253,7 @@ function MatrixLine({
             const tc = caseOf(c.tcId);
             const label =
               c.state === 'running'
-                ? `${c.tcId} ${tc?.title ?? ''} — ${c.paused ? '일시정지' : '실행 중'} (${c.executor})`
+                ? `${c.tcId} ${tc?.title ?? ''} — ${c.paused ? `일시정지${c.pauseReason ? `(${PAUSE_REASON_LABEL[c.pauseReason]})` : ''}` : '실행 중'} (${c.executor})`
                 : `${c.tcId} ${tc?.title ?? ''} — ${c.state === 'remaining' ? '남은 칸' : VERDICT_LABEL[c.verdict]}`;
             return (
               <Link
