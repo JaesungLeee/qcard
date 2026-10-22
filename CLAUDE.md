@@ -7,17 +7,17 @@
 
 pnpm workspace + Turborepo, TypeScript 단일 언어.
 
-| 경로                    | 내용                                                                                                      |
-| ----------------------- | --------------------------------------------------------------------------------------------------------- |
-| `apps/web`              | 웹 대시보드 (React 18 + Vite + react-router 7 + TanStack Query). `/__ui`는 UI 카탈로그                    |
-| `apps/web/src/data`     | 데이터 접근 인터페이스 `QcardApi`(`api.ts`)와 fixture 메모리 구현(`memory.ts`), 훅(`hooks.ts`)            |
-| `apps/web/src/features` | 화면 단위 폴더: `qa-sheet`(사이클·QA 시트·판정 추적), `qa-doc`(QA 문서 검토·승인), `console`(로컬 콘솔)   |
-| `packages/ui`           | 디자인 시스템 "Montage for qcard" — Montage 컴포넌트 재수출, `--qc-*` 토큰, `VerdictBadge`                |
-| `packages/shared`       | 도메인 스키마(Zod, PRD §6.4)와 표시용 라벨                                                                |
-| `packages/fixtures`     | 하루콩 onboarding-flow 스펙에서 만든 결정적 데이터(QA 문서·사이클·결과·콘솔 세션)와 목업 디바이스 화면 배치 |
-| `packages/device`       | `DeviceDriver` 인터페이스, 접근성 트리 파서, `AdbDriver`·녹화(`@qcard/device/node`), `FakeDevice`(화면 + 전환 규칙 상태 기계) |
-| `packages/llm`          | `LlmClient`(SDK 타입 그대로), 녹화·재생(cassette), 사용량·한도, 비밀값 검사, strict 도구·출력 스키마 변환 |
-| `packages/agent`        | Executor 루프(`runSteps`), 검증 포인트 판정(`verifyPoints`·`settle`), 판정 집계(`judge`), 케이스 실행(`runCase`). `e2e/`는 합성 온보딩 앱 + 실제 모델 녹화 재생 |
+| 경로                    | 내용                                                                                                                                                                                           |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`              | 웹 대시보드 (React 18 + Vite + react-router 7 + TanStack Query). `/__ui`는 UI 카탈로그                                                                                                         |
+| `apps/web/src/data`     | 데이터 접근 인터페이스 `QcardApi`(`api.ts`)와 fixture 메모리 구현(`memory.ts`), 훅(`hooks.ts`)                                                                                                 |
+| `apps/web/src/features` | 화면 단위 폴더: `qa-sheet`(사이클·QA 시트·판정 추적), `qa-doc`(QA 문서 검토·승인), `console`(로컬 콘솔)                                                                                        |
+| `packages/ui`           | 디자인 시스템 "Montage for qcard" — Montage 컴포넌트 재수출, `--qc-*` 토큰, `VerdictBadge`                                                                                                     |
+| `packages/shared`       | 도메인 스키마(Zod, PRD §6.4)와 표시용 라벨                                                                                                                                                     |
+| `packages/fixtures`     | 하루콩 onboarding-flow 스펙에서 만든 결정적 데이터(QA 문서·사이클·결과·콘솔 세션)와 목업 디바이스 화면 배치                                                                                      |
+| `packages/device`       | `DeviceDriver` 인터페이스, 접근성 트리 파서, `AdbDriver`·녹화(`@qcard/device/node`), `FakeDevice`(화면 + 전환 규칙 상태 기계)                                                                  |
+| `packages/llm`          | `LlmClient`(SDK 타입 그대로), 실제 호출 구현 2개(본인 Claude Code `claude -p` = 기본·제품 경로 / API 키 = 개발용), 녹화·재생(cassette), 사용량·한도, 비밀값 검사, strict 도구·출력 스키마 변환 |
+| `packages/agent`        | Executor 루프(`runSteps`), 검증 포인트 판정(`verifyPoints`·`settle`), 판정 집계(`judge`), 케이스 실행(`runCase`). `e2e/`는 합성 온보딩 앱 + 실제 모델 녹화 재생                                |
 
 예정: `apps/functions`, `apps/host-agent`(`@qcard/agent`를 실기기·Firestore에 연결하는 프로세스). Agent 도구·Verifier 출력 스키마는 `packages/shared/src/agent.ts`, 온보딩 합성 시나리오(FakeDevice용)는 `packages/fixtures/src/device.ts`.
 
@@ -33,11 +33,12 @@ pnpm이 전역에 없으면 `npx -y pnpm@10.34.6 <명령>`으로 실행한다.
 - `pnpm dev` — 웹 개발 서버 (http://localhost:5173). `packages/agent/runs/`의 실기기 실행을 "로컬 실행" 사이클로 함께 보여 준다(`apps/web/vite/local-runs.ts`, 개발 서버 전용)
 - `pnpm --filter @qcard/agent sample-runs` — ui:snap용 로컬 실행 샘플(`apps/web/e2e/runs-sample/`)을 녹화 재생으로 다시 만든다. Agent 결과 형식을 바꾸면 돌린다
 - `pnpm device:check` — 실기기 점검(연결·기기 정보·앱 설치·IME·덤프 속도). 읽기 전용
-- `pnpm --filter @qcard/agent device-run <TC-ID…> [--package com.example.harukong.qa]` — 실기기에서 케이스 실행(실제 모델, 비용 발생). 결과·스크린샷은 `packages/agent/runs/`(커밋 안 함). 지정한 앱만 `pm clear`한다
+- `pnpm --filter @qcard/agent device-run <TC-ID…> [--package com.example.harukong.qa]` — 실기기에서 케이스 실행(실제 모델, 사용자 플랜 사용량 차감). 플랜 한도·로그인 만료면 일시정지하고 `--resume <실행 id>`로 이어 간다. 결과·스크린샷은 `packages/agent/runs/`(커밋 안 함). 지정한 앱만 `pm clear`한다
 - `pnpm device:record <화면 이름> [--set <묶음>]` — 실기기의 지금 화면(스크린샷 + 트리)을 `packages/device/recordings/`에 저장 (커밋 안 함, 읽기 전용 명령만 씀)
-- `pnpm llm:smoke` — 실제 API로 도구·출력 스키마 확인 (사용자가 키를 넣고 직접 실행, 비용 발생)
-- `pnpm --filter @qcard/agent record [TC-ID…]` — e2e 케이스를 실제 모델로 다시 녹화 (`packages/agent/cassettes/<시나리오>/`). Agent 프롬프트·도구·관찰 형식을 바꾸면 요청이 달라져 재생 테스트가 실패하므로 다시 녹화한다 (사용자 키 필요, 5케이스 약 $0.12)
+- `pnpm llm:smoke` — Claude Code 설치·로그인 상태와 실제 모델의 도구·출력 스키마 확인 (호출 2번, 플랜 사용량 차감)
+- `pnpm --filter @qcard/agent record [TC-ID…]` — e2e 케이스를 실제 모델로 다시 녹화 (`packages/agent/cassettes/<시나리오>/`). Agent 프롬프트·도구·관찰 형식을 바꾸면 요청이 달라져 재생 테스트가 실패하므로 다시 녹화한다 (플랜 사용량 차감)
 - LLM 모드는 `LLM_MODE=replay`(기본, 녹화 없으면 실패)·`record`·`live`. 테스트는 항상 replay
+- 실제 호출 제공자는 `LLM_PROVIDER=claude-cli`(기본: 같은 PC의 Claude Code를 본인 플랜으로)·`api`(ANTHROPIC_API_KEY, 비용 발생). claude-cli는 내장 도구·MCP·설정을 끄고 저장소 밖 빈 폴더에서 실행하며, API 키 환경변수를 넘기지 않는다. Claude 자격 증명을 직접 읽거나 Agent SDK·OAuth 토큰으로 호출하지 않는다(PRD §8 옵션 D)
 
 ## UI 작업 규칙
 

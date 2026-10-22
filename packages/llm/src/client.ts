@@ -1,12 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createCassetteLlm } from './cassette';
+import { createClaudeCliLlm } from './claude-cli';
 import { withSecretGuard, type SecretVault } from './secrets';
 import type { LlmClient } from './types';
 import { withUsage, type UsageMeter } from './usage';
 
 /**
- * 실제 Claude 호출. 자격 증명은 SDK가 환경(ANTHROPIC_API_KEY 또는 `ant auth login` 프로필)에서 읽는다.
- * M1에서 LLM 프록시(Cloud Run)를 붙이면 baseURL만 바꾼다.
+ * Anthropic API 직접 호출 (개발·테스트용, PRD §8 옵션 A). 자격 증명은 SDK가 환경(ANTHROPIC_API_KEY 또는
+ * `ant auth login` 프로필)에서 읽는다. 제품 경로는 사용자 본인의 Claude Code(`createClaudeCliLlm`)다.
  */
 export function createAnthropicLlm(options: { client?: Anthropic; baseURL?: string } = {}): LlmClient {
   const client = options.client ?? new Anthropic({ baseURL: options.baseURL, maxRetries: 2 });
@@ -24,6 +25,22 @@ export function llmModeFromEnv(value = process.env.LLM_MODE): LlmMode {
   return mode;
 }
 
+/** 실제 호출을 누가 하는가. claude-cli(기본): 사용자 본인 플랜의 Claude Code · api: Anthropic API 키 */
+export type LlmProvider = 'claude-cli' | 'api';
+
+export function llmProviderFromEnv(value = process.env.LLM_PROVIDER): LlmProvider {
+  const provider = value ?? 'claude-cli';
+  if (provider !== 'claude-cli' && provider !== 'api') {
+    throw new Error(`LLM_PROVIDER는 claude-cli·api 중 하나: ${provider}`);
+  }
+  return provider;
+}
+
+/** 실제 호출 구현. claude-cli는 세션 프로세스를 닫을 수 있게 `close`를 함께 돌려준다 */
+export function createLiveLlm(provider = llmProviderFromEnv()): LlmClient & { close?: () => void } {
+  return provider === 'api' ? createAnthropicLlm() : createClaudeCliLlm();
+}
+
 /**
  * 모드에 맞는 LlmClient를 조립한다. 바깥부터: 비밀값 검사 → 사용량·한도 → 녹화/재생 또는 실제 호출.
  * 재생할 때도 녹화된 usage로 한도를 계산하므로 한도 동작을 오프라인으로 시험할 수 있다.
@@ -36,7 +53,7 @@ export function createLlm(options: {
   live?: LlmClient;
 }): LlmClient {
   const mode = options.mode ?? llmModeFromEnv();
-  const live = () => options.live ?? createAnthropicLlm();
+  const live = () => options.live ?? createLiveLlm();
   let client: LlmClient =
     mode === 'replay'
       ? createCassetteLlm({ dir: options.cassetteDir, mode: 'replay' })

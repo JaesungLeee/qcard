@@ -1,14 +1,18 @@
 /**
- * 실기기에서 QA 문서 케이스를 실제 모델로 실행한다 (녹화 없음, 비용 발생).
+ * 실기기에서 QA 문서 케이스를 실제 모델로 실행한다 (녹화 없음). 기본은 본인 Claude Code(플랜 사용량 차감),
+ * LLM_PROVIDER=api면 API 키(비용 발생). 비용은 API 단가로 계산한 환산값이다.
  * 결과는 packages/agent/runs/<실행>/에 남는다 (커밋하지 않음):
  *   run.json(실행 메타·진행) · <TC>/result.json · <TC>/metrics.json(시간·비용) · <TC>/thoughts.txt · <TC>/obs-*.png
  *
  *   pnpm --filter @qcard/agent device-run TC-ONBOARDING-001 …   케이스 지정
  *   pnpm --filter @qcard/agent device-run --all                 자동 케이스 전체 (준비 상태별로 묶어서)
  *     --resume <실행 id>     끝난 케이스는 건너뛰고 이어서
- *     --budget 8             누적 비용(USD)이 넘으면 멈춤
+ *     --budget 8             누적 환산 비용(USD)이 넘으면 멈춤
  *     --allow-network        set_network(네트워크 끄기) 허용. 케이스가 끝나면 다시 켠다
  *     --package com.example.harukong.qa  --serial <시리얼>
+ *
+ * 플랜 사용 한도에 닿거나 Claude Code 로그인이 풀리면 일시정지한다(run.json status: paused).
+ * 해소한 뒤 --resume <실행 id>로 이어 간다 (멈춘 케이스는 처음부터 다시).
  *
  * 앱 데이터 초기화(pm clear)는 --package로 지정한 앱에만 한다.
  * 수동 스텝: 터미널에서 Enter를 누르거나 실행 폴더에 MANUAL_DONE 파일을 만들면 이어 간다 (10분 넘으면 Blocked).
@@ -21,7 +25,15 @@ import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import { AdbDriver, execAdb, listDevices } from '@qcard/device/node';
 import { PREP_FLOWS, qaDocV130 } from '@qcard/fixtures';
-import { createLlm, UsageMeter, type UsageTotals } from '@qcard/llm';
+import {
+  assertClaudeCodeReady,
+  ClaudeCodeSetupError,
+  createLlm,
+  llmProviderFromEnv,
+  PlanLimitError,
+  UsageMeter,
+  type UsageTotals,
+} from '@qcard/llm';
 import type { TestCase } from '@qcard/shared';
 import { runCase } from '../src';
 
@@ -58,6 +70,18 @@ const groupOrder = [...new Set(picked.map((c) => c.prepFlowIds.join('+')))];
 const cases = [...picked].sort(
   (a, b) => groupOrder.indexOf(a.prepFlowIds.join('+')) - groupOrder.indexOf(b.prepFlowIds.join('+')),
 );
+
+// LLM: 본인 Claude Code가 준비됐는지 먼저 본다 (F-EX-17)
+if (llmProviderFromEnv() === 'claude-cli') {
+  const s = await assertClaudeCodeReady().catch((e: Error) => {
+    console.error(e.message);
+    process.exit(1);
+  });
+  console.log(
+    `LLM: Claude Code ${s.version} · ${s.authMethod}${s.subscriptionType ? ` · ${s.subscriptionType} 플랜` : ''}`,
+  );
+  if (s.authMethod !== 'claude.ai') console.warn('⚠ 플랜 로그인이 아닙니다. API 크레딧으로 과금될 수 있습니다');
+}
 
 const serial = values.serial ?? (await listDevices()).find((d) => d.state === 'device')?.serial;
 if (!serial) throw new Error('연결된 디바이스가 없습니다');
@@ -138,12 +162,20 @@ const diff = (a: UsageTotals, b: UsageTotals) => ({
 
 let envErrors = 0;
 let stopped: string | undefined;
+let paused: { reason: 'plan_limit' | 'not_logged_in' | 'not_installed'; message: string } | undefined;
+/** 플랜 한도·로그인 오류면 일시정지로 기록하고 undefined, 아니면 다시 던진다 */
+const pauseOn = (e: unknown): undefined => {
+  if (e instanceof PlanLimitError) paused = { reason: 'plan_limit', message: e.message };
+  else if (e instanceof ClaudeCodeSetupError) paused = { reason: e.reason, message: e.message };
+  else throw e;
+  return undefined;
+};
 for (const [i, testCase] of cases.entries()) {
   const tcId = testCase.tcId;
   const dir = join(runDir, tcId);
   if (existsSync(join(dir, 'result.json'))) continue; // --resume
   if (total >= budget) {
-    stopped = `예산 초과 ($${total.toFixed(2)} ≥ $${budget})`;
+    stopped = `예산 초과 (환산 $${total.toFixed(2)} ≥ $${budget})`;
     break;
   }
   await rm(dir, { recursive: true, force: true });
@@ -188,10 +220,15 @@ for (const [i, testCase] of cases.entries()) {
         phase = { name, at: Date.now(), usage: { ...meter.run } };
       },
     },
-  );
+  ).catch(pauseOn);
   closePhase();
   const ms = Date.now() - t0;
   total += meter.run.costUsd;
+  if (!result) {
+    // 멈춘 케이스는 결과를 남기지 않는다 → --resume 때 처음부터 다시 실행
+    log(`⏸ ${tcId}: 일시정지 — ${paused!.message}`);
+    break;
+  }
   const metrics = {
     tcId,
     approval: testCase.approval.status,
@@ -208,7 +245,7 @@ for (const [i, testCase] of cases.entries()) {
   await writeFile(join(dir, 'thoughts.txt'), thoughts.join('\n') + '\n');
   await writeMeta({ status: 'running', planned: cases.length });
   log(
-    `■ ${tcId}: ${result.verdict}${result.blockedReason ? ` — ${result.blockedReason}` : ''} · ${(ms / 1000).toFixed(0)}초 · 호출 ${meter.run.calls} · $${meter.run.costUsd.toFixed(3)} · 누적 $${total.toFixed(2)}`,
+    `■ ${tcId}: ${result.verdict}${result.blockedReason ? ` — ${result.blockedReason}` : ''} · ${(ms / 1000).toFixed(0)}초 · 호출 ${meter.run.calls} · 환산 $${meter.run.costUsd.toFixed(3)} · 누적 $${total.toFixed(2)}`,
   );
 
   // 디바이스 연결 끊김·서버 무응답이 이어지면 멈춘다
@@ -219,6 +256,18 @@ for (const [i, testCase] of cases.entries()) {
   }
 }
 
-await writeMeta({ status: stopped ? 'stopped' : 'done', stoppedReason: stopped, finishedAt: new Date().toISOString() });
-log(`\n${stopped ? `중단: ${stopped}` : '완료'} · 합계 $${total.toFixed(2)} · ${runDir}`);
-notify(stopped ? `실행 중단: ${stopped}` : `실행 완료 · $${total.toFixed(2)}`);
+if (paused) {
+  await writeMeta({ status: 'paused', pauseReason: paused.reason, pausedMessage: paused.message });
+  log(
+    `\n일시정지: ${paused.message}\n해결한 뒤 이어서 실행: device-run … --resume ${id} · 환산 합계 $${total.toFixed(2)}`,
+  );
+  notify(`실행 일시정지: ${paused.reason === 'plan_limit' ? '플랜 사용 한도' : 'Claude Code 로그인 필요'}`);
+} else {
+  await writeMeta({
+    status: stopped ? 'stopped' : 'done',
+    stoppedReason: stopped,
+    finishedAt: new Date().toISOString(),
+  });
+  log(`\n${stopped ? `중단: ${stopped}` : '완료'} · 환산 합계 $${total.toFixed(2)} · ${runDir}`);
+  notify(stopped ? `실행 중단: ${stopped}` : `실행 완료 · 환산 $${total.toFixed(2)}`);
+}

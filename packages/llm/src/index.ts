@@ -1,5 +1,6 @@
 export * from './types';
 export * from './client';
+export * from './claude-cli';
 export * from './cassette';
 export * from './usage';
 export * from './secrets';

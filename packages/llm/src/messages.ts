@@ -15,6 +15,25 @@ export class LlmOutputError extends Error {
   override name = 'LlmOutputError';
 }
 
+/**
+ * Claude Code를 쓸 수 없다(설치 안 됨·로그인 안 됨). 케이스 결함이 아니므로 Blocked가 아니라 Run을 멈추고
+ * 실행자에게 해결 방법을 알린다 (F-EX-17).
+ */
+export class ClaudeCodeSetupError extends Error {
+  override name = 'ClaudeCodeSetupError';
+  constructor(
+    readonly reason: 'not_installed' | 'not_logged_in',
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/** 사용자 플랜의 사용 한도(5시간·주간)에 닿았다. 시간이 지나면 풀리므로 Run을 일시정지한다 (F-EX-17) */
+export class PlanLimitError extends Error {
+  override name = 'PlanLimitError';
+}
+
 export const textOf = (m: LlmResponse) =>
   m.content
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')

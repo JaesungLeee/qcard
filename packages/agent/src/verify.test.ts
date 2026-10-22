@@ -1,5 +1,6 @@
 import { FakeDevice, type UiElement } from '@qcard/device';
 import { onboardingScenario, PREP_FLOWS, qaDocV130 } from '@qcard/fixtures';
+import { ClaudeCodeSetupError, PlanLimitError } from '@qcard/llm';
 import type { PointResult, TestCase, VerificationPoint } from '@qcard/shared';
 import { describe, expect, it } from 'vitest';
 import { fakeClock, observe, type AgentEnv } from './env';
@@ -232,6 +233,16 @@ describe('runCase', () => {
     const { env: e } = env([]);
     const r = await runCase(e, { testCase: tc('TC-ONBOARDING-001'), prepFlows: PREP_FLOWS, deviceId: 'd' });
     expect(r).toMatchObject({ verdict: 'blocked', blockedReason: expect.stringContaining('환경 오류') });
+  });
+
+  it('플랜 한도·Claude Code 로그인 오류는 판정하지 않고 던진다 (Run 일시정지)', async () => {
+    for (const error of [new PlanLimitError('한도'), new ClaudeCodeSetupError('not_logged_in', '로그인')]) {
+      const { env: e } = env([]);
+      e.llm = { create: () => Promise.reject(error) };
+      await expect(
+        runCase(e, { testCase: tc('TC-ONBOARDING-001'), prepFlows: PREP_FLOWS, deviceId: 'd' }),
+      ).rejects.toBe(error);
+    }
   });
 
   it('Agent가 끈 네트워크는 케이스가 막혀도 끝날 때 다시 켠다', async () => {
