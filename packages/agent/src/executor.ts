@@ -45,6 +45,7 @@ export const EXECUTOR_SYSTEM = `너는 Android 앱 QA Executor다. QA 케이스�
 - 기대 결과 판정은 하지 않는다. 기대와 다르게 보여도 단계를 수행할 수 있으면 진행한다.
 - 스플래시·로딩처럼 화면이 바뀌는 중이면 wait로 기다린 뒤 진행한다. 확인만 하는 단계도 화면이 자리 잡은 뒤 step_done을 부른다.
 - 사전조건이 아직 갖춰지지 않았으면 단계 전에 UI로 갖춘다(예: 입력돼 있어야 할 값 입력).
+- 기대 결과는 이 케이스가 무엇을 확인하는지 알려 주는 참고다. 단계가 "~상황을 만든다"처럼 막연하면 그 결과를 확인할 수 있는 상황과 조작을 만든다(예: 유지되는지 보려면 먼저 값을 입력해 두고, 실패 처리를 보려면 실패 조건을 만든 뒤 해당 버튼을 누른다). 결과가 좋게 보이도록 단계에 없는 우회를 하지 않는다.
 - 예상치 못한 팝업·권한 요청·키보드가 단계를 막으면 닫고 진행한다.
 - 앱이 꺼지거나 크래시 대화상자가 보이면 give_up(kind=crash). 진행할 방법이 없으면 give_up(kind=stuck).
 - 비밀값은 {{secret.이름}} 플레이스홀더 그대로 입력한다.`;
@@ -364,6 +365,21 @@ async function act(
       await d.pressKey(call.input.key);
       return {
         action: call.input.key === 'home' ? 'home' : call.input.key === 'back' ? 'back' : 'input',
+        intent: call.input.intent,
+      };
+    }
+    case 'reopen_app':
+      // 실행 중인 앱이면 종료하지 않고 앞으로 가져온다 (런처 아이콘을 누른 것과 같다)
+      await d.launchApp(env.appPackage);
+      return { action: 'reopen', intent: call.input.intent };
+    case 'set_network': {
+      if (!env.allowNetworkToggle) throw new ActionInputError('이 실행에서는 네트워크 조작이 허용되지 않습니다');
+      const { wifi, data } = call.input;
+      await d.setNetwork('wifi', wifi);
+      await d.setNetwork('data', data);
+      return {
+        action: 'env',
+        input: `Wi-Fi ${wifi ? '켬' : '끔'} · 데이터 ${data ? '켬' : '끔'}`,
         intent: call.input.intent,
       };
     }

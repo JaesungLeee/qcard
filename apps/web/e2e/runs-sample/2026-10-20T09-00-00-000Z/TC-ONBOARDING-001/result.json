@@ -12,7 +12,7 @@
   "steps": [
     {
       "action": "wait",
-      "intent": "스플래시가 끝나기를 기다림",
+      "intent": "스플래시 종료 대기",
       "screenshot": {
         "kind": "mock",
         "screen": "splash"
@@ -26,7 +26,7 @@
   "points": [
     {
       "pointId": "TC-ONBOARDING-001-P1",
-      "expected": "닉네임 설정 스텝이 열려 있다",
+      "expected": "닉네임 설정 스텝 화면이 열려 있다.",
       "method": "tree",
       "evidence": {
         "kind": "mock",
@@ -45,7 +45,7 @@
     },
     {
       "pointId": "TC-ONBOARDING-001-P2",
-      "expected": "바텀 네비게이션이 보이지 않는다",
+      "expected": "바텀 네비게이션이 화면에 보이지 않는다.",
       "method": "tree",
       "evidence": {
         "kind": "mock",
@@ -53,7 +53,7 @@
       },
       "result": "mismatch",
       "observed": "찾은 요소: id=bottom_nav \"홈 · 방 · 마이\"",
-      "reason": "보이면 안 되는 요소가 있다 — 마지막 관찰에 바텀 네비게이션(bottom_nav, '홈 · 방 · 마이')이 존재한다.",
+      "reason": "보이면 안 되는 요소가 있다 — 보이지 않아야 할 바텀 네비게이션(bottom_nav)이 마지막 관찰에 존재한다.",
       "targetElement": "bottom_nav",
       "targetBounds": {
         "x": 0,
@@ -67,9 +67,9 @@
   "decidedBy": {
     "kind": "agent"
   },
-  "tokens": 8397,
-  "costUsd": 0.007764900000000001,
+  "tokens": 14944,
+  "costUsd": 0.0119907,
   "verdict": "fail",
   "agentVerdict": "fail",
-  "actualSummary": "바텀 네비게이션이 보이지 않는다 → 찾은 요소: id=bottom_nav \"홈 · 방 · 마이\""
+  "actualSummary": "바텀 네비게이션이 화면에 보이지 않는다. → 찾은 요소: id=bottom_nav \"홈 · 방 · 마이\""
 }

@@ -395,7 +395,7 @@ export function ActionOverlay({ step, size = DEVICE_SIZE }: { step: ExecStep; si
           }}
         >
           {STEP_ACTION_LABEL[step.action]}
-          {step.action === 'env' ? ' · pm clear' : ''}
+          {step.action === 'env' ? ` · ${step.input ?? 'pm clear'}` : ''}
         </div>
       )}
     </>

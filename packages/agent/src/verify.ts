@@ -10,7 +10,7 @@ import { clockOf, observationBlocks, observe, type AgentEnv, type Observation } 
 
 export const LOCATOR_SYSTEM = `너는 Android 앱 QA의 검증 보조다. 검증 포인트마다 판정 근거가 될 요소를 접근성 트리에서 찾아 그 번호(e12)를 돌려준다. 판정은 하지 않는다.
 
-관찰은 마지막 단계를 수행하며 본 화면들이고, 번호가 클수록 나중이다.
+관찰은 마지막 단계를 수행하며 본 화면들이고, 번호가 클수록 나중이다. 요소 참조에는 관찰 번호가 붙어 있다(o7.e6 = 관찰 7의 e6). element_ref에는 그 참조를 그대로 쓴다.
 
 비교 종류별로 찾을 요소:
 - visible·text_exists·count·size_dp: 대상 요소. 토스트처럼 잠깐 뜨는 요소가 있으므로 어느 관찰에서든 찾는다
@@ -20,6 +20,11 @@ export const LOCATOR_SYSTEM = `너는 Android 앱 QA의 검증 보조다. 검증
 
 status: found(찾음) · absent(화면에 분명히 없음) · unclear(화면만으로는 알 수 없음).
 대상이 화면에 나타나는 종류가 아니어서 판단할 수 없으면 absent가 아니라 unclear다.
+
+unclear로 답해야 하는 경우 (잘못 쓰인 포인트가 섞여 온다):
+- 대상이 화면 요소가 아니라 동작·결과·내부 상태다: "이동한다", "버린다", "기록된다", "되돌아가지 않는다", "다시 확보하지 않는다", 문장 조각("방을 만들지 않")
+- not_visible인데 기대 문장이 "보이면 안 되는 요소"가 아니라 일어나야 할 결과를 말한다 (예: "튜토리얼로 이동한다", "앱을 백그라운드로 보낸다", "처음부터 다시 거친다")
+not_visible의 found는 보이면 안 되는 바로 그 요소가 화면에 있을 때만이다. 기대한 결과 화면의 요소(이동해 간 화면의 제목, 런처 화면 등)를 고르지 않는다.
 비슷하지만 다른 요소를 고르지 않는다. 모든 포인트에 답한다.`;
 
 export const VERIFIER_SYSTEM = `너는 Android 앱 QA Verifier다. 화면(스크린샷과 접근성 트리)을 보고 검증 포인트마다 기대 결과와 일치하는지 판정한다.
@@ -142,7 +147,12 @@ export async function verifyPoints(
             content: [
               { type: 'text', text: `검증 포인트:\n${pointList(tree)}` },
               ...evidence.flatMap((o) =>
-                observationBlocks(env, o, `[관찰 ${o.index}]${o === at ? ' (마지막)' : ''}`, false),
+                observationBlocks(
+                  env,
+                  { ...o, treeText: o.treeText.replace(/^e(\d+)\b/gm, `o${o.index}.e$1`) },
+                  `[관찰 ${o.index}]${o === at ? ' (마지막)' : ''}`,
+                  false,
+                ),
               ),
             ],
           },
@@ -163,7 +173,19 @@ export async function verifyPoints(
       }
       // 잠깐 뜨는 요소는 그 요소가 보인 관찰을 근거로 삼는다. 나머지는 마지막 관찰만 인정
       const anyObs = ANY_OBSERVATION.has(p.compare);
-      if (a.status === 'found' && !anyObs && a.observation !== at.index) {
+      // 참조 `o7.e6` → 관찰 7의 e6. 관찰 번호가 없으면(resource-id 등) 마지막 관찰
+      const m = a.element_ref?.match(/^o(\d+)\.(.+)$/);
+      const o = m ? evidence.find((x) => x.index === Number(m[1])) : at;
+      if (a.status === 'found' && !o) {
+        out.set(p.id, {
+          ...base(p),
+          observed: a.element_ref ?? '',
+          result: 'unknown',
+          reason: '없는 관찰의 요소를 골랐다',
+        });
+        continue;
+      }
+      if (a.status === 'found' && !anyObs && o !== at) {
         out.set(p.id, {
           ...base(p),
           observed: '',
@@ -172,8 +194,8 @@ export async function verifyPoints(
         });
         continue;
       }
-      const o = (anyObs && evidence.find((x) => x.index === a.observation)) || at;
-      const el = a.status === 'found' && a.element_ref ? findElement(o.tree, a.element_ref) : undefined;
+      const shown = o ?? at;
+      const el = a.status === 'found' && a.element_ref ? findElement(shown.tree, m ? m[2]! : a.element_ref) : undefined;
       if (a.status === 'found' && !el) {
         out.set(p.id, {
           ...base(p),
@@ -187,7 +209,7 @@ export async function verifyPoints(
       out.set(p.id, {
         ...base(p),
         ...c,
-        evidence: o.screenshot,
+        evidence: shown.screenshot,
         targetElement: el && elementName(el),
         targetBounds: el?.bounds,
         reason: `${c.reason} — ${a.reason}`,

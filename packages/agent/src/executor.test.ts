@@ -245,6 +245,49 @@ describe('Executor 루프', () => {
     expect(JSON.stringify(llm.requests[2]!.messages.at(-1))).toContain('키보드가 (540, 2240)를 가립니다');
   });
 
+  it('홈으로 보냈다가 reopen_app으로 보던 화면에 돌아온다', async () => {
+    const { device, env } = setup('invite', [
+      [toolUse('press_key', { key: 'home', intent: '백그라운드로' })],
+      [toolUse('reopen_app', { intent: '다시 열기' })],
+      [toolUse('step_done', { case_step_index: 0, summary: '' })],
+    ]);
+    const r = await runSteps(env, { caseId: 'TC-1', steps: steps('백그라운드 후 복귀'), context: '' });
+    expect(device.current).toBe('invite');
+    expect(r.steps.map((s) => s.action)).toEqual(['home', 'reopen']);
+  });
+
+  it('set_network는 허용된 실행에서만 동작한다 (F-EX-16)', async () => {
+    const denied = setup('invite', [
+      [toolUse('set_network', { wifi: false, data: false, intent: '네트워크 끊기' })],
+      [toolUse('give_up', { kind: 'env_unavailable', reason: '허용 안 됨' })],
+    ]);
+    const r1 = await runSteps(denied.env, { caseId: 'TC-1', steps: steps('네트워크 끊기'), context: '' });
+    expect(denied.device.state.network).toEqual({ wifi: true, data: true });
+    expect(JSON.stringify(denied.llm.requests[1]!.messages.at(-1))).toContain('네트워크 조작이 허용되지 않습니다');
+    expect(r1.status).toBe('blocked');
+
+    const allowed = setup(
+      'invite',
+      [
+        [toolUse('set_network', { wifi: false, data: false, intent: '네트워크 끊기' })],
+        [toolUse('step_done', { case_step_index: 0, summary: '' })],
+      ],
+      { allowNetworkToggle: true },
+    );
+    const r2 = await runSteps(allowed.env, { caseId: 'TC-1', steps: steps('네트워크 끊기'), context: '' });
+    expect(allowed.device.state.network).toEqual({ wifi: false, data: false });
+    expect(r2.steps[0]).toMatchObject({ action: 'env', input: 'Wi-Fi 끔 · 데이터 끔' });
+  });
+
+  it('대상 앱 밖(런처) 화면은 트리 내용 대신 "앱 밖" 요소 하나만 보낸다', async () => {
+    const { llm, env } = setup('launcher', [[toolUse('step_done', { case_step_index: 0, summary: '' })]]);
+    await runSteps(env, { caseId: 'TC-1', steps: steps('확인'), context: '' });
+    const first = JSON.stringify(llm.requests[0]!.messages[0]);
+    expect(first).toContain('기기 홈 화면(런처)');
+    expect(first).not.toContain('launcher_camera');
+    expect(first).not.toContain('카메라');
+  });
+
   it('비밀값은 디바이스에만 실제 값, LLM·타임라인에는 플레이스홀더 (F-EX-09)', async () => {
     const vault = new SecretVault();
     vault.set('nick', '비밀닉네임');

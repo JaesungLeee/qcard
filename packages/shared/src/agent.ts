@@ -24,6 +24,13 @@ export const InputTextInput = z.object({
 export const SwipeInput = z.object({ direction: z.enum(['up', 'down', 'left', 'right']), intent });
 export const PressKeyInput = z.object({ key: z.enum(['back', 'home', 'enter']), intent });
 export const RestartAppInput = z.object({ intent });
+export const ReopenAppInput = z.object({ intent });
+/** 환경 조작 (F-EX-16). 케이스가 끝나면 자동으로 원래대로 켠다 */
+export const SetNetworkInput = z.object({
+  wifi: z.boolean().describe('Wi-Fi를 켤지'),
+  data: z.boolean().describe('모바일 데이터를 켤지'),
+  intent,
+});
 export const WaitInput = z.object({ seconds: z.number().int().min(1).max(10), intent });
 export const StepDoneInput = z.object({
   case_step_index: z.number().int().describe('끝낸 케이스 단계 번호 (0부터)'),
@@ -45,6 +52,8 @@ export const EXECUTOR_TOOL_INPUTS = {
   swipe: SwipeInput,
   press_key: PressKeyInput,
   restart_app: RestartAppInput,
+  reopen_app: ReopenAppInput,
+  set_network: SetNetworkInput,
   wait: WaitInput,
   view_screen: ViewScreenInput,
   step_done: StepDoneInput,
@@ -59,7 +68,10 @@ export const EXECUTOR_TOOL_DESCRIPTIONS: Record<ExecutorToolName, string> = {
   input_text: '요소를 탭해 포커스한 뒤 텍스트를 입력한다.',
   swipe: '화면 가운데에서 지정 방향으로 쓸어넘긴다. left는 다음 페이지, up은 아래 내용 보기.',
   press_key: '시스템 키를 누른다.',
-  restart_app: '테스트 대상 앱을 종료했다가 다시 실행한다.',
+  restart_app: '테스트 대상 앱을 강제 종료했다가 다시 실행한다 (데이터는 유지).',
+  reopen_app: '백그라운드로 간 테스트 대상 앱을 종료하지 않고 다시 앞으로 가져온다 (최근 앱에서 다시 여는 것과 같다).',
+  set_network:
+    '디바이스 네트워크를 켜거나 끈다. 네트워크 실패 상황을 만들 때만 쓴다. 케이스가 끝나면 자동으로 다시 켜진다. 허용되지 않은 실행이면 에러가 난다.',
   wait: '로딩·애니메이션이 끝나기를 기다린다.',
   view_screen:
     '지금 화면의 스크린샷을 본다. 트리로 알 수 없을 때만 쓴다: 글자 없는 아이콘 버튼, 이미지·색·배치, 트리가 비었거나 화면과 안 맞아 보일 때.',
@@ -80,8 +92,7 @@ export type VerifierOutput = z.infer<typeof VerifierOutput>;
 export const LocateOutput = z.object({
   /** found: 찾음 · absent: 화면에 없음 · unclear: 화면만으로 알 수 없음(판단불가) */
   status: z.enum(['found', 'absent', 'unclear']),
-  element_ref: z.string().nullable().describe('찾은 요소 참조. found가 아니면 null'),
-  observation: z.number().int().describe('요소를 찾은 관찰 번호. 못 찾았으면 마지막 관찰 번호'),
+  element_ref: z.string().nullable().describe('찾은 요소 참조(관찰 번호가 붙은 o7.e6 형태 그대로). found가 아니면 null'),
   reason: z.string(),
 });
 export type LocateOutput = z.infer<typeof LocateOutput>;

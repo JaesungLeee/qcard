@@ -6,6 +6,9 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "eval-locator": "tsx scripts/eval-locator.ts",
+    "gen-points": "tsx scripts/gen-points.ts",
+    "report": "tsx scripts/report.ts",
     "sample-runs": "tsx scripts/sample-runs.ts",
     "device-run": "tsx scripts/device-run.ts",
     "record": "tsx scripts/record.ts",
@@ -23,6 +26,7 @@
     "@types/node": "24.19.0",
     "tsx": "4.23.15",
     "typescript": "5.9.3",
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "zod": "4.6.5"
   }
 }

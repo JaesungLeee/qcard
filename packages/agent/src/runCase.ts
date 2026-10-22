@@ -1,3 +1,4 @@
+import type { NetworkKind } from '@qcard/device';
 import type { UsageMeter } from '@qcard/llm';
 import type { CaseResult, PrepFlow, TestCase } from '@qcard/shared';
 import { clockOf, thought, type AgentEnv } from './env';
@@ -16,6 +17,8 @@ export type RunCaseInput = {
   runId?: string;
   /** 사용량을 케이스 단위로 기록 (tokens·costUsd) */
   meter?: UsageMeter;
+  /** 단계가 바뀔 때 (단계별 시간·비용 측정용) */
+  onPhase?: (phase: 'prep' | 'steps' | 'verify') => void;
 };
 
 /**
@@ -57,7 +60,37 @@ export async function prepare(
   return { nextIndex };
 }
 
+/**
+ * 케이스 실행. Agent가 끈 네트워크는 성공·실패와 상관없이 끝날 때 다시 켠다 (F-EX-16 원복).
+ * 복구에 실패하면 던진다 — 다음 케이스를 네트워크 없이 돌리지 않게.
+ */
 export async function runCase(env: AgentEnv, input: RunCaseInput): Promise<CaseResult> {
+  const off = new Set<NetworkKind>();
+  const target = env.device;
+  const device = new Proxy(target, {
+    get(t, prop) {
+      if (prop === 'setNetwork') {
+        return async (kind: NetworkKind, enabled: boolean) => {
+          await t.setNetwork(kind, enabled);
+          if (enabled) off.delete(kind);
+          else off.add(kind);
+        };
+      }
+      const v = Reflect.get(t, prop, t) as unknown;
+      return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(t) : v;
+    },
+  });
+  try {
+    return await runCaseInner({ ...env, device }, input);
+  } finally {
+    for (const kind of off) {
+      thought(env, clockOf(env).now(), 'system', `환경 원복: ${kind === 'wifi' ? 'Wi-Fi' : '모바일 데이터'} 켬`);
+      await target.setNetwork(kind, true);
+    }
+  }
+}
+
+async function runCaseInner(env: AgentEnv, input: RunCaseInput): Promise<CaseResult> {
   const { testCase: tc, meter } = input;
   const clock = clockOf(env);
   const startedAt = new Date(clock.now()).toISOString();
@@ -84,9 +117,11 @@ export async function runCase(env: AgentEnv, input: RunCaseInput): Promise<CaseR
   };
 
   try {
+    input.onPhase?.('prep');
     const prep = await prepare(env, tc, input.prepFlows);
     if ('failed' in prep) return result({ verdict: 'blocked', agentVerdict: 'blocked', blockedReason: prep.failed });
 
+    input.onPhase?.('steps');
     const exec = await runSteps(env, {
       caseId: tc.tcId,
       steps: tc.steps,
@@ -95,6 +130,9 @@ export async function runCase(env: AgentEnv, input: RunCaseInput): Promise<CaseR
         `케이스: ${tc.title}`,
         tc.preconditions.length ? `사전조건: ${tc.preconditions.join(' / ')}` : '',
         tc.data ? `데이터: ${tc.data}` : '',
+        tc.verificationPoints.length
+          ? `기대 결과(무엇을 확인하는 케이스인지 참고. 판정은 따로 한다):\n${tc.verificationPoints.map((p) => `- ${p.expected}`).join('\n')}`
+          : '',
       ]
         .filter(Boolean)
         .join('\n'),
@@ -111,6 +149,7 @@ export async function runCase(env: AgentEnv, input: RunCaseInput): Promise<CaseR
       });
     }
 
+    input.onPhase?.('verify');
     const evidence = await settle(env, { caseId: tc.tcId, evidence: exec.evidence, nextIndex: exec.nextIndex });
     const points = await verifyPoints(env, { caseId: tc.tcId, points: tc.verificationPoints, evidence });
     const start = clock.now();

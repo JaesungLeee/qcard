@@ -24,7 +24,11 @@ export function fakeClock(start = 0): Clock {
 }
 
 /** 스크린샷 저장 (호스트는 로컬 디스크·Storage에 올리고 URL을 돌려준다) */
-export type SaveScreenshot = (png: Uint8Array, ctx: { caseId: string; index: number }) => Promise<Screenshot>;
+/** treeText는 LLM에 보낸 그대로의 트리 텍스트 (평가 세트·분석용으로 함께 저장할 수 있다) */
+export type SaveScreenshot = (
+  png: Uint8Array,
+  ctx: { caseId: string; index: number; treeText: string; foreground?: string },
+) => Promise<Screenshot>;
 
 /** Agent가 쓰는 외부 의존성과 설정 */
 export type AgentEnv = {
@@ -44,6 +48,8 @@ export type AgentEnv = {
   /** 액션 뒤 화면이 안정되기를 기다리는 시간 (기본 500ms) */
   settleMs?: number;
   onThought?: (t: ThoughtEntry) => void;
+  /** 네트워크 끄기·켜기(set_network)를 허용할지 (기본 false). 개인 기기에서는 사용자 확인 후에만 켠다 */
+  allowNetworkToggle?: boolean;
   /** 수동 스텝: 실행자에게 알리고 "완료"를 기다린다. 없으면 타임아웃으로 본다 (F-EX-11) */
   onManual?: (instruction: string) => Promise<'done' | 'timeout'>;
 };
@@ -60,6 +66,43 @@ export type Observation = {
 
 export const clockOf = (env: AgentEnv) => env.clock ?? realClock;
 
+/** 테스트에 필요한 시스템 화면(공유 시트·권한 대화상자)은 앱 밖이어도 트리를 그대로 쓴다 */
+const SYSTEM_UI =
+  /^(android|com\.android\.intentresolver|com\.(google\.)?android\.permissioncontroller|com\.samsung\.android\.(app\.sharelive|permissioncontroller))$/;
+
+/**
+ * 대상 앱 밖 화면(홈 화면·다른 앱)은 내용을 LLM에 보내지 않는다 — 개인 기기의 위젯·앱 목록·알림이 나가지 않게.
+ * 대신 "앱 밖"이라는 요소 하나로 바꾼다 (판정에서 "런처 화면이 열려 있다"를 확인할 수 있게).
+ * 포그라운드를 모르면(스플래시 등) 그대로 둔다.
+ */
+export function outsideAppTree(
+  appPackage: string,
+  foreground: string | undefined,
+  tree: UiElement[],
+): UiElement[] | undefined {
+  if (!foreground || foreground === appPackage || SYSTEM_UI.test(foreground)) return undefined;
+  const root = tree[0]?.bounds ?? { x: 0, y: 0, w: 0, h: 0 };
+  const desc = /launcher/i.test(foreground)
+    ? `기기 홈 화면(런처) · ${foreground} — 내용은 보내지 않음`
+    : `다른 앱 ${foreground} — 내용은 보내지 않음`;
+  return [
+    {
+      ref: 'e0',
+      resourceId: 'outside_app',
+      desc,
+      cls: 'OutsideApp',
+      pkg: foreground,
+      bounds: root,
+      clickable: false,
+      enabled: true,
+      focused: false,
+      scrollable: false,
+      password: false,
+      depth: 0,
+    },
+  ];
+}
+
 export async function observe(env: AgentEnv, caseId: string, index: number): Promise<Observation> {
   // 실기기에서 덤프(~2.4s)와 스크린샷(~1s)을 동시에 하면 관찰 1회가 ~3.4s → ~2.3s (SM-S711N 실측)
   const [tree, png, foreground, keyboard] = await Promise.all([
@@ -68,12 +111,13 @@ export async function observe(env: AgentEnv, caseId: string, index: number): Pro
     env.device.foregroundPackage(),
     env.device.keyboard(),
   ]);
-  const screenshot = env.saveScreenshot
-    ? await env.saveScreenshot(png, { caseId, index })
-    : { kind: 'url' as const, url: `local:${caseId}/${index}.png` };
+  const visibleTree = outsideAppTree(env.appPackage, foreground, tree) ?? tree;
   // 입력한 비밀값이 화면에 보일 수 있으므로 LLM에 갈 트리 텍스트는 가린다 (F-EX-09)
-  const treeText = env.vault ? env.vault.mask(formatTree(tree)) : formatTree(tree);
-  return { index, tree, treeText, png, foreground, keyboard, screenshot };
+  const treeText = env.vault ? env.vault.mask(formatTree(visibleTree)) : formatTree(visibleTree);
+  const screenshot = env.saveScreenshot
+    ? await env.saveScreenshot(png, { caseId, index, treeText, foreground })
+    : { kind: 'url' as const, url: `local:${caseId}/${index}.png` };
+  return { index, tree: visibleTree, treeText, png, foreground, keyboard, screenshot };
 }
 
 export function thought(env: AgentEnv, start: number, kind: ThoughtEntry['kind'], text: string) {

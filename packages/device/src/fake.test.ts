@@ -94,6 +94,16 @@ describe('FakeDevice', () => {
     expect(d.current).toBe('launcher');
   });
 
+  it('홈 키로 보낸 앱은 다시 열면 보던 화면으로 돌아온다 (종료하면 처음부터)', async () => {
+    const d = new FakeDevice({ ...scenario(), start: 'page2' });
+    await d.pressKey('home');
+    await d.launchApp('com.example');
+    expect(d.current).toBe('page2');
+    await d.stopApp('com.example');
+    await d.launchApp('com.example');
+    expect(d.current).toBe('splash');
+  });
+
   it('앱 실행·종료·데이터 삭제', async () => {
     const d = new FakeDevice({ ...scenario(), start: 'form' });
     await tapId(d, 'name');

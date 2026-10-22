@@ -20,7 +20,7 @@
           "h": 130
         }
       },
-      "intent": "초대 링크 복사 버튼 탭",
+      "intent": "초대 링크 복사 버튼 누르기",
       "screenshot": {
         "kind": "mock",
         "screen": "invite"
@@ -32,12 +32,12 @@
     },
     {
       "action": "wait",
-      "intent": "기다리기",
+      "intent": "복사 후 대기",
       "screenshot": {
         "kind": "mock",
         "screen": "invite-toast"
       },
-      "durationMs": 3000,
+      "durationMs": 5000,
       "index": 1,
       "videoTs": 500,
       "caseStepIndex": 0
@@ -46,7 +46,7 @@
   "points": [
     {
       "pointId": "TC-ONBOARDING-004-P1",
-      "expected": "복사 완료 토스트가 뜬다",
+      "expected": "초대 링크 복사 후 복사 완료 토스트가 보인다.",
       "method": "tree",
       "evidence": {
         "kind": "mock",
@@ -54,7 +54,7 @@
       },
       "result": "match",
       "observed": "찾은 요소: id=toast \"초대 링크를 복사했어요\"",
-      "reason": "요소가 화면에 있다 — 관찰 7의 트리에 Toast \"초대 링크를 복사했어요\"(e6)가 있어 복사 완료 토스트로 볼 수 있다.",
+      "reason": "요소가 화면에 있다 — 관찰 7에 '초대 링크를 복사했어요' 토스트가 있어 복사 완료 토스트로 볼 수 있다.",
       "targetElement": "toast",
       "targetBounds": {
         "x": 90,
@@ -65,7 +65,7 @@
     },
     {
       "pointId": "TC-ONBOARDING-004-P2",
-      "expected": "화면은 메이트 초대 스텝에 그대로 머무른다",
+      "expected": "복사 후 기다린 뒤에도 메이트 초대 스텝 화면이 그대로 열려 있다.",
       "method": "tree",
       "evidence": {
         "kind": "mock",
@@ -73,7 +73,7 @@
       },
       "result": "match",
       "observed": "찾은 요소: id=invite_title \"함께할 메이트를 불러볼까요?\"",
-      "reason": "요소가 화면에 있다 — 마지막 관찰 8에도 메이트 초대 스텝의 제목 \"함께할 메이트를 불러볼까요?\"(e1)가 남아 있어 같은 화면에 머무름을 보여 준다.",
+      "reason": "요소가 화면에 있다 — 마지막 관찰 8에 메이트 초대 스텝의 제목 '함께할 메이트를 불러볼까요?'가 그대로 보인다.",
       "targetElement": "invite_title",
       "targetBounds": {
         "x": 60,
@@ -87,8 +87,8 @@
   "decidedBy": {
     "kind": "agent"
   },
-  "tokens": 39140,
-  "costUsd": 0.0310568,
+  "tokens": 45593,
+  "costUsd": 0.0322219,
   "verdict": "pass",
   "agentVerdict": "pass"
 }

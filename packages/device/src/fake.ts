@@ -87,6 +87,8 @@ export class FakeDevice implements DeviceDriver {
   readonly installed: string[] = [];
   private focused?: string;
   private observedCurrent = false;
+  /** 홈 키로 백그라운드에 간 앱의 화면. 다시 실행하면 여기로 돌아온다 */
+  private background?: string;
 
   constructor(readonly scenario: FakeScenario) {
     this.current = scenario.start ?? scenario.home;
@@ -189,7 +191,10 @@ export class FakeDevice implements DeviceDriver {
     }
     const t = this.transition((on) => on.kind === 'key' && on.key === key);
     if (t) return this.go(t.to);
-    if (key === 'home') return this.go(this.scenario.home);
+    if (key === 'home') {
+      if (this.current !== this.scenario.home) this.background = this.current;
+      return this.go(this.scenario.home);
+    }
     this.unexpected(`${key} 키`);
   }
 
@@ -197,18 +202,23 @@ export class FakeDevice implements DeviceDriver {
     this.log.push(`launch ${pkg}`);
     if (pkg !== this.scenario.appPackage) this.unexpected(`다른 앱 실행(${pkg})`);
     // 이미 앱 화면이면 그대로 앞으로 가져온다
-    if (this.current === this.scenario.home) this.go(this.scenario.launch);
+    if (this.current === this.scenario.home) this.go(this.background ?? this.scenario.launch);
+    this.background = undefined;
   }
 
   async stopApp(pkg: string) {
     this.log.push(`stop ${pkg}`);
-    if (pkg === this.scenario.appPackage) this.go(this.scenario.home);
+    if (pkg === this.scenario.appPackage) {
+      this.background = undefined;
+      this.go(this.scenario.home);
+    }
   }
 
   async clearAppData(pkg: string) {
     this.log.push(`clear ${pkg}`);
     if (pkg !== this.scenario.appPackage) return;
     this.state.values = {};
+    this.background = undefined;
     this.go(this.scenario.home);
   }
 

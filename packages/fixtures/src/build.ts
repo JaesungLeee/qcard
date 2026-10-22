@@ -22,6 +22,7 @@ import type {
   Verdict,
 } from '@qcard/shared';
 import raw from './data/onboarding-flow.json';
+import generatedPoints from './data/onboarding-points.json';
 import { SCREENS, element, type MockElement } from './screens';
 
 type Row = {
@@ -39,6 +40,7 @@ const SPEC = raw.spec;
 const SPEC_FILE = `docs/specs/${SPEC}/spec.md`;
 const FEATURE = raw.feature;
 const rows = raw.rows as Row[];
+const GENERATED = generatedPoints.points as Record<string, Omit<VerificationPoint, 'id'>[]>;
 
 // ---------------------------------------------------------------- 사람·시각 (모두 고정값)
 
@@ -84,7 +86,6 @@ const shot = (screen: string, state?: Record<string, string>): Screenshot => ({ 
 
 // ---------------------------------------------------------------- 준비 플로우
 
-
 export const PREP_FLOWS: PrepFlow[] = [
   {
     id: 'pf-clean',
@@ -125,6 +126,8 @@ export const PREP_FLOWS: PrepFlow[] = [
 
 /** Given 문장으로 케이스가 시작할 화면과 준비 플로우를 정한다. */
 function startOf(row: Row): { screen: string; prep: string[] } {
+  // 링크를 받기 전에 네트워크를 끊어야 하므로 메이트 초대 스텝에 들어가기 전(습관 생성)에서 시작한다
+  if (row.id === 'EC-008') return { screen: 'room-create', prep: ['pf-clean', 'pf-room'] };
   const g = `${row.given} ${row.kind === 'EC' ? row.title : ''}`;
   const step = /(?:튜토리얼 스텝|dot으로 스텝) ([1-5])/.exec(g);
   if (/완료한|완료 표시가 기록|완료해/.test(g)) return { screen: 'home', prep: ['pf-clean', 'pf-done'] };
@@ -138,56 +141,30 @@ function startOf(row: Row): { screen: string; prep: string[] } {
 
 // ---------------------------------------------------------------- 케이스 변환
 
-/** `…고`·`…며`로 끝나는 절을 문장으로 끝맺는다. */
-function finish(clause: string): string {
-  const c = clause.trim().replace(/,$/, '');
-  const rules: [RegExp, string][] = [
-    [/되(고|며)$/, '된다'],
-    [/리(고|며)$/, '린다'],
-    [/뜨(고|며)$/, '뜬다'],
-    [/나(고|며)$/, '난다'],
-    [/없(고|으며)$/, '없다'],
-    [/않(고|으며)$/, '않는다'],
-    [/있(고|으며)$/, '있다'],
-    [/가(고|며)$/, '간다'],
-    [/쓰(고|며)$/, '쓴다'],
-    [/(고|며)$/, '다'],
-  ];
-  for (const [re, end] of rules) if (re.test(c)) return c.replace(re, end);
-  return c;
+/**
+ * 검증 포인트: 스펙 Then에서 Opus로 생성해 둔 것(data/onboarding-points.json, packages/agent/scripts/gen-points.ts).
+ * 개수 포인트는 기대가 숫자만 오므로 문장으로 바꾼다.
+ */
+function pointsOf(key: string, tcId: string): VerificationPoint[] {
+  const gen = GENERATED[key];
+  if (!gen) throw new Error(`생성된 검증 포인트 없음: ${key} (gen-points를 다시 돌리세요)`);
+  return gen.map((p, i) => ({
+    id: `${tcId}-P${i + 1}`,
+    target: p.target,
+    compare: p.compare,
+    expected: /^\d+$/.test(p.expected.trim()) ? `${p.target} ${p.expected.trim()}개` : p.expected,
+    method: p.method,
+  }));
 }
 
-function splitThen(then: string): string[] {
-  const parts = then
-    .split(/(?<=[가-힣](?:고|며)),? /)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  if (parts.length < 2 || parts.some((p) => p.length < 8)) return [then];
-  return parts.map(finish);
-}
-
-function pointOf(text: string, i: number, tcId: string): VerificationPoint {
-  const vision = /px|위치|이미지|dot/.test(text);
-  const compare: VerificationPoint['compare'] = /px/.test(text)
-    ? 'size_dp'
-    : /없|않|존재하지|사라/.test(text)
-      ? 'not_visible'
-      : /기록|클립보드|0개|개이고|저장된 장소/.test(text)
-        ? 'state'
-        : /열린|열려|백그라운드|도착/.test(text)
-          ? 'screen'
-          : /`[^`]+`|문구|제목/.test(text)
-            ? 'text_exists'
-            : /[0-9]개/.test(text)
-              ? 'count'
-              : 'visible';
-  const subject = text.replace(/^(매번|그대로|모두|항상) /, '');
-  const target = (/^(.{2,24}?)(?:이|가|은|는|을|를|와|과) /.exec(subject)?.[1] ?? subject.slice(0, 16)).replace(
-    /`/g,
-    '',
-  );
-  return { id: `${tcId}-P${i + 1}`, target, compare, expected: text, method: vision ? 'vision' : 'tree' };
-}
+/** 스펙의 When만으로는 기대 결과를 확인할 수 없는 케이스: 확인 가능한 순서로 단계를 적는다 */
+const STEP_OVERRIDES: Record<string, CaseBody['steps']> = {
+  'EC-008': [
+    { text: 'Wi-Fi와 모바일 데이터를 끈다 (초대 링크를 받지 못하는 상황)', manual: false },
+    { text: '습관 이름 `물 2L 마시기`을 입력하고 방을 만들어 메이트 초대 스텝에 들어간다', manual: false },
+    { text: '[초대 링크 복사]와 [메이트 초대하기]를 차례로 누른다', manual: false },
+  ],
+};
 
 const MANUAL_CASES = new Set(['TS-020', 'EC-019']);
 const MANUAL_STEP_CASES: Record<string, CaseBody['steps']> = {
@@ -215,7 +192,7 @@ function priorityOf(row: Row): CaseBody['priority'] {
 
 function bodyOf(row: Row, tcId: string): CaseBody {
   const { prep } = startOf(row);
-  const steps = MANUAL_STEP_CASES[row.id] ?? [{ text: row.when, manual: false }];
+  const steps = STEP_OVERRIDES[row.id] ?? MANUAL_STEP_CASES[row.id] ?? [{ text: row.when, manual: false }];
   const preconditions = row.kind === 'TS' ? [row.given] : [`${row.title} 상황을 만든다`];
   return {
     title: row.title,
@@ -228,7 +205,7 @@ function bodyOf(row: Row, tcId: string): CaseBody {
         ? '닉네임 `콩콩이`'
         : undefined,
     steps,
-    verificationPoints: splitThen(row.then).map((t, i) => pointOf(t, i, tcId)),
+    verificationPoints: pointsOf(row.id, tcId),
     priority: priorityOf(row),
     type: typeOf(row),
     platform: 'common',
@@ -242,6 +219,9 @@ const PREVIOUS_THEN: Record<string, string> = {
   'EC-004': '아무 반응 없이 현재 스텝에 머무른다. 온보딩은 종료되지 않는다',
   'TS-019': '1.5초 뒤 튜토리얼 스텝 1로 자동 이동한다',
 };
+/** 검증 포인트 생성기(packages/agent/scripts/gen-points.ts)의 입력 */
+export const SPEC_INPUT = { spec: SPEC, rows, previousThen: PREVIOUS_THEN, requirements: raw.requirements };
+
 const NEW_IN_130 = new Set(['TS-037', 'TS-038', 'EC-021', 'EC-022']);
 const HELD = new Set(['TS-023', 'TS-038']);
 
@@ -271,7 +251,7 @@ function buildCases(version: '1.2.0' | '1.3.0'): TestCase[] {
     let previous: CaseBody | undefined;
     const prevThen = PREVIOUS_THEN[row.id];
     if (prevThen) {
-      const old = { ...body, verificationPoints: [pointOf(prevThen, 0, tcId)] };
+      const old = { ...body, verificationPoints: pointsOf(`${row.id}@prev`, tcId) };
       if (version === '1.2.0') body = old;
       else previous = old;
     }

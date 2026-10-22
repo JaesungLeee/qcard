@@ -23,7 +23,7 @@
         }
       },
       "input": "콩콩이",
-      "intent": "사전조건: 방 정보 입력",
+      "intent": "사전조건: 습관 이름 입력",
       "screenshot": {
         "kind": "mock",
         "screen": "room-create"
@@ -59,7 +59,7 @@
   "points": [
     {
       "pointId": "TC-ONBOARDING-003-P1",
-      "expected": "메이트 초대 스텝이 열린다",
+      "expected": "습관을 만든 후 메이트 초대 스텝 화면이 열려 있다.",
       "method": "tree",
       "evidence": {
         "kind": "mock",
@@ -67,7 +67,7 @@
       },
       "result": "match",
       "observed": "찾은 요소: id=invite_title \"함께할 메이트를 불러볼까요?\"",
-      "reason": "요소가 화면에 있다 — 마지막 관찰(6)에 '함께할 메이트를 불러볼까요?' 제목(invite_title)과 초대 버튼들이 있어 메이트 초대 스텝 화면임을 보여 준다.",
+      "reason": "요소가 화면에 있다 — 마지막 관찰 6에 '함께할 메이트를 불러볼까요?' 제목(invite_title)과 메이트 초대하기 버튼이 있어 메이트 초대 스텝 화면임을 보여 줌",
       "targetElement": "invite_title",
       "targetBounds": {
         "x": 60,
@@ -78,7 +78,7 @@
     },
     {
       "pointId": "TC-ONBOARDING-003-P2",
-      "expected": "방금 만든 방의 초대 링크가 준비된다",
+      "expected": "직전 스텝에서 만든 습관의 초대 링크가 확보되어 있다.",
       "method": "tree",
       "evidence": {
         "kind": "mock",
@@ -86,16 +86,16 @@
       },
       "observed": "화면으로 알 수 없음",
       "result": "unknown",
-      "reason": "초대 링크 자체나 링크 생성 완료를 나타내는 텍스트는 어느 관찰에도 없고 '초대 링크 복사' 버튼만 있다. 이것만으로 방금 만든 방의 링크가 준비됐는지는 알 수 없다."
+      "reason": "초대 링크 확보 여부는 내부 상태라 화면만으로 알 수 없음. 링크 복사 버튼은 있으나 링크 자체나 확보 상태는 표시되지 않음"
     }
   ],
   "history": [],
   "decidedBy": {
     "kind": "agent"
   },
-  "tokens": 32642,
-  "costUsd": 0.026702800000000002,
+  "tokens": 38514,
+  "costUsd": 0.0278107,
   "verdict": "check",
   "agentVerdict": "check",
-  "actualSummary": "방금 만든 방의 초대 링크가 준비된다 → 화면으로 알 수 없음"
+  "actualSummary": "직전 스텝에서 만든 습관의 초대 링크가 확보되어 있다. → 화면으로 알 수 없음"
 }

@@ -90,7 +90,7 @@ describe('diff', () => {
     const diffs = diffCase(c.previous!, toBody(c));
     expect(diffs.map((x) => x.key)).toEqual(['verificationPoints']);
     const lines = diffs[0]!.lines;
-    expect(lines.some((l) => l.op === 'del' && l.text.includes('아무 반응 없이'))).toBe(true);
+    expect(lines.some((l) => l.op === 'del' && l.text.includes('첫 습관 만들기 스텝에 머물러 있다'))).toBe(true);
     expect(lines.some((l) => l.op === 'add')).toBe(true);
   });
 

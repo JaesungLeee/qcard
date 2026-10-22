@@ -69,10 +69,10 @@ describe('verifyPoints', () => {
     const llm = scriptedLlm([
       json({
         points: [
-          { point_id: 'P1', status: 'found', element_ref: 'bottom_nav', observation: 0, reason: '하단 탭' },
-          { point_id: 'P2', status: 'absent', element_ref: null, observation: 0, reason: '없음' },
-          { point_id: 'P3', status: 'found', element_ref: 'e99', observation: 0, reason: '착각' },
-          { point_id: 'P5', status: 'unclear', element_ref: null, observation: 0, reason: '화면에 안 나타남' },
+          { point_id: 'P1', status: 'found', element_ref: 'bottom_nav', reason: '하단 탭' },
+          { point_id: 'P2', status: 'absent', element_ref: null, reason: '없음' },
+          { point_id: 'P3', status: 'found', element_ref: 'e99', reason: '착각' },
+          { point_id: 'P5', status: 'unclear', element_ref: null, reason: '화면에 안 나타남' },
         ],
       }),
     ]);
@@ -132,8 +132,8 @@ describe('잠깐 뜨는 요소와 화면 안정화', () => {
     const llm = scriptedLlm([
       json({
         points: [
-          { point_id: 'T', status: 'found', element_ref: 'toast', observation: 3, reason: '토스트' },
-          { point_id: 'N', status: 'found', element_ref: 'toast', observation: 3, reason: '앞 화면' },
+          { point_id: 'T', status: 'found', element_ref: 'o3.e6', reason: '토스트' },
+          { point_id: 'N', status: 'found', element_ref: 'o3.e6', reason: '앞 화면' },
         ],
       }),
     ]);
@@ -153,6 +153,7 @@ describe('잠깐 뜨는 요소와 화면 안정화', () => {
       ['N', 'unknown'],
     ]);
     expect(JSON.stringify(llm.requests[0]!.messages)).toContain('[관찰 4] (마지막)');
+    expect(JSON.stringify(llm.requests[0]!.messages)).toContain('o3.e6 Toast');
   });
 });
 
@@ -209,10 +210,9 @@ describe('runCase', () => {
             point_id: 'TC-ONBOARDING-001-P1',
             status: 'found',
             element_ref: 'profile_title',
-            observation: 1,
             reason: '제목',
           },
-          { point_id: 'TC-ONBOARDING-001-P2', status: 'absent', element_ref: null, observation: 1, reason: '없음' },
+          { point_id: 'TC-ONBOARDING-001-P2', status: 'absent', element_ref: null, reason: '없음' },
         ],
       }),
     ]);
@@ -232,6 +232,21 @@ describe('runCase', () => {
     const { env: e } = env([]);
     const r = await runCase(e, { testCase: tc('TC-ONBOARDING-001'), prepFlows: PREP_FLOWS, deviceId: 'd' });
     expect(r).toMatchObject({ verdict: 'blocked', blockedReason: expect.stringContaining('환경 오류') });
+  });
+
+  it('Agent가 끈 네트워크는 케이스가 막혀도 끝날 때 다시 켠다', async () => {
+    const { device, env: e } = env([
+      [toolUse('wait', { seconds: 1, intent: '스플래시' })],
+      [toolUse('set_network', { wifi: false, data: false, intent: '끊기' })],
+      [toolUse('give_up', { kind: 'stuck', reason: '진행 불가' })],
+    ]);
+    const r = await runCase(
+      { ...e, allowNetworkToggle: true },
+      { testCase: tc('TC-ONBOARDING-001'), prepFlows: PREP_FLOWS, deviceId: 'd' },
+    );
+    expect(r.verdict).toBe('blocked');
+    expect(device.state.network).toEqual({ wifi: true, data: true });
+    expect(device.log.slice(-2)).toEqual(['network wifi on', 'network data on']);
   });
 
   it('없는 준비 플로우를 가리키면 Blocked', async () => {
