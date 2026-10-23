@@ -680,3 +680,22 @@ export const Host = z.object({
 export type Host = z.infer<typeof Host>;
 /** 이 시간 안에 신호가 있으면 연결된 것으로 본다 (호스트는 30초마다 갱신) */
 export const HOST_ONLINE_MS = 90_000;
+
+/**
+ * 호스트 연결 (F-TM-14): 웹에서 [이 PC 연결]로 만든, 호스트 에이전트가 이 계정으로 접속할 자격.
+ * `hostConnections/{id}` — Functions만 쓰고 본인만 읽는다. 문서가 없으면(연결 해제) 그 호스트의 요청은 보안 규칙이 막는다.
+ * 비밀값은 PC의 키체인에만 있고 여기에는 해시만 둔다.
+ */
+export const HostConnection = z.object({
+  id: z.string(),
+  uid: z.string(),
+  /** PC 이름 (연결할 때 호스트가 알려 준 컴퓨터 이름) */
+  name: z.string(),
+  connectedAt: z.string(),
+  /** 마지막으로 호스트 토큰을 받은 시각 (호스트를 켤 때마다) */
+  lastTokenAt: z.string().optional(),
+});
+export type HostConnection = z.infer<typeof HostConnection>;
+
+/** 웹이 [이 PC 연결]로 받아 호스트에 넘기는 자격. 비밀값은 이때 한 번만 보인다 */
+export type HostCredential = { uid: string; hostId: string; secret: string };

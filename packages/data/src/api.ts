@@ -6,6 +6,8 @@ import type {
   CaseResult,
   Defect,
   Host,
+  HostConnection,
+  HostCredential,
   Invitation,
   Job,
   QaDocJob,
@@ -91,6 +93,12 @@ export interface QcardApi {
   retryJob(projectId: string, jobId: string): Promise<void>;
   /** 내 호스트 에이전트 (연결 상태는 `lastSeen`으로 판단, HOST_ONLINE_MS) */
   myHosts(): Promise<Host[]>;
+  /** 내 계정에 연결된 PC (F-TM-14). 연결 신호(myHosts)는 켜져 있을 때만 있다 */
+  myHostConnections(): Promise<HostConnection[]>;
+  /** [이 PC 연결]: 호스트 자격을 만든다. 비밀값은 여기서 한 번만 받아 그 PC의 호스트 에이전트에 넘긴다 */
+  connectHost(name: string): Promise<HostCredential>;
+  /** 연결 해제: 그 PC는 바로 읽기·쓰기가 막히고, 다시 쓰려면 다시 연결해야 한다 */
+  disconnectHost(hostId: string): Promise<void>;
 
   /** 올린 빌드 (새것 먼저) */
   listBuilds(projectId: string): Promise<Build[]>;

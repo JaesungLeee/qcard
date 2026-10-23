@@ -164,14 +164,20 @@ describe('QA 문서 생성 작업', () => {
     ).rejects.toThrow();
   });
 
-  it('호스트 연결 신호는 본인만 쓰고 본인 웹에서 보인다', async () => {
+  it('호스트 연결 신호는 연결된 그 호스트만 쓰고 본인 웹에서 보인다 (F-TM-14)', async () => {
     const lead = as(PEOPLE.lead);
-    await heartbeat(lead.db, lead.uid, { id: 'mbp', name: '이재성의 MacBook Pro', lastSeen: '2026-10-22T10:00:00Z' });
-    expect(await lead.api.myHosts()).toEqual([
-      { id: 'mbp', name: '이재성의 MacBook Pro', lastSeen: '2026-10-22T10:00:00Z' },
-    ]);
+    await env.withSecurityRulesDisabled(async (c) => {
+      const { doc, setDoc } = await import('firebase/firestore');
+      await setDoc(doc(c.firestore() as unknown as Firestore, 'hostConnections/mbp'), { id: 'mbp', uid: lead.uid });
+    });
+    // 호스트 토큰(host 클레임)으로 접속한 호스트
+    const hostDb = env.authenticatedContext(lead.uid, { host: 'mbp' }).firestore() as unknown as Firestore;
+    const beat = { id: 'mbp', name: 'MacBook Pro', lastSeen: '2026-10-22T10:00:00Z' };
+    await heartbeat(hostDb, lead.uid, beat);
+    expect(await lead.api.myHosts()).toEqual([beat]);
     expect(await as(PEOPLE.qa).api.myHosts()).toEqual([]);
-    const qa = as(PEOPLE.qa);
-    await expect(heartbeat(qa.db, lead.uid, { id: 'x', name: 'x', lastSeen: 'now' })).rejects.toThrow();
+    // 사람(웹) 세션이나 다른 사람은 쓰지 못한다
+    await expect(heartbeat(lead.db, lead.uid, beat)).rejects.toThrow();
+    await expect(heartbeat(as(PEOPLE.qa).db, lead.uid, { ...beat, id: 'x' })).rejects.toThrow();
   });
 });

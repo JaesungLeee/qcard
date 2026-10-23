@@ -1,0 +1,49 @@
+/* 연결된 PC·이 PC 연결 화면 (F-TM-14). 색은 --qc-* 토큰만 쓴다. */
+.qh-add {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--qc-space-12);
+  padding: var(--qc-space-16);
+  border-radius: var(--qc-radius-12);
+  background: var(--qc-surface-neutral-tertiary);
+}
+.qh-code {
+  font-family: var(--qc-font-mono);
+  padding: var(--qc-space-2) var(--qc-space-6);
+  border-radius: var(--qc-radius-4);
+  background: var(--qc-surface-neutral-secondary);
+  overflow-wrap: anywhere;
+  align-self: flex-start;
+}
+.qh-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.qh-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--qc-space-12);
+  padding: var(--qc-space-12) var(--qc-space-16);
+  border-top: 1px solid var(--qc-line-neutral-tertiary);
+}
+.qh-item:first-child {
+  border-top: 0;
+}
+.qh-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-4);
+  min-width: 0;
+}
+.qh-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--qc-foreground-neutral-secondary);
+}
+.qh-actions {
+  display: flex;
+  gap: var(--qc-space-8);
+}

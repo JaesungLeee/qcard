@@ -210,3 +210,42 @@ describe('쓰기', () => {
     );
   });
 });
+
+describe('호스트 토큰 (F-TM-14)', () => {
+  // 호스트 에이전트는 Functions가 발급한 토큰으로 접속한다: uid = 사용자, host 클레임 = 연결 id
+  const asHost = (uid: string, host: string) => env.authenticatedContext(uid, { host }).firestore();
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      await setDoc(doc(c.firestore(), 'hostConnections/h-qa'), { id: 'h-qa', uid: 'u-qa', name: 'mbp' });
+    });
+  });
+
+  it('연결이 살아 있는 동안만 사용자 권한으로 읽고 쓴다', async () => {
+    await assertSucceeds(getDoc(doc(asHost('u-qa', 'h-qa'), 'projects/haru/qaDocs/doc-130')));
+    await assertSucceeds(setDoc(doc(asHost('u-qa', 'h-qa'), 'projects/haru/cycles/c1/runs/r1'), { status: 'running' }));
+    // 연결 해제(문서 삭제) 뒤에는 이미 받은 토큰도 막힌다
+    await env.withSecurityRulesDisabled((c) => deleteDoc(doc(c.firestore(), 'hostConnections/h-qa')));
+    await assertFails(getDoc(doc(asHost('u-qa', 'h-qa'), 'projects/haru/qaDocs/doc-130')));
+    await assertFails(setDoc(doc(asHost('u-qa', 'h-qa'), 'projects/haru/cycles/c1/runs/r2'), { status: 'running' }));
+  });
+
+  it('다른 사람의 연결 id로는 통과하지 못한다', async () => {
+    await assertFails(getDoc(doc(asHost('u-admin', 'h-qa'), 'projects/haru/qaDocs/doc-130')));
+  });
+
+  it('연결 목록은 본인 것만 읽고, 아무도 직접 쓰지 못한다', async () => {
+    await assertSucceeds(getDoc(doc(as('u-qa'), 'hostConnections/h-qa')));
+    await assertFails(getDoc(doc(as('u-admin'), 'hostConnections/h-qa')));
+    await assertFails(setDoc(doc(as('u-qa'), 'hostConnections/h-new'), { uid: 'u-qa' }));
+    await assertFails(deleteDoc(doc(as('u-qa'), 'hostConnections/h-qa')));
+  });
+
+  it('연결 신호는 그 호스트만 자기 문서에 쓰고, 웹(사람)은 읽기만 한다', async () => {
+    const beat = { id: 'h-qa', name: 'mbp', lastSeen: '2026-10-24T00:00:00Z' };
+    await assertSucceeds(setDoc(doc(asHost('u-qa', 'h-qa'), 'users/u-qa/hosts/h-qa'), beat));
+    await assertSucceeds(getDoc(doc(as('u-qa'), 'users/u-qa/hosts/h-qa')));
+    await assertFails(setDoc(doc(as('u-qa'), 'users/u-qa/hosts/h-qa'), beat));
+    await assertFails(setDoc(doc(asHost('u-qa', 'h-qa'), 'users/u-qa/hosts/other'), beat));
+    await assertFails(deleteDoc(doc(asHost('u-qa', 'h-qa'), 'users/u-qa/hosts/h-qa')));
+  });
+});

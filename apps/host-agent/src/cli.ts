@@ -4,7 +4,8 @@
  *
  * 개발·자동화용 명령. 사용자는 상주 모드(serve)의 로컬 콘솔에서 사이클을 골라 Run을 시작한다.
  *
- *   pnpm --filter @qcard/host-agent run-cycle --project haru --cycle cycle-130-1 --user jaesung-lee [TC-ID…]
+ *   pnpm --filter @qcard/host-agent run-cycle --project haru --cycle cycle-130-1 [TC-ID…]
+ *     --user <시드 사용자>          개발용: 에뮬레이터에서 브라우저 없이 그 사용자 이름으로 연결
  *     --package com.example.harukong.qa   빌드 파일이 없는 사이클(시드)에서 실행할 앱 (앱 데이터 초기화는 이 앱에만)
  *     --serial <시리얼>            디바이스가 여러 대일 때
  *     --resume <run id>            일시정지된 Run을 이어서 (이미 결과가 있는 칸은 건너뜀)
@@ -17,8 +18,7 @@
  *
  * 결과·증거는 업로드 큐(~/.qcard/upload-queue)를 거친다. 네트워크가 끊겨도 로컬에 남았다가 다음 실행 때 이어서 보낸다.
  *
- * 지금은 에뮬레이터(`pnpm emu`)에만 연결한다. --user는 시드 사용자(GitHub 사용자명)다.
- * 실제 Firebase 연결·GitHub 로그인은 배포 준비 때 붙인다.
+ * 먼저 `connect`로 이 PC를 계정에 연결해 둔다(F-TM-14).
  */
 import { parseArgs } from 'node:util';
 import { AdbDriver, listDevices } from '@qcard/device/node';
@@ -26,7 +26,7 @@ import { assertClaudeCodeReady, llmProviderFromEnv } from '@qcard/llm';
 import type { ClaudeCodeState } from '@qcard/shared';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { connectEmulator } from './connect';
+import { HostDisconnectedError, openHostSession } from './connect';
 import { attachScreen, hubBackend, launchConsole } from './console';
 import { UploadQueue } from './queue';
 import { CycleRunError, prepareCycleRun } from './run';
@@ -45,14 +45,23 @@ const { values, positionals } = parseArgs({
     headless: { type: 'boolean', default: false },
   },
 });
-if (!values.project || !values.cycle || !values.user) {
-  console.error('사용법: run-cycle --project <id> --cycle <id> --user <GitHub 사용자명> [TC-ID…]');
+if (!values.project || !values.cycle) {
+  console.error('사용법: run-cycle --project <id> --cycle <id> [--user <시드 사용자>] [TC-ID…]');
   process.exit(1);
 }
 const log = (l: string) => console.log(l);
 
-// ---------------------------------------------------------------- Firebase 로그인 (에뮬레이터)
-const { db, storage, api, user: seed } = await connectEmulator(values.user);
+// ---------------------------------------------------------------- Firebase 로그인 (호스트 연결)
+const {
+  db,
+  storage,
+  api,
+  user: seed,
+} = await openHostSession({ seedUser: values.user }).catch((e: unknown) => {
+  if (!(e instanceof HostDisconnectedError)) throw e;
+  console.error(e.message);
+  process.exit(1);
+});
 
 // ---------------------------------------------------------------- LLM (본인 Claude Code)
 let claudeCode: ClaudeCodeState = { installed: true, loggedIn: true };

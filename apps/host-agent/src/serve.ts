@@ -2,7 +2,8 @@
  * 호스트 에이전트 상주 모드: 로컬 콘솔을 띄워 두고(사이클을 골라 Run 시작), 웹에서 요청한 내 작업(QA 문서 생성)을
  * 이 PC의 Claude Code(본인 플랜)로 처리한다.
  *
- *   pnpm --filter @qcard/host-agent serve --user jaesung-lee
+ *   pnpm --filter @qcard/host-agent serve
+ *     --user <시드 사용자>          개발용: 에뮬레이터에서 브라우저 없이 그 사용자 이름으로 연결
  *     --package com.example.harukong.qa   빌드 파일이 없는 사이클(시드)에서 실행할 앱
  *     --serial <시리얼>            디바이스가 여러 대일 때 (기본: 처음 연결된 것, 1인 1대)
  *     --allow-network              set_network(네트워크 끄기) 허용
@@ -17,16 +18,16 @@
  * - 작업마다 호출을 ~/.qcard/jobs/<작업>/llm에 녹화한다. 플랜 한도로 멈춘 작업을 웹에서 다시 시도하면
  *   끝난 호출은 재생하고 남은 것만 부른다
  *
- * 지금은 에뮬레이터(`pnpm emu`)에만 연결한다. --user는 시드 사용자(GitHub 사용자명).
+ * 먼저 `connect`로 이 PC를 계정에 연결해 둔다(F-TM-14). 연결이 해제됐으면 시작하지 않는다.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
-import { homedir, hostname } from 'node:os';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { AdbDriver, listDevices } from '@qcard/device/node';
 import { claudeCodeStatus, createCassetteLlm, createLiveLlm, type ClaudeCodeStatus } from '@qcard/llm';
 import { collectionGroup, onSnapshot, query, where } from 'firebase/firestore';
-import { connectEmulator } from './connect';
+import { HostDisconnectedError, openHostSession } from './connect';
 import { attachScreen, ConsoleService, launchConsole } from './console';
 import { RESTORED, restoreAwake } from './awake';
 import { claimJob, heartbeat, pendingJobs, processJob, startRunJobs } from './jobs';
@@ -42,14 +43,12 @@ const { values } = parseArgs({
     headless: { type: 'boolean', default: false },
   },
 });
-if (!values.user) {
-  console.error('사용법: serve --user <GitHub 사용자명>');
+const session = await openHostSession({ seedUser: values.user }).catch((e: unknown) => {
+  if (!(e instanceof HostDisconnectedError)) throw e;
+  console.error(e.message);
   process.exit(1);
-}
-
-const { db, storage, api, user } = await connectEmulator(values.user);
-const machine = hostname().replace(/\.local$/, '');
-const host = { id: machine.toLowerCase().replace(/[^a-z0-9-]+/g, '-'), name: `${user.name}의 ${machine}` };
+});
+const { db, storage, api, user, host } = session;
 
 // ---------------------------------------------------------------- 연결 신호
 /** 연결된 디바이스 (시리얼별 정보는 한 번만 읽는다) — 웹이 사이클 대상을 고를 때 쓴다. 읽기 전용(getprop·wm) */

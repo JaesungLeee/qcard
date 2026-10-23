@@ -1,0 +1,9 @@
+[
+  { "name": "hosts-list", "path": "/hosts", "waitFor": "MacBook Pro" },
+  {
+    "name": "hosts-connect",
+    "path": "/connect?port=51234&nonce=abcdefghijklmnopqrstuvwx&name=Jaesung%E2%80%99s%20MacBook%20Air",
+    "waitFor": "이 PC의 터미널에서 직접"
+  },
+  { "name": "hosts-connect-invalid", "path": "/connect?port=1", "waitFor": "연결 주소가 올바르지 않습니다" }
+]

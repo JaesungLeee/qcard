@@ -2,11 +2,12 @@
 // 콘솔은 그 PC의 127.0.0.1에만 열려 있어, 호스트를 켠 PC의 브라우저에서만 들어갈 수 있다.
 import type { Host } from '@qcard/shared';
 import { Button, Icons, SectionMessage, textClass, token } from '@qcard/ui';
-import { NavLink, useParams } from 'react-router';
+import { Link, NavLink, useParams } from 'react-router';
 import { PageHeader } from '../../components/PageHeader';
 import { isMemoryApi } from '../../data/memory';
 import { useApi, useMyHosts } from '../../data/hooks';
-import { isOnline, serveCommand } from '../qa-doc/Jobs';
+import { DEV_COMMAND_NOTE } from '../hosts/model';
+import { isOnline, SERVE_COMMAND } from '../qa-doc/Jobs';
 
 /** 연결된 내 호스트의 콘솔 주소 (없으면 호스트가 꺼져 있거나 콘솔 없이 켠 것) */
 export const consoleUrlOf = (hosts: Host[], now = Date.now()) =>
@@ -93,8 +94,14 @@ export function ConsoleOpenPage() {
                   overflowWrap: 'anywhere',
                 }}
               >
-                {serveCommand(api.currentUid)}
+                {SERVE_COMMAND}
               </code>
+              <span className={textClass('caption1')}>{DEV_COMMAND_NOTE}</span>
+              {!online && (
+                <span>
+                  처음 쓰는 PC면 먼저 계정에 연결하세요 — <Link to="/hosts">연결된 PC</Link>
+                </span>
+              )}
             </span>
           }
         >

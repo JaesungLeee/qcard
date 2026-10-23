@@ -4,10 +4,28 @@
 
 두 명령 모두 `pnpm emu`가 떠 있어야 한다([emulators.md](emulators.md)).
 
+## connect — 이 PC를 계정에 연결 (F-TM-14)
+
+호스트는 GitHub로 따로 로그인하지 않는다. 웹에서 이 PC를 계정에 한 번 연결해 두면, 켤 때마다 그 자격으로 접속한다.
+
+```sh
+pnpm --filter @qcard/host-agent connect      # 브라우저가 열리면 [이 PC 연결]
+pnpm --filter @qcard/host-agent status       # 연결된 계정 확인
+pnpm --filter @qcard/host-agent disconnect   # 이 PC의 연결 해제
+```
+
+- `connect`는 127.0.0.1에 임시 서버를 열고 웹의 `/connect?port&nonce&name`을 연다. [이 PC 연결]을 누르면 Functions `pairHost`가 호스트 자격을 만들고, 웹이 그 자격을 임시 서버로 폼 POST한다(Origin·Host·nonce 확인). 자격은 macOS 키체인(`qcard-host`, 계정 = Firebase 프로젝트 id)에 둔다.
+- 켤 때마다 Functions `hostToken`으로 짧은 수명의 로그인 토큰(`host` 클레임)을 받는다. 보안 규칙은 `hostConnections/{hostId}`가 있을 때만 이 토큰을 통과시키므로, 웹의 [연결된 PC]에서 해제하면 바로 막힌다.
+- 붙을 곳: `QCARD_FIREBASE_CONFIG`(웹 설정 JSON) + `QCARD_WEB_URL`. 없으면 개발용 에뮬레이터와 `http://localhost:5173`(`pnpm dev:firebase`).
+- 운영에서 `hostToken`이 커스텀 토큰을 만들려면 Functions 서비스 계정에 "서비스 계정 토큰 생성자" 권한이 필요하다.
+
+**개발 단축**: 에뮬레이터에서는 `serve`·`run-cycle`에 `--user <시드 GitHub 사용자명>`을 주면 브라우저 없이 그 사용자로 연결한다(자격은 키체인 계정 `demo-qcard:<사용자명>`에 두고, 에뮬레이터를 다시 띄워 연결이 없어지면 자동으로 다시 연결).
+
 ## serve — 상주 모드 (실행자가 쓰는 경로)
 
 ```sh
-pnpm --filter @qcard/host-agent serve --user jaesung-lee
+pnpm --filter @qcard/host-agent serve                    # connect로 연결한 PC
+pnpm --filter @qcard/host-agent serve --user jaesung-lee # 개발: 에뮬레이터 시드 사용자
 ```
 
 - **로컬 콘솔**을 띄워 두고 한 번만 쓸 수 있는 주소를 출력한다. 열면 [로컬 콘솔 열기] 버튼이 나온다 — 링크 미리보기가 먼저 열어도 토큰이 남는다. 터미널에서 Enter = 새 주소.

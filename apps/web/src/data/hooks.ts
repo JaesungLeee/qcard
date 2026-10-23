@@ -36,6 +36,7 @@ export const keys = {
   console: ['console'] as const,
   jobs: (projectId: string) => ['jobs', projectId] as const,
   hosts: ['hosts'] as const,
+  hostConnections: ['hostConnections'] as const,
   builds: (projectId: string) => ['builds', projectId] as const,
 };
 
@@ -235,6 +236,26 @@ export function useMyHosts() {
   const api = useApi();
   return useQuery({ queryKey: keys.hosts, queryFn: () => api.myHosts(), refetchInterval: 15_000 });
 }
+
+/** 내 계정에 연결된 PC (F-TM-14) */
+export function useHostConnections() {
+  const api = useApi();
+  return useQuery({ queryKey: keys.hostConnections, queryFn: () => api.myHostConnections() });
+}
+
+function useHostMutation<T, R>(fn: (api: QcardApi, input: T) => Promise<R>) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: T) => fn(api, input),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: keys.hostConnections });
+      void qc.invalidateQueries({ queryKey: keys.hosts });
+    },
+  });
+}
+export const useConnectHost = () => useHostMutation((api, name: string) => api.connectHost(name));
+export const useDisconnectHost = () => useHostMutation((api, hostId: string) => api.disconnectHost(hostId));
 
 export function useRequestQaDoc(projectId: string) {
   const api = useApi();

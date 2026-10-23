@@ -139,3 +139,40 @@ describe('프로필', () => {
     expect(p).toEqual({ github: 'jaesung-lee', name: 'jaesung-lee' });
   });
 });
+
+describe('호스트 연결 (F-TM-14)', () => {
+  const mint = async (uid: string, claims: { host: string }) => `token:${uid}:${claims.host}`;
+
+  it('연결하면 비밀값은 해시로만 남고, 그 비밀값으로 호스트 토큰을 받는다', async () => {
+    const cred = await h.pairHost(ctx('lead', '2026-10-24T00:00:00.000Z'), { name: '  MacBook Pro  ' });
+    expect(cred.uid).toBe(USERS.lead.uid);
+    const stored = (await db.doc(`hostConnections/${cred.hostId}`).get()).data()!;
+    expect(stored).toMatchObject({ uid: USERS.lead.uid, name: 'MacBook Pro', connectedAt: '2026-10-24T00:00:00.000Z' });
+    expect(JSON.stringify(stored)).not.toContain(cred.secret);
+
+    const t = await h.hostToken(db, { hostId: cred.hostId, secret: cred.secret }, mint, () => '2026-10-24T01:00:00Z');
+    expect(t.token).toBe(`token:${USERS.lead.uid}:${cred.hostId}`);
+    expect((await db.doc(`hostConnections/${cred.hostId}`).get()).data()!.lastTokenAt).toBe('2026-10-24T01:00:00Z');
+  });
+
+  it('비밀값이 틀리거나 연결을 해제했으면 토큰을 주지 않는다', async () => {
+    const cred = await h.pairHost(ctx('lead'), { name: 'mbp' });
+    await expectRule(h.hostToken(db, { hostId: cred.hostId, secret: 'wrong' }, mint), 'permission');
+    await db.doc(`users/${USERS.lead.uid}/hosts/${cred.hostId}`).set({ id: cred.hostId, lastSeen: 'x' });
+
+    await h.revokeHost(ctx('lead'), { hostId: cred.hostId });
+    await expectRule(h.hostToken(db, cred, mint), 'permission', '다시 연결');
+    expect((await db.doc(`users/${USERS.lead.uid}/hosts/${cred.hostId}`).get()).exists).toBe(false);
+  });
+
+  it('다른 사람의 PC는 해제할 수 없고, 호스트는 자기 연결만 해제하며 새 PC를 연결하지 못한다', async () => {
+    const mine = await h.pairHost(ctx('lead'), { name: 'mbp' });
+    const other = await h.pairHost(ctx('lead'), { name: 'imac' });
+    await expectRule(h.revokeHost(ctx('qa'), { hostId: mine.hostId }), 'not_found');
+    const asHost = { ...ctx('lead'), host: mine.hostId };
+    await expectRule(h.revokeHost(asHost, { hostId: other.hostId }), 'permission');
+    await expectRule(h.pairHost(asHost, { name: 'x' }), 'permission');
+    await h.revokeHost(asHost, { hostId: mine.hostId });
+    expect((await db.doc(`hostConnections/${mine.hostId}`).get()).exists).toBe(false);
+  });
+});

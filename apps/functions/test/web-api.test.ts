@@ -216,3 +216,17 @@ describe('프로젝트·초대 (callable)', () => {
     expect(snaps.every((s) => s.exists)).toBe(true);
   });
 });
+
+describe('호스트 연결 (F-TM-14)', () => {
+  it('연결하면 내 목록에만 보이고, 해제하면 빠진다 — 메모리 구현과 같다', async () => {
+    for (const api of [apiAs(PEOPLE.qa), createMemoryApi({ currentUser: PEOPLE.qa })]) {
+      const cred = await api.connectHost(' MacBook Air ');
+      expect(cred.uid).toBe(GITHUB[PEOPLE.qa]);
+      expect((await api.myHostConnections()).map((c) => [c.id, c.name])).toEqual([[cred.hostId, 'MacBook Air']]);
+      expect(JSON.stringify(await api.myHostConnections())).not.toContain('secretHash');
+      await api.disconnectHost(cred.hostId);
+      expect(await api.myHostConnections()).toEqual([]);
+      await expect(api.disconnectHost(cred.hostId)).rejects.toBeInstanceOf(Error);
+    }
+  });
+});

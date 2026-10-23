@@ -4,6 +4,8 @@ import type {
   CaseResult,
   Defect,
   Host,
+  HostConnection,
+  HostCredential,
   Invitation,
   Job,
   Member,
@@ -569,6 +571,18 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       ),
     myHosts: () =>
       guard(async () => (await getDocs(collection(db, 'users', me().uid, 'hosts'))).docs.map((d) => d.data() as Host)),
+    myHostConnections: () =>
+      guard(async () => {
+        const snap = await getDocs(query(collection(db, 'hostConnections'), where('uid', '==', me().uid)));
+        return snap.docs
+          .map((d) => {
+            const { secretHash: _s, ...conn } = d.data() as HostConnection & { secretHash?: string };
+            return conn;
+          })
+          .sort((a, b) => (a.connectedAt < b.connectedAt ? 1 : -1));
+      }),
+    connectHost: (name) => call<HostCredential>('pairHost', { name }),
+    disconnectHost: (hostId) => call<void>('revokeHost', { hostId }),
 
     screenshotUrl: (path) =>
       guard(async () => {

@@ -5,10 +5,23 @@ rules_version = '2';
 // - 프로젝트·멤버·초대 쓰기는 Cloud Functions(Admin SDK)만 한다 — "Admin 1명 이상", 초대 확인 같은
 //   규칙은 @qcard/shared membership에 있고 Functions가 강제한다
 // - QA 데이터 쓰기는 Admin·QA만, Viewer는 조회만 (F-TM-03)
+// - 호스트 에이전트는 호스트 토큰(`host` 클레임)으로 접속한다. 그 연결(hostConnections)이 있는 동안만 통과한다 —
+//   웹에서 연결을 해제하면 이미 받은 토큰으로도 읽기·쓰기가 바로 막힌다 (F-TM-14)
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() {
-      return request.auth != null;
+      return request.auth != null && hostOk();
+    }
+    function hostClaim() {
+      return request.auth.token.get('host', null);
+    }
+    function connection(hostId) {
+      return /databases/$(database)/documents/hostConnections/$(hostId);
+    }
+    // 사람이면 통과. 호스트면 연결이 살아 있고 이 사용자의 것이어야 한다
+    function hostOk() {
+      return hostClaim() == null
+        || (exists(connection(hostClaim())) && get(connection(hostClaim())).data.uid == request.auth.uid);
     }
     function memberDoc(p) {
       return /databases/$(database)/documents/projects/$(p)/members/$(request.auth.uid);
@@ -146,14 +159,23 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // 호스트 연결 (F-TM-14). Functions만 쓰고(pairHost·revokeHost), 본인은 "연결된 PC" 목록으로 읽는다
+    // 질의 조건(where uid == 나)으로 증명할 수 있게 필드로 비교한다. 비밀값은 해시만 있다
+    match /hostConnections/{hostId} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
+
     // 사용자 프로필 (표시 이름·GitHub 사용자명). GitHub로 확인한 값만 Functions가 쓴다
     match /users/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
       allow write: if false;
 
-      // 내 호스트 에이전트 연결 상태 (호스트가 주기적으로 갱신, 웹이 읽는다)
+      // 내 호스트 에이전트 연결 신호 (그 호스트만 자기 문서를 갱신, 웹이 읽는다. 지우는 것은 연결 해제 때 Functions)
       match /hosts/{hostId} {
-        allow read, write: if signedIn() && request.auth.uid == uid;
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow create, update: if signedIn() && request.auth.uid == uid && hostClaim() == hostId;
+        allow delete: if false;
       }
     }
   }

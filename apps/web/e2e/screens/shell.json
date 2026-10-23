@@ -1,1 +1,5 @@
-[{ "name": "shell-cycles", "path": "/p/haru/cycles", "waitFor": "하루콩" }]
+[
+  { "name": "shell-cycles", "path": "/p/haru/cycles", "waitFor": "하루콩" },
+  { "name": "shell-login", "path": "/login", "waitFor": "qcard에 로그인" },
+  { "name": "shell-login-invite", "path": "/login?next=%2Finvite%2Fatlas-join", "waitFor": "초대를 수락하려면" }
+]

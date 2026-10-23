@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { FieldValue, type DocumentReference, type Firestore, type Transaction } from 'firebase-admin/firestore';
 import {
   accepting,
@@ -15,6 +15,8 @@ import {
   restoration,
   Role,
   type Actor,
+  type HostConnection,
+  type HostCredential,
   type Invitation,
   type InvitationState,
   type Member,
@@ -33,9 +35,12 @@ import { z } from 'zod';
  *   projects/{p}/members/{uid}               Member
  *   projects/{p}/invitations/{id}            Invitation
  *   invitationTokens/{token}                 { projectId, invitationId } — 토큰으로 초대를 찾는 색인
+ *   hostConnections/{hostId}                 HostConnection + secretHash — 호스트 연결 (F-TM-14)
+ *   users/{uid}/hosts/{hostId}               호스트 연결 신호 (호스트가 씀, 연결 해제 때 여기서 지움)
  */
 
-export type Ctx = { db: Firestore; uid: string; now?: () => string };
+/** `host`: 호스트 토큰으로 부른 경우 그 호스트 id (사람이 부르면 없음) */
+export type Ctx = { db: Firestore; uid: string; host?: string; now?: () => string };
 
 const nowOf = (ctx: Ctx) => (ctx.now ?? (() => new Date().toISOString()))();
 const fail = (kind: MembershipError['kind'], message: string) => new MembershipError(kind, message);
@@ -265,4 +270,56 @@ export async function acceptInvitation(ctx: Ctx, data: unknown): Promise<Project
     if (r.invitationStatus !== inv.status) tx.update(ref, { status: r.invitationStatus });
     return project;
   });
+}
+
+// ------------------------------------------------------------------ 호스트 연결 (F-TM-14)
+
+const connectionRef = (db: Firestore, hostId: string) => db.doc(`hostConnections/${hostId}`);
+const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
+
+/**
+ * [이 PC 연결]: 로그인한 사용자 이름으로 호스트 자격을 만든다. 비밀값은 응답으로 한 번만 돌려주고
+ * (웹이 그 PC의 호스트 에이전트에 넘긴다) 해시만 저장한다. 호스트 토큰으로는 부를 수 없다
+ */
+export async function pairHost(ctx: Ctx, data: unknown): Promise<HostCredential> {
+  if (ctx.host) throw fail('permission', '호스트는 다른 PC를 연결할 수 없습니다.');
+  const { name } = parse(z.object({ name: z.string().trim().min(1).max(60) }), data);
+  await actorOf(ctx);
+  const ref = ctx.db.collection('hostConnections').doc();
+  const secret = randomBytes(32).toString('base64url');
+  const conn: HostConnection = { id: ref.id, uid: ctx.uid, name, connectedAt: nowOf(ctx) };
+  await ref.create({ ...conn, secretHash: sha256(secret) });
+  return { uid: ctx.uid, hostId: ref.id, secret };
+}
+
+/** 연결 해제: 본인 웹 또는 그 호스트 자신. 연결 문서가 없어지면 그 호스트의 요청은 보안 규칙이 바로 막는다 */
+export async function revokeHost(ctx: Ctx, data: unknown): Promise<void> {
+  const { hostId } = parse(z.object({ hostId: z.string().min(1) }), data);
+  if (ctx.host && ctx.host !== hostId) throw fail('permission', '다른 호스트의 연결은 해제할 수 없습니다.');
+  const ref = connectionRef(ctx.db, hostId);
+  const conn = (await ref.get()).data() as HostConnection | undefined;
+  if (!conn || conn.uid !== ctx.uid) throw fail('not_found', '연결된 PC를 찾을 수 없습니다.');
+  const batch = ctx.db.batch();
+  batch.delete(ref);
+  batch.delete(ctx.db.doc(`users/${ctx.uid}/hosts/${hostId}`));
+  await batch.commit();
+}
+
+/**
+ * 호스트 자격 → 짧은 수명의 로그인 토큰(`host` 클레임). 호스트는 켤 때마다 부른다. 로그인 없이 부르는 함수라
+ * 자격이 맞지 않으면 이유를 구분하지 않고 거절한다. `mint`는 Admin SDK createCustomToken
+ */
+export async function hostToken(
+  db: Firestore,
+  data: unknown,
+  mint: (uid: string, claims: { host: string }) => Promise<string>,
+  now: () => string = () => new Date().toISOString(),
+): Promise<{ token: string }> {
+  const { hostId, secret } = parse(z.object({ hostId: z.string().min(1), secret: z.string().min(1) }), data);
+  const ref = connectionRef(db, hostId);
+  const conn = (await ref.get()).data() as (HostConnection & { secretHash: string }) | undefined;
+  const ok = !!conn && timingSafeEqual(Buffer.from(sha256(secret), 'hex'), Buffer.from(conn.secretHash, 'hex'));
+  if (!conn || !ok) throw fail('permission', '이 PC의 연결이 해제되었거나 자격이 맞지 않습니다. 다시 연결하세요.');
+  await ref.update({ lastTokenAt: now() });
+  return { token: await mint(conn.uid, { host: hostId }) };
 }

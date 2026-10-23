@@ -75,11 +75,19 @@ export function createFirebaseClient() {
         cb(user);
       });
     },
-    /** GitHub 로그인 후 GitHub 사용자명을 확인해 프로필에 쓴다 (초대 수락 기준) */
+    /**
+     * GitHub 로그인 후 GitHub 사용자명을 확인해 프로필에 쓴다 (초대 수락 기준).
+     * 프로필을 못 쓰면 쓸 수 있는 화면이 없으므로 로그아웃하고 오류를 그대로 올린다
+     */
     async signInWithGithub() {
       const result = await signInWithPopup(auth, new GithubAuthProvider());
       const token = GithubAuthProvider.credentialFromResult(result)?.accessToken;
-      await call('registerProfile', { githubAccessToken: token });
+      try {
+        await call('registerProfile', { githubAccessToken: token });
+      } catch (e) {
+        await signOut(auth);
+        throw e;
+      }
     },
     signInTestUser: (email: string) => signInWithEmailAndPassword(auth, email, TEST_PASSWORD),
     signOut: () => signOut(auth),

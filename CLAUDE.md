@@ -35,7 +35,7 @@ pnpm이 전역에 없으면 `npx -y pnpm@10.34.6 <명령>`으로 실행한다.
 
 그 밖의 명령은 `docs/dev/`에 있다. 필요할 때 읽는다.
 
-- [host-agent.md](docs/dev/host-agent.md) — `serve`(상주 모드)·`run-cycle`, 로컬 콘솔
+- [host-agent.md](docs/dev/host-agent.md) — `connect`(PC 연결)·`serve`(상주 모드)·`run-cycle`, 로컬 콘솔
 - [device-llm.md](docs/dev/device-llm.md) — 실기기 점검·실행, `llm:smoke`, cassette 녹화, `sample-runs`
 - [spec-qadoc.md](docs/dev/spec-qadoc.md) — `spec check`, `qadoc generate`, `seed-generated`
 - [emulators.md](docs/dev/emulators.md) — 에뮬레이터 구성·시드·임시 폴더 분리

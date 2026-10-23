@@ -8,6 +8,9 @@
   "scripts": {
     "run-cycle": "tsx src/cli.ts",
     "serve": "tsx src/serve.ts",
+    "connect": "tsx src/pair.ts connect",
+    "disconnect": "tsx src/pair.ts disconnect",
+    "status": "tsx src/pair.ts status",
     "typecheck": "tsc -p tsconfig.json",
     "test": "node ../functions/scripts/emulators.mjs test 'vitest run'"
   },

@@ -15,6 +15,7 @@ import {
   requireMember,
   restoration,
   type Actor,
+  type HostConnection,
   type Member,
 } from '@qcard/shared';
 import {
@@ -126,6 +127,12 @@ export function createMemoryApi(
       throw toApiError(e);
     }
   };
+
+  // 호스트 연결 (F-TM-14). 시연: 이재성의 MacBook Pro가 연결돼 있고 켜져 있다
+  const DEMO_HOST = 'macbook-pro';
+  let connections: HostConnection[] = [
+    { id: DEMO_HOST, uid: GITHUB[PEOPLE.lead]!, name: 'MacBook Pro', connectedAt: '2026-10-20T09:00:00.000Z' },
+  ];
 
   // 사이클 구독 (watchCycle): 쓰기가 일어나면 그 사이클을 다시 읽어 알린다
   const watchers = new Map<string, Set<(d: CycleDetail) => void>>();
@@ -401,7 +408,7 @@ export function createMemoryApi(
     },
     async myHosts() {
       // 시연: 이재성만 호스트 에이전트를 켜 두었다 (다른 사용자로 바꾸면 "호스트 꺼짐" 안내를 볼 수 있다)
-      if (currentUser !== PEOPLE.lead) return wait([]);
+      if (currentUser !== PEOPLE.lead || !connections.some((c) => c.id === DEMO_HOST)) return wait([]);
       return wait([
         {
           id: 'macbook-pro',
@@ -412,6 +419,24 @@ export function createMemoryApi(
           claudeCode: { version: '2.1.308', loggedIn: true, subscriptionType: 'max' },
         },
       ]);
+    },
+
+    async myHostConnections() {
+      return wait(
+        connections.filter((c) => c.uid === actor().uid).sort((a, b) => (a.connectedAt < b.connectedAt ? 1 : -1)),
+      );
+    },
+    async connectHost(name) {
+      const id = `host-${connections.length + 1}-${Date.now().toString(36)}`;
+      connections.push({ id, uid: actor().uid, name: name.trim(), connectedAt: now() });
+      return wait({ uid: actor().uid, hostId: id, secret: `memory-secret-${id}` });
+    },
+    async disconnectHost(hostId) {
+      if (!connections.some((c) => c.id === hostId && c.uid === actor().uid)) {
+        throw new NotFoundError('연결된 PC를 찾을 수 없습니다.');
+      }
+      connections = connections.filter((c) => c.id !== hostId);
+      return wait(undefined);
     },
 
     async screenshotUrl(path) {

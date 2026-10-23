@@ -20,14 +20,24 @@ export function ProjectListPage() {
         title="내 프로젝트"
         meta="앱마다 QA 대시보드를 하나씩 만들고 멤버를 초대합니다. 다른 프로젝트는 초대를 받아야 볼 수 있습니다."
         actions={
-          <Button
-            variant="solid"
-            color="primary"
-            leadingContent={<Icons.IconPlus />}
-            onClick={() => void navigate('/projects/new')}
-          >
-            새 프로젝트
-          </Button>
+          <div className="qp-row">
+            <Button
+              variant="outlined"
+              color="assistive"
+              leadingContent={<Icons.IconDesktop />}
+              onClick={() => void navigate('/hosts')}
+            >
+              연결된 PC
+            </Button>
+            <Button
+              variant="solid"
+              color="primary"
+              leadingContent={<Icons.IconPlus />}
+              onClick={() => void navigate('/projects/new')}
+            >
+              새 프로젝트
+            </Button>
+          </div>
         }
       />
       <QueryState query={projects}>

@@ -1,6 +1,14 @@
-import { HOST_ONLINE_MS, JOB_ERROR_LABEL, JOB_STATUS_LABEL, type Host, type JobStatus, type QaDocJob } from '@qcard/shared';
+import {
+  HOST_ONLINE_MS,
+  JOB_ERROR_LABEL,
+  JOB_STATUS_LABEL,
+  type Host,
+  type JobStatus,
+  type QaDocJob,
+} from '@qcard/shared';
 import { Button, Icons, SectionMessage, textClass, token } from '@qcard/ui';
 import { Link } from 'react-router';
+import { DEV_COMMAND_NOTE } from '../hosts/model';
 import { fmtDateTime, fmtNumber } from '../../components/format';
 import { useApi, useMyHosts, useRetryJob } from '../../data/hooks';
 import { Progress, Tag, type Tone } from './Badges';
@@ -12,8 +20,8 @@ import { Progress, Tag, type Tone } from './Badges';
 
 export const isOnline = (h: Host, now = Date.now()) => now - Date.parse(h.lastSeen) < HOST_ONLINE_MS;
 
-/** 호스트 에이전트를 켜는 명령 (지금은 에뮬레이터 개발 환경) */
-export const serveCommand = (github: string) => `pnpm --filter @qcard/host-agent serve --user ${github}`;
+/** 호스트 에이전트를 켜는 명령. 처음 쓰는 PC는 먼저 connect로 계정에 연결한다 (F-TM-14, /hosts 안내) */
+export const SERVE_COMMAND = 'pnpm --filter @qcard/host-agent serve';
 
 /** 내 호스트 연결 상태. 꺼져 있으면 켜는 방법을 안내한다 */
 export function HostStatus() {
@@ -29,7 +37,11 @@ export function HostStatus() {
         description={
           <span className="qd-stack" style={{ gap: token('space-6') }}>
             <span>생성은 내 PC의 호스트 에이전트가 내 Claude 플랜으로 합니다. 터미널에서 켜 두면 바로 시작합니다.</span>
-            <code className="qd-code">{serveCommand(api.currentUid)}</code>
+            <code className="qd-code">{SERVE_COMMAND}</code>
+            <span className={textClass('caption1')}>{DEV_COMMAND_NOTE}</span>
+            <span>
+              처음 쓰는 PC면 먼저 계정에 연결하세요 — <Link to="/hosts">연결된 PC</Link>
+            </span>
           </span>
         }
       >
