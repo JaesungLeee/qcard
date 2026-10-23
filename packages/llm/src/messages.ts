@@ -15,6 +15,11 @@ export class LlmOutputError extends Error {
   override name = 'LlmOutputError';
 }
 
+/** 응답이 제한 시간 안에 오지 않았다 (응답 오류의 한 종류 — 다시 물으면 될 수 있다) */
+export class LlmTimeoutError extends LlmOutputError {
+  override name = 'LlmTimeoutError';
+}
+
 /**
  * Claude Code를 쓸 수 없다(설치 안 됨·로그인 안 됨). 케이스 결함이 아니므로 Blocked가 아니라 Run을 멈추고
  * 실행자에게 해결 방법을 알린다 (F-EX-17).

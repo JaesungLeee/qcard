@@ -56,7 +56,12 @@ export async function pendingJobs(db: Firestore, uid: string): Promise<Job[]> {
 }
 
 /** 대기 → 생성 중. 다른 호스트(같은 사용자의 다른 PC)가 먼저 가져갔으면 undefined */
-export async function claimJob<J extends Job>(db: Firestore, job: J, host: string, now: string): Promise<J | undefined> {
+export async function claimJob<J extends Job>(
+  db: Firestore,
+  job: J,
+  host: string,
+  now: string,
+): Promise<J | undefined> {
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(jobRef(db, job));
     const current = snap.data() as J | undefined;

@@ -1,7 +1,7 @@
-import type { NetworkKind } from '@qcard/device';
+import { DeviceDisconnectedError, type NetworkKind } from '@qcard/device';
 import { ClaudeCodeSetupError, PlanLimitError, type UsageMeter } from '@qcard/llm';
 import type { CaseResult, PrepFlow, TestCase } from '@qcard/shared';
-import { clockOf, thought, type AgentEnv } from './env';
+import { clockOf, RunAbortedError, thought, type AgentEnv } from './env';
 import { runSteps } from './executor';
 import { judge } from './judge';
 import { settle, verifyPoints } from './verify';
@@ -167,7 +167,13 @@ async function runCaseInner(env: AgentEnv, input: RunCaseInput): Promise<CaseRes
     });
   } catch (e) {
     // 플랜 한도·Claude Code 로그인은 케이스 결함이 아니다. 판정하지 않고 Run을 일시정지하게 던진다 (F-EX-17)
-    if (e instanceof PlanLimitError || e instanceof ClaudeCodeSetupError) throw e;
+    if (
+      e instanceof PlanLimitError ||
+      e instanceof ClaudeCodeSetupError ||
+      e instanceof RunAbortedError ||
+      e instanceof DeviceDisconnectedError
+    )
+      throw e;
     // 서버 무응답·디바이스 연결 끊김 등 환경 오류 (F-EX-05)
     return result({ verdict: 'blocked', agentVerdict: 'blocked', blockedReason: `환경 오류: ${(e as Error).message}` });
   }

@@ -11,15 +11,19 @@ export function CasePanel({
   step,
   phase,
   verified,
+  prepText = '준비 — 앱 데이터 초기화 후 프로필·습관 준비 플로우 수행',
 }: {
   tc: TestCase;
-  step: ExecStep;
+  /** 지금 스텝. 없으면 준비 중 */
+  step?: ExecStep;
   phase: Phase;
   verified: number;
+  /** 준비 행 문구 */
+  prepText?: string;
 }) {
   const ended = phase === 'done' || phase === 'verifying';
-  const cur = ended ? tc.steps.length : step.caseStepIndex; // undefined = 준비 단계
-  const rows = [{ text: '준비 — 앱 데이터 초기화 후 프로필·습관 준비 플로우 수행', manual: false }, ...tc.steps];
+  const cur = ended ? tc.steps.length : step?.caseStepIndex; // undefined = 준비 단계
+  const rows = [{ text: prepText, manual: false }, ...tc.steps];
   return (
     <section className="qcc-card" aria-label="현재 케이스">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
@@ -110,8 +114,9 @@ export function CasePanel({
 
 /** 스텝 타임라인: 썸네일 · 액션 · 의도 (F-EX-06) */
 export function StepTimeline({ steps, current, ended }: { steps: ExecStep[]; current: number; ended: boolean }) {
-  const step = steps.find((s) => s.index === current) ?? steps[0]!;
-  const b = step.target?.bounds;
+  // 실시간에서는 케이스가 막 시작해 스텝이 아직 없을 수 있다
+  const step = steps.find((s) => s.index === current) ?? steps.at(-1);
+  const b = step?.target?.bounds;
   return (
     <section className="qcc-card" aria-label="스텝 타임라인">
       <div className="qcc-card-head">
@@ -143,48 +148,54 @@ export function StepTimeline({ steps, current, ended }: { steps: ExecStep[]; cur
           );
         })}
       </ol>
-      <dl className={`qcc-kv ${textClass('label1')}`} style={{ marginTop: 8 }}>
-        <dt>의도</dt>
-        <dd className={textClass('label1', 'medium')}>{step.intent}</dd>
-        <dt>액션</dt>
-        <dd>
-          {STEP_ACTION_LABEL[step.action]}
-          {step.target && (
+      {!step ? (
+        <p className={`${textClass('label1')} qcc-muted`} style={{ margin: '8px 0 0' }}>
+          Agent가 첫 액션을 준비하고 있습니다.
+        </p>
+      ) : (
+        <dl className={`qcc-kv ${textClass('label1')}`} style={{ marginTop: 8 }}>
+          <dt>의도</dt>
+          <dd className={textClass('label1', 'medium')}>{step.intent}</dd>
+          <dt>액션</dt>
+          <dd>
+            {STEP_ACTION_LABEL[step.action]}
+            {step.target && (
+              <>
+                {' · '}
+                {step.target.label}{' '}
+                {step.target.elementId && (
+                  <span className={`qcc-mono ${textClass('label2')} qcc-muted`}>{step.target.elementId}</span>
+                )}
+                {b && (
+                  <span className={`qcc-mono ${textClass('label2')} qcc-faint`}>
+                    {' '}
+                    ({fmtNumber(Math.round(b.x + b.w / 2))}, {fmtNumber(Math.round(b.y + b.h / 2))})
+                  </span>
+                )}
+              </>
+            )}
+          </dd>
+          {step.input && (
             <>
-              {' · '}
-              {step.target.label}{' '}
-              {step.target.elementId && (
-                <span className={`qcc-mono ${textClass('label2')} qcc-muted`}>{step.target.elementId}</span>
-              )}
-              {b && (
-                <span className={`qcc-mono ${textClass('label2')} qcc-faint`}>
-                  {' '}
-                  ({fmtNumber(Math.round(b.x + b.w / 2))}, {fmtNumber(Math.round(b.y + b.h / 2))})
-                </span>
-              )}
+              <dt>입력값</dt>
+              <dd className="qcc-mono">“{step.input}”</dd>
             </>
           )}
-        </dd>
-        {step.input && (
-          <>
-            <dt>입력값</dt>
-            <dd className="qcc-mono">“{step.input}”</dd>
-          </>
-        )}
-        {step.risk && (
-          <>
-            <dt>위험 액션</dt>
-            <dd>
-              <span className={`qcc-tag is-risk ${textClass('caption1', 'bold')}`}>{step.risk.kind}</span>{' '}
-              <span className={`${textClass('label2')} qcc-muted`}>
-                {step.risk.planned ? '케이스에 계획됨 · 사전 승인' : '계획에 없음 · 실행자 승인 필요'}
-              </span>
-            </dd>
-          </>
-        )}
-        <dt>영상 시점</dt>
-        <dd className="qcc-mono">{fmtTs(step.videoTs)}</dd>
-      </dl>
+          {step.risk && (
+            <>
+              <dt>위험 액션</dt>
+              <dd>
+                <span className={`qcc-tag is-risk ${textClass('caption1', 'bold')}`}>{step.risk.kind}</span>{' '}
+                <span className={`${textClass('label2')} qcc-muted`}>
+                  {step.risk.planned ? '케이스에 계획됨 · 사전 승인' : '계획에 없음 · 실행자 승인 필요'}
+                </span>
+              </dd>
+            </>
+          )}
+          <dt>영상 시점</dt>
+          <dd className="qcc-mono">{fmtTs(step.videoTs)}</dd>
+        </dl>
+      )}
     </section>
   );
 }

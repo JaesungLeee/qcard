@@ -16,13 +16,14 @@ export type Judgement = {
  * 아니면 확인필요로 둔다.
  */
 export function judge(
-  exec: Pick<ExecOutcome, 'status' | 'recoveries'>,
+  exec: Pick<ExecOutcome, 'status' | 'recoveries'> & { intervened?: boolean },
   points: PointResult[],
   retryLimit = 3,
 ): Judgement {
   const unmet: AutoConfirmCondition[] = [];
   if (points.length === 0 || points.some((p) => p.result !== 'match')) unmet.push('all_match');
   if (points.some((p) => p.method === 'vision')) unmet.push('tree_only');
+  if (exec.intervened) unmet.push('no_takeover');
   if (exec.recoveries > retryLimit) unmet.push('within_retry');
 
   const agentVerdict: Verdict =

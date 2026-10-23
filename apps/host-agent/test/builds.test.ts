@@ -145,12 +145,18 @@ describe('호스트: 사이클 빌드 설치 (F-DV-05·06)', () => {
     expect(device.installed).toHaveLength(1);
   });
 
-  it('저장 파일이 없는 빌드(시드)는 설치된 앱으로 진행한다', async () => {
+  it('저장 파일이 없는 빌드(시드)는 패키지가 달라도 설치된 앱으로 진행한다', async () => {
     const lead = as(PEOPLE.lead);
     const { build } = await lead.api.getCycle({ projectId: 'haru', cycleId: 'cycle-130-1' });
     const device = new FakeDevice(onboardingScenario());
     expect(
-      await ensureBuild({ storage: lead.storage, build, device, appPackage: build.packageName, cacheDir: tmpdir() }),
+      await ensureBuild({
+        storage: lead.storage,
+        build,
+        device,
+        appPackage: `${build.packageName}.qa`,
+        cacheDir: tmpdir(),
+      }),
     ).toEqual({ status: 'no_file' });
   });
 });

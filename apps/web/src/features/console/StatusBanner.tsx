@@ -1,26 +1,34 @@
-import type { ConsoleQueueItem } from '@qcard/fixtures';
-import type { ExecStep } from '@qcard/shared';
+import type { ConsoleControl, ConsoleQueueItem, ExecStep, Verdict } from '@qcard/shared';
 import { Button, Icons, VerdictBadge, textClass, token } from '@qcard/ui';
-import type { Dispatch, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { fmtTs } from '../../components/format';
-import { MANUAL_TIMEOUT_MS, type PlaybackAction, type PlaybackState } from './playback';
+import type { Phase } from './playback';
+
+/** 배너가 보는 상태 (재생·실시간 공용) */
+export type BannerView = {
+  phase: Phase;
+  verdict?: Verdict;
+  reason?: string;
+  /** 수동 스텝 남은 시간 (ms) */
+  manualLeftMs?: number;
+};
 
 /**
  * 실행자가 지금 해야 할 일. 수동 스텝 대기(F-EX-11)·Take over(F-DB-05)·검증·완료 상태를 본문 위에 크게 띄운다.
  * Agent가 혼자 진행 중일 때는 아무것도 그리지 않는다.
  */
 export function StatusBanner({
-  state,
-  dispatch,
+  view: state,
+  onControl,
   step,
   caseStepText,
   verified,
   pointCount,
   next,
 }: {
-  state: PlaybackState;
-  dispatch: Dispatch<PlaybackAction>;
-  step: ExecStep;
+  view: BannerView;
+  onControl: (a: ConsoleControl) => void;
+  step?: ExecStep;
   caseStepText?: string;
   verified: number;
   pointCount: number;
@@ -28,27 +36,27 @@ export function StatusBanner({
 }) {
   switch (state.phase) {
     case 'manual': {
-      const left = MANUAL_TIMEOUT_MS - state.waitMs;
+      const left = state.manualLeftMs ?? 0;
       return (
         <Banner
           tone="manual"
           icon={<Icons.IconPerson style={{ color: token('foreground-cautionary-primary') }} />}
           title="수동 스텝 — 디바이스에서 직접 수행해 주세요"
           action={
-            <Button variant="solid" color="primary" onClick={() => dispatch({ type: 'completeManual' })}>
+            <Button variant="solid" color="primary" onClick={() => onControl('completeManual')}>
               완료
             </Button>
           }
         >
-          <span className={textClass('body2-reading')}>{caseStepText ?? step.intent}</span>
+          <span className={textClass('body2-reading')}>{caseStepText ?? step?.intent}</span>
           <span className="qcc-manual-meta">
-            {step.risk && (
+            {step?.risk && (
               <span className={`qcc-tag is-risk ${textClass('caption1', 'bold')}`}>
                 <Icons.IconTriangleExclamation aria-hidden style={{ width: 12, height: 12 }} />
                 위험 액션 · {step.risk.kind}
               </span>
             )}
-            {step.risk?.planned && (
+            {step?.risk?.planned && (
               <span className={`${textClass('label2')} qcc-muted`}>
                 케이스 단계에 계획된 액션 — 케이스 승인으로 사전 승인됨, 추가 승인 없이 실행자가 직접 수행
               </span>
@@ -63,7 +71,9 @@ export function StatusBanner({
               />
               {fmtTs(left)} 남음
             </span>
-            <span className={`${textClass('label2')} qcc-muted`}>10분 안에 [완료]하지 않으면 Blocked 후 다음 케이스로</span>
+            <span className={`${textClass('label2')} qcc-muted`}>
+              10분 안에 [완료]하지 않으면 Blocked 후 다음 케이스로
+            </span>
           </span>
         </Banner>
       );
@@ -75,7 +85,7 @@ export function StatusBanner({
           icon={<Icons.IconPerson style={{ color: token('foreground-brand-primary') }} />}
           title="Take over 중 — Agent가 대기하고 있습니다"
           action={
-            <Button variant="solid" color="primary" onClick={() => dispatch({ type: 'returnToAgent' })}>
+            <Button variant="solid" color="primary" onClick={() => onControl('returnToAgent')}>
               Agent에 반환
             </Button>
           }

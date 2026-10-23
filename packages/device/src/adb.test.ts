@@ -5,7 +5,9 @@ import {
   isWifiSerial,
   parseDevices,
   parseImeTop,
+  isDisconnected,
   parseInstalledApp,
+  parseScreenState,
   parseWm,
   resolveAdb,
   type AdbExec,
@@ -197,5 +199,24 @@ describe('파서·이스케이프', () => {
   it('입력 텍스트: 공백은 %s, 셸 특수문자는 이스케이프, 한글은 거부', () => {
     expect(escapeInputText(`a b&c'd$(e)`)).toBe(`a%sb\\&c\\'d\\$\\(e\\)`);
     expect(() => escapeInputText('하루콩러버')).toThrow(UnsupportedInputError);
+  });
+});
+
+describe('parseScreenState', () => {
+  it('켜짐은 mWakefulness=Awake, 잠금은 isKeyguardShowing=true', () => {
+    const power = (w: string) => `Power Manager State:\n  mWakefulness=${w}\n  mWakefulnessChanging=false\n`;
+    const window = (k: boolean) => `    mShowingDream=false mDreamingLockscreen=${k}\n    isKeyguardShowing=${k}\n`;
+    expect(parseScreenState(power('Awake'), window(false))).toEqual({ awake: true, locked: false });
+    expect(parseScreenState(power('Dozing'), window(true))).toEqual({ awake: false, locked: true });
+    expect(parseScreenState(power('Asleep'), window(false))).toEqual({ awake: false, locked: false });
+  });
+});
+
+describe('isDisconnected', () => {
+  it('디바이스를 찾지 못하는 adb 오류만 연결 끊김으로 본다', () => {
+    expect(isDisconnected("adb: device 'R5CWB31DAVX' not found")).toBe(true);
+    expect(isDisconnected('error: device offline')).toBe(true);
+    expect(isDisconnected('adb: no devices/emulators found')).toBe(true);
+    expect(isDisconnected('Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE]')).toBe(false);
   });
 });

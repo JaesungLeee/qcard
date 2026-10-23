@@ -1,11 +1,26 @@
-import type { ClaudeCodeState, ConsoleDevice, ConsoleSession } from '@qcard/fixtures';
+import type { ClaudeCodeState, ConsoleDevice } from '@qcard/shared';
 import { Button, Icons, Menu, MenuContent, MenuItem, MenuList, MenuTrigger, textClass, token } from '@qcard/ui';
 import { Link } from 'react-router';
 import { ThemeSwitch } from '../../shell/AppShell';
 
+/** 상단 바가 보는 정보 (재생 세션·실시간 상태·홈 공용). 사이클은 Run 중일 때만 */
+export type TopBarInfo = {
+  projectId?: string;
+  cycleId?: string;
+  cycleName?: string;
+  build?: { version: string; buildNumber: number };
+  executor: string;
+  /** 없으면 연결된 디바이스 없음 */
+  device?: ConsoleDevice;
+  otherDevices?: ConsoleDevice[];
+  claudeCode: ClaudeCodeState;
+  /** 호스트 에이전트 연결 */
+  host: { connected: boolean; label: string };
+};
+
 /** 상단 바: 호스트 연결 · 사이클 · 빌드 · 디바이스 선택 · 대시보드로 (F-DV-03, F-DV-04) */
-export function TopBar({ session }: { session: ConsoleSession }) {
-  const { build } = session;
+export function TopBar({ session }: { session: TopBarInfo }) {
+  const { build, host } = session;
   return (
     <header className="qcc-top">
       <div className="qcc-brand">
@@ -16,27 +31,40 @@ export function TopBar({ session }: { session: ConsoleSession }) {
           style={{ background: token('surface-neutral-tertiary'), color: token('foreground-neutral-secondary') }}
           title="호스트 에이전트 연결 상태"
         >
-          <span className="qcc-dot" style={{ background: token('foreground-positive-primary') }} />
-          호스트 연결됨 · localhost:7420
+          <span
+            className="qcc-dot"
+            style={{
+              background: token(host.connected ? 'foreground-positive-primary' : 'foreground-negative-primary'),
+            }}
+          />
+          {host.connected ? `호스트 연결됨 · ${host.label}` : `호스트 연결 끊김 · ${host.label}`}
         </span>
         <ClaudeCodeChip state={session.claudeCode} />
       </div>
       <div className={`qcc-top-meta ${textClass('label1')}`}>
-        <span className={textClass('label1', 'medium')} style={{ color: token('foreground-neutral-primary') }}>
-          {session.cycleName}
-        </span>
-        <span className="qcc-top-sep" />
-        <span>
-          빌드 <span className="qcc-mono">{`${build.version} (${build.buildNumber})`}</span>
-        </span>
-        <span className="qcc-top-sep" />
-        <span>실행자 {session.run.executor}</span>
+        {session.cycleName && build && (
+          <>
+            <span className={textClass('label1', 'medium')} style={{ color: token('foreground-neutral-primary') }}>
+              {session.cycleName}
+            </span>
+            <span className="qcc-top-sep" />
+            <span>
+              빌드 <span className="qcc-mono">{`${build.version} (${build.buildNumber})`}</span>
+            </span>
+            <span className="qcc-top-sep" />
+          </>
+        )}
+        <span>실행자 {session.executor}</span>
       </div>
       <div className="qcc-top-right">
-        <DeviceMenu device={session.device} others={session.otherDevices} />
+        {session.device ? (
+          <DeviceMenu device={session.device} others={session.otherDevices ?? []} />
+        ) : (
+          <span className={`${textClass('label1')} qcc-muted`}>디바이스 연결 안 됨</span>
+        )}
         <Link
           className={`qcc-link ${textClass('label1', 'medium')}`}
-          to={`/p/${session.projectId}/cycles/${session.cycleId}`}
+          to={session.projectId && session.cycleId ? `/p/${session.projectId}/cycles/${session.cycleId}` : '/projects'}
         >
           대시보드에서 보기
           <Icons.IconArrowUpRight aria-hidden style={{ width: 16, height: 16 }} />

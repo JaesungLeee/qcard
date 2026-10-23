@@ -5,6 +5,7 @@ import {
   type DeviceDriver,
   type DeviceInfo,
   type InstalledApp,
+  type ScreenState,
   type NetworkKind,
   type Point,
   type SystemKey,
@@ -88,6 +89,8 @@ export class FakeDevice implements DeviceDriver {
   readonly installed: string[] = [];
   /** 설치된 앱 버전 (테스트가 정한다) */
   readonly apps: Record<string, InstalledApp> = {};
+  /** 화면 켜짐·잠금 (테스트가 바꾼다) */
+  display: ScreenState = { awake: true, locked: false };
   private focused?: string;
   private observedCurrent = false;
   /** 홈 키로 백그라운드에 간 앱의 화면. 다시 실행하면 여기로 돌아온다 */
@@ -232,6 +235,20 @@ export class FakeDevice implements DeviceDriver {
 
   async installedApp(pkg: string) {
     return this.apps[pkg];
+  }
+
+  /** 충전 중 화면 켜짐 유지 (테스트가 본다) */
+  stayOn = 0;
+  async stayOnWhilePlugged() {
+    return this.stayOn;
+  }
+  async setStayOnWhilePlugged(value: number) {
+    this.log.push(`stay-on ${value}`);
+    this.stayOn = value;
+  }
+
+  async screenState() {
+    return this.display;
   }
 
 

@@ -33,6 +33,9 @@ export const VERIFIER_SYSTEM = `너는 Android 앱 QA Verifier다. 화면(스크
 - observed에는 실제로 본 것을, reason에는 판정 근거를 쓴다. 근거 요소가 트리에 있으면 target_element에 번호를 쓴다.
 - 추측으로 match를 주지 않는다. 모든 포인트에 답한다.`;
 
+const EARLIER_NOTE =
+  '\n\n앞선 화면은 마지막 단계를 수행하며 본 화면이다. visible·text_exists·count는 토스트처럼 잠깐 뜨는 요소가 있으므로 어느 화면에서든 보이면 match다. 그 밖의 비교는 검증 시점 화면으로 판정한다.';
+
 const pointList = (points: VerificationPoint[]) =>
   points.map((p) => `- ${p.id} · 대상: ${p.target} · 비교: ${p.compare} · 기대: ${p.expected}`).join('\n');
 
@@ -218,6 +221,14 @@ export async function verifyPoints(
   }
 
   if (vision.length) {
+    // 잠깐 뜨는 요소(토스트)는 검증 시점 화면에서 이미 사라졌을 수 있다 — "보인다"류 포인트가 있으면
+    // 마지막 단계를 수행하며 본 다른 화면(최근 2장)의 스크린샷도 함께 보낸다
+    const earlier = vision.some((p) => p.compare === 'visible' || p.compare === 'text_exists' || p.compare === 'count')
+      ? evidence
+          .slice(0, -1)
+          .filter((o, i, all) => o.treeText !== at.treeText && all.findIndex((x) => x.treeText === o.treeText) === i)
+          .slice(-2)
+      : [];
     const res = await env.llm.create(
       {
         model: MODELS.verifier,
@@ -228,7 +239,8 @@ export async function verifyPoints(
           {
             role: 'user',
             content: [
-              { type: 'text', text: `검증 포인트:\n${pointList(vision)}` },
+              { type: 'text', text: `검증 포인트:\n${pointList(vision)}${earlier.length ? EARLIER_NOTE : ''}` },
+              ...earlier.flatMap((o) => observationBlocks(env, o, `[앞선 화면 · 관찰 ${o.index}]`, true)),
               ...observationBlocks(env, at, '[검증 시점 화면]', true),
             ],
           },

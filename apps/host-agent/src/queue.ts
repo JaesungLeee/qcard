@@ -7,6 +7,7 @@ import { join } from 'node:path';
  *
  *   <dir>/000042.json   작업 (보내면 지운다)
  *   <dir>/000042.png    업로드할 파일
+ *   <dir>/dropped/       대상 문서가 사라져 보낼 수 없는 작업 (예: 에뮬레이터 초기화로 Run 문서가 없어짐). 다음 작업으로 넘어간다
  */
 
 export type QueueOp =
@@ -31,6 +32,15 @@ export function isTransient(e: unknown): boolean {
   );
 }
 
+/** 고칠 문서가 없다 — 다시 해도 안 되고, 기다릴 이유도 없다 */
+export function isGone(op: QueueOp, e: unknown): boolean {
+  const code = (e as { code?: string }).code ?? '';
+  return (
+    op.type === 'update' &&
+    (code === 'not-found' || /NOT_FOUND|no entity to update/.test(String((e as Error).message ?? e)))
+  );
+}
+
 export class QueueFailedError extends Error {
   override name = 'QueueFailedError';
 }
@@ -44,8 +54,21 @@ export class UploadQueue {
   constructor(
     readonly dir: string,
     private readonly apply: ApplyOp,
-    private readonly opts: { retryMs?: number; maxRetryMs?: number; transient?: (e: unknown) => boolean } = {},
+    private readonly opts: {
+      retryMs?: number;
+      maxRetryMs?: number;
+      transient?: (e: unknown) => boolean;
+      /** 보낼 수 없어 뺀 작업 */
+      onDrop?: (op: QueueOp, reason: string) => void;
+    } = {},
   ) {}
+
+  /** 멈춘 큐를 다시 보내 본다 (새 Run을 시작할 때). 같은 오류면 다시 멈춘다 */
+  retry() {
+    if (!this.failure) return;
+    this.failure = undefined;
+    this.kick();
+  }
 
   /** 큐 폴더를 열고 남은 작업이 있으면 보내기 시작한다 */
   async open(): Promise<this> {
@@ -116,6 +139,12 @@ export class UploadQueue {
           await this.apply(op, file);
           break;
         } catch (e) {
+          if (isGone(op, e)) {
+            await mkdir(join(this.dir, 'dropped'), { recursive: true });
+            await rename(join(this.dir, `${id}.json`), join(this.dir, 'dropped', `${id}.json`));
+            this.opts.onDrop?.(op, (e as Error).message);
+            break;
+          }
           if (!transient(e)) {
             // 다시 해도 안 되는 오류(권한 등): 멈추고 알린다. 작업은 디스크에 남는다
             this.failure = new QueueFailedError(`업로드 실패 (${op.type} ${op.path}): ${(e as Error).message}`);
@@ -125,7 +154,7 @@ export class UploadQueue {
           wait = Math.min(wait * 2, this.opts.maxRetryMs ?? 30_000);
         }
       }
-      await rm(join(this.dir, `${id}.json`));
+      await rm(join(this.dir, `${id}.json`), { force: true });
       if (file) await rm(join(this.dir, `${id}.png`));
     }
   }

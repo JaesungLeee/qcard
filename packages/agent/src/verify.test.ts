@@ -156,6 +156,31 @@ describe('잠깐 뜨는 요소와 화면 안정화', () => {
     expect(JSON.stringify(llm.requests[0]!.messages)).toContain('[관찰 4] (마지막)');
     expect(JSON.stringify(llm.requests[0]!.messages)).toContain('o3.e6 Toast');
   });
+
+  it('비전 포인트도 "보인다"류면 앞선 화면 스크린샷을 함께 보낸다', async () => {
+    const device = new FakeDevice({ ...onboardingScenario(), start: 'invite-toast' });
+    const env = { device, appPackage: 'com.example.harukong', vision: true, clock: fakeClock() };
+    const withToast = await observe({ ...env, llm: scriptedLlm([]).client }, 'TC', 3);
+    const evidence = await settle({ ...env, llm: scriptedLlm([]).client }, { caseId: 'TC', evidence: [withToast], nextIndex: 4 });
+    const llm = scriptedLlm([json({ points: [{ point_id: 'T', result: 'match', observed: '토스트', reason: '앞선 화면', target_element: null }] })]);
+    const [r] = await verifyPoints(
+      { ...env, llm: llm.client },
+      { caseId: 'TC', evidence, points: [{ ...point('visible', '복사 완료 토스트가 뜬다', 'vision'), id: 'T' }] },
+    );
+    expect(r!.result).toBe('match');
+    const content = llm.requests[0]!.messages[0]!.content as { type: string; text?: string }[];
+    expect(content.filter((b) => b.type === 'image')).toHaveLength(2);
+    expect(content.map((b) => b.text ?? '').join('\n')).toMatch(/\[앞선 화면 · 관찰 3\][\s\S]*\[검증 시점 화면\]/);
+
+    // 화면 비교뿐이면 검증 시점 화면만
+    const only = scriptedLlm([json({ points: [{ point_id: 'S', result: 'match', observed: '', reason: '', target_element: null }] })]);
+    await verifyPoints(
+      { ...env, llm: only.client },
+      { caseId: 'TC', evidence, points: [{ ...point('screen', '메이트 초대 스텝', 'vision'), id: 'S' }] },
+    );
+    const c2 = only.requests[0]!.messages[0]!.content as { type: string }[];
+    expect(c2.filter((b) => b.type === 'image')).toHaveLength(1);
+  });
 });
 
 describe('판정 집계 (F-EX-04, F-RP-03)', () => {
@@ -176,6 +201,14 @@ describe('판정 집계 (F-EX-04, F-RP-03)', () => {
       verdict: 'check',
       agentVerdict: 'pass',
       unmet: ['tree_only'],
+    });
+  });
+
+  it('Take over·건너뛰기가 있었으면 Pass여도 확인필요로 둔다', () => {
+    expect(judge({ ...done, intervened: true }, [p('match')])).toMatchObject({
+      verdict: 'check',
+      agentVerdict: 'pass',
+      unmet: ['no_takeover'],
     });
   });
 
@@ -267,4 +300,5 @@ describe('runCase', () => {
       '준비 플로우 없음: pf-ghost',
     );
   });
+
 });

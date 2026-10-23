@@ -67,6 +67,14 @@ export interface DeviceDriver {
   installApk(path: string): Promise<void>;
   /** 설치된 앱 버전 (없으면 undefined). 읽기 전용 */
   installedApp(pkg: string): Promise<InstalledApp | undefined>;
+  /** 화면 켜짐·잠금 화면 여부. 읽기 전용. 꺼졌거나 잠겨 있으면 Agent가 앱에 닿지 못한다 */
+  screenState(): Promise<ScreenState>;
+  /**
+   * "충전 중 화면 켜짐 유지" (settings global stay_on_while_plugged_in: 0 = 끔, 1 AC·2 USB·4 무선의 합).
+   * Run 동안 켜서 화면이 꺼지며 잠기지 않게 하고, 끝나면 원래 값으로 되돌린다
+   */
+  stayOnWhilePlugged(): Promise<number>;
+  setStayOnWhilePlugged(value: number): Promise<void>;
 
   /** 환경 조작 (F-EX-16) */
   setNetwork(kind: NetworkKind, enabled: boolean): Promise<void>;
@@ -74,6 +82,7 @@ export interface DeviceDriver {
 }
 
 export type InstalledApp = { versionCode: number; versionName?: string };
+export type ScreenState = { awake: boolean; locked: boolean };
 
 export class DeviceError extends Error {
   override name = 'DeviceError';
@@ -88,4 +97,8 @@ export class EnvActionUnavailableError extends DeviceError {
 }
 export class UnsupportedInputError extends DeviceError {
   override name = 'UnsupportedInputError';
+}
+/** 디바이스 연결이 끊겼다 (케이스 결함이 아니다 → Run 일시정지, 다시 연결하면 이어서) */
+export class DeviceDisconnectedError extends DeviceError {
+  override name = 'DeviceDisconnectedError';
 }

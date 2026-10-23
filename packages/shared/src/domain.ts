@@ -312,6 +312,8 @@ export const StepAction = z.enum([
   'env',
   'manual',
   'verify',
+  'takeover',
+  'skip',
 ]);
 export type StepAction = z.infer<typeof StepAction>;
 export const STEP_ACTION_LABEL: Record<StepAction, string> = {
@@ -326,6 +328,8 @@ export const STEP_ACTION_LABEL: Record<StepAction, string> = {
   env: '환경 조작',
   manual: '수동',
   verify: '검증',
+  takeover: 'Take over',
+  skip: '건너뜀',
 };
 
 /** 스텝 타임라인 한 줄 (F-EX-06) */
@@ -440,7 +444,7 @@ export const Defect = z.object({
 export type Defect = z.infer<typeof Defect>;
 
 /** Run 일시정지 이유 (F-EX-13·17). 플랜 한도·로그인은 실행자의 Claude Code 상태 */
-export const PauseReason = z.enum(['executor', 'network', 'plan_limit', 'not_logged_in', 'claude_outdated']);
+export const PauseReason = z.enum(['executor', 'network', 'plan_limit', 'not_logged_in', 'claude_outdated', 'device_locked', 'device_disconnected']);
 export type PauseReason = z.infer<typeof PauseReason>;
 export const PAUSE_REASON_LABEL: Record<PauseReason, string> = {
   executor: '실행자',
@@ -448,6 +452,8 @@ export const PAUSE_REASON_LABEL: Record<PauseReason, string> = {
   plan_limit: '플랜 한도',
   not_logged_in: 'Claude Code 로그인 필요',
   claude_outdated: 'Claude Code 업데이트 필요',
+  device_locked: '디바이스 잠김',
+  device_disconnected: '디바이스 연결 끊김',
 };
 
 export const Run = z.object({

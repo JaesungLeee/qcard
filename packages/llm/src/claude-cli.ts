@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { canonicalJson } from './canonical';
-import { ClaudeCodeSetupError, LlmOutputError, PlanLimitError } from './messages';
+import { ClaudeCodeSetupError, LlmOutputError, LlmTimeoutError, PlanLimitError } from './messages';
 import type { LlmClient, LlmRequest, LlmResponse } from './types';
 
 /*
@@ -61,6 +61,9 @@ function toolProtocol(tools: Anthropic.Tool[]): string {
   ].join('\n');
 }
 
+/** 한 턴 응답을 기다리는 시간. 넘으면 그 호출은 실패하고 케이스는 Blocked */
+export const TURN_TIMEOUT_MS = 180_000;
+
 export function createClaudeCliLlm(
   options: {
     spawn?: CliSpawn;
@@ -91,17 +94,20 @@ export function createClaudeCliLlm(
       if (session) {
         content = toCliContent(last.content, session.toolNames);
       } else {
-        session = new Session(
+        const s: Session = new Session(
           spawnCli(cliArgs({ model: req.model, system, schema, effort })),
           config,
           options.idleMs ?? 60_000,
-          () => sessions.delete(session!),
+          () => sessions.delete(s),
         );
-        sessions.add(session);
-        content = req.messages.length === 1 ? toCliContent(last.content, session.toolNames) : transcript(req.messages);
+        sessions.add(s);
+        session = s;
+        // 새 프로세스에는 대화 전체를 보낸다
+        content = req.messages.length === 1 ? toCliContent(last.content, s.toolNames) : transcript(req.messages);
       }
 
-      const timeout = options.turnTimeoutMs ?? 180_000;
+      const timeout = options.turnTimeoutMs ?? TURN_TIMEOUT_MS;
+      // 응답이 없으면 다시 묻지 않는다 — 그 케이스는 사유와 함께 Blocked로 넘어간다
       let r = await session.turn(content, timeout);
       let blocks: Anthropic.ContentBlock[];
       try {
@@ -162,7 +168,11 @@ class Session {
       const timer = setTimeout(
         () =>
           this.settle((w) =>
-            w.reject(new LlmOutputError(`Claude Code 응답이 ${timeoutMs / 1000}초 안에 오지 않았습니다`)),
+            w.reject(
+              new LlmTimeoutError(
+                `이 PC의 Claude Code가 ${Math.round(timeoutMs / 1000)}초 동안 응답하지 않았습니다 (Claude Code·네트워크 상태를 확인하세요)`,
+              ),
+            ),
           ),
         timeoutMs,
       );

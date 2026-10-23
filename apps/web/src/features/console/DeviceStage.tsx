@@ -1,13 +1,12 @@
-import type { ExecStep } from '@qcard/shared';
+import type { ConsoleControl } from '@qcard/shared';
 import { Icons, textClass, token } from '@qcard/ui';
-import { useEffect, useState, type Dispatch, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { fmtTs } from '../../components/format';
-import { MockScreen } from '../../mock/MockScreen';
 import { PhaseChip } from './meta';
-import { elapsedMs, type PlaybackAction, type PlaybackState } from './playback';
+import type { Phase } from './playback';
 
 /** 디바이스 화면 너비: 데스크톱은 화면 높이에 맞춰 280~360px, 좁은 폭은 가용 너비 */
-function useScreenWidth() {
+export function useScreenWidth() {
   const calc = () => {
     if (typeof window === 'undefined') return 360;
     const w = window.innerWidth;
@@ -25,35 +24,41 @@ function useScreenWidth() {
   return width;
 }
 
-/** 가운데: 라이브 디바이스 화면 + 액션 오버레이 + 제어 (F-DB-01·02·03·05) */
+/** 가운데: 디바이스 화면 + 상태 줄 + 제어 (F-DB-01·02·03·05). 화면은 재생(목업)·실시간(영상)이 채운다 */
 export function DeviceStage({
-  step,
-  afterScreen,
+  phase,
+  elapsedMs,
+  stepNo,
   stepCount,
-  state,
-  dispatch,
+  canSkip,
+  onControl,
+  screen,
+  note,
 }: {
-  step: ExecStep;
-  /** 케이스가 끝난 뒤 보일 화면 (수동 스텝 이후 화면은 fixture에 없어 앞 화면으로 대신한다) */
-  afterScreen?: ExecStep['screenshot'];
-  stepCount: number;
-  state: PlaybackState;
-  dispatch: Dispatch<PlaybackAction>;
+  phase: Phase;
+  /** 케이스 경과 시간 */
+  elapsedMs: number;
+  stepNo: number;
+  /** 모르면 없음 (실시간은 Agent가 몇 스텝을 쓸지 미리 모른다) */
+  stepCount?: number;
+  /** 지금 스텝을 건너뛸 수 있는가 (수동 스텝은 [완료]로) */
+  canSkip: boolean;
+  onControl: (a: ConsoleControl) => void;
+  /** 화면 너비(px)를 받아 화면을 그린다 */
+  screen: (width: number) => ReactNode;
+  /** 상태 줄 아래 한 줄 안내 (예: 화면 켜짐 유지 중) */
+  note?: ReactNode;
 }) {
   const width = useScreenWidth();
-  const { phase } = state;
   const active = phase === 'running' || phase === 'paused';
   const ended = phase === 'done' || phase === 'aborted';
-  const closed = phase === 'done' || phase === 'verifying';
-  // 액션 오버레이는 Agent가 누르려는 순간에만 보인다 (수동·Take over 중에는 사람이 조작한다)
-  const overlay = (phase === 'running' || phase === 'paused') && step.action !== 'manual' ? step : undefined;
   return (
     <section className="qcc-card qcc-device" aria-label="디바이스 화면">
       <div className="qcc-device-status">
         <PhaseChip phase={phase} />
         <span className={`${textClass('label2', 'medium')} qcc-mono`}>
-          스텝 {step.index}
-          <span className="qcc-faint">/{stepCount}</span>
+          스텝 {stepNo}
+          {stepCount !== undefined && <span className="qcc-faint">/{stepCount}</span>}
         </span>
         <span
           className={`${textClass('label2', 'medium')} qcc-mono`}
@@ -61,44 +66,53 @@ export function DeviceStage({
           style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
         >
           <Icons.IconClock aria-hidden style={{ width: 14, height: 14, color: token('foreground-neutral-tertiary') }} />
-          {fmtTs(elapsedMs(state))}
+          {fmtTs(elapsedMs)}
         </span>
       </div>
+      {note && (
+        <div
+          className={`${textClass('caption1', 'medium')} qcc-muted`}
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 4,
+            marginBottom: 8,
+            minWidth: 0,
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {note}
+        </div>
+      )}
       <div style={{ position: 'relative' }}>
-        {/* 실제 제품에서는 호스트 에이전트가 scrcpy(ADB) H.264 스트림을 보내고, 브라우저에서 디코딩한
-            <video>/<canvas>가 이 MockScreen 자리를 대신한다 (F-DB-01). 오버레이는 그 위에 같은 좌표계로 그린다. */}
-        <MockScreen screenshot={afterScreen && closed ? afterScreen : step.screenshot} width={width} action={overlay} label={`${step.index}번 스텝 화면`} />
+        {screen(width)}
         {phase === 'takeover' && <ScreenNote icon={<Icons.IconPerson />}>실행자 조작 중 — Agent 대기</ScreenNote>}
         {phase === 'manual' && <ScreenNote icon={<Icons.IconPerson />}>실행자 조작 대기</ScreenNote>}
         {phase === 'done' && <ScreenNote icon={<Icons.IconHourglass />}>다음 케이스 준비 중</ScreenNote>}
       </div>
       <div className="qcc-controls" role="toolbar" aria-label="실행 제어">
         {phase === 'paused' ? (
-          <Ctl icon={<Icons.IconPlay />} onClick={() => dispatch({ type: 'resume' })} on>
+          <Ctl icon={<Icons.IconPlay />} onClick={() => onControl('resume')} on>
             재개
           </Ctl>
         ) : (
-          <Ctl icon={<Icons.IconPause />} onClick={() => dispatch({ type: 'pause' })} disabled={phase !== 'running'}>
+          <Ctl icon={<Icons.IconPause />} onClick={() => onControl('pause')} disabled={phase !== 'running'}>
             일시정지
           </Ctl>
         )}
-        <Ctl
-          icon={<Icons.IconChevronDoubleRight />}
-          onClick={() => dispatch({ type: 'skip' })}
-          disabled={!active || step.action === 'manual'}
-        >
+        <Ctl icon={<Icons.IconChevronDoubleRight />} onClick={() => onControl('skip')} disabled={!active || !canSkip}>
           스텝 건너뛰기
         </Ctl>
         {phase === 'takeover' ? (
-          <Ctl icon={<Icons.IconAgent />} onClick={() => dispatch({ type: 'returnToAgent' })} on>
+          <Ctl icon={<Icons.IconAgent />} onClick={() => onControl('returnToAgent')} on>
             Agent에 반환
           </Ctl>
         ) : (
-          <Ctl icon={<Icons.IconPerson />} onClick={() => dispatch({ type: 'takeOver' })} disabled={!active}>
+          <Ctl icon={<Icons.IconPerson />} onClick={() => onControl('takeOver')} disabled={!active}>
             Take over
           </Ctl>
         )}
-        <Ctl icon={<Icons.IconSquareFill />} onClick={() => dispatch({ type: 'abort' })} disabled={ended} danger>
+        <Ctl icon={<Icons.IconSquareFill />} onClick={() => onControl('abort')} disabled={ended} danger>
           중단
         </Ctl>
       </div>

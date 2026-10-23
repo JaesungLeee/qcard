@@ -35,6 +35,43 @@ describe('UploadQueue (F-EX-13)', () => {
     expect(readdirSync(d).filter((f) => f.endsWith('.json'))).toHaveLength(1);
   });
 
+  it('고칠 문서가 사라진 작업(에뮬레이터 초기화 등)은 dropped로 빼고 다음 작업을 보낸다', async () => {
+    const d = dir();
+    const gone = Object.assign(new Error('5 NOT_FOUND: no entity to update'), { code: 'not-found' });
+    const sent: string[] = [];
+    const dropped: string[] = [];
+    const q = await new UploadQueue(
+      d,
+      async (op) => {
+        if (op.type === 'update') throw gone;
+        sent.push(op.path);
+      },
+      { retryMs: 5, onDrop: (op) => dropped.push(op.path) },
+    ).open();
+    await q.enqueue({ type: 'update', path: 'runs/old', data: { status: 'done' } });
+    await q.enqueue(set(2));
+    expect(await q.drain()).toBe(0);
+    expect([sent, dropped]).toEqual([['docs/2'], ['runs/old']]);
+    expect(readdirSync(join(d, 'dropped'))).toEqual(['000001.json']);
+  });
+
+  it('멈춘 큐는 retry()로 다시 보낸다 (권한을 고친 뒤 새 Run)', async () => {
+    const denied = Object.assign(new Error('Missing or insufficient permissions'), { code: 'permission-denied' });
+    let allowed = false;
+    const q = await new UploadQueue(
+      dir(),
+      async () => {
+        if (!allowed) throw denied;
+      },
+      { retryMs: 5 },
+    ).open();
+    await q.enqueue(set(1));
+    await expect(q.drain()).rejects.toBeInstanceOf(QueueFailedError);
+    allowed = true;
+    q.retry();
+    expect(await q.drain()).toBe(0);
+  });
+
   it('보내지 못한 작업은 다음 실행(새 큐)이 이어서 보낸다 — 파일 포함', async () => {
     const d = dir();
     const first = await new UploadQueue(d, () => Promise.reject(offline), { retryMs: 5 }).open();

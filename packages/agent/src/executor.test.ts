@@ -2,7 +2,7 @@ import { FakeDevice } from '@qcard/device';
 import { onboardingScenario } from '@qcard/fixtures';
 import { SecretVault, UsageMeter, withSecretGuard, withUsage } from '@qcard/llm';
 import { describe, expect, it } from 'vitest';
-import { fakeClock, type AgentEnv } from './env';
+import { fakeClock, RunAbortedError, type AgentEnv, type ControlSignal, type RunControl } from './env';
 import { runSteps } from './executor';
 import { scriptedLlm, text, toolUse } from './testing';
 
@@ -56,6 +56,17 @@ describe('Executor 루프', () => {
     const first = JSON.stringify(llm.requests[0]!.messages[0]);
     expect(first).toContain('0. 닉네임 `콩콩이` 입력');
     expect(first).toContain('id=profile_save');
+  });
+
+  it('끝 단계가 기다리기뿐이면 마지막으로 조작한 단계의 화면부터 근거로 남긴다 (조작 뒤 잠깐 뜬 토스트)', async () => {
+    const { env } = setup('invite', [
+      [toolUse('tap', { element_ref: 'invite_copy', intent: '복사' })],
+      [toolUse('step_done', { case_step_index: 0, summary: '복사함' })],
+      [toolUse('wait', { seconds: 2, intent: '기다림' })],
+      [toolUse('step_done', { case_step_index: 1, summary: '기다림' })],
+    ]);
+    const r = await runSteps(env, { caseId: 'TC-1', steps: steps('[복사]를 누른다', '2초 기다린다'), context: '' });
+    expect(r.evidence.map((o) => o.tree.some((e) => e.resourceId === 'toast'))).toEqual([true, false]);
   });
 
   it('대화는 덧붙이기만 한다 (앞 턴이 그대로 남아 캐시 접두어가 유지된다)', async () => {
@@ -303,5 +314,76 @@ describe('Executor 루프', () => {
     expect(device.state.values.profile_nickname).toBe('비밀닉네임');
     expect(r.steps[0]!.input).toBe('{{secret.nick}}');
     expect(JSON.stringify(llm.requests)).not.toContain('비밀닉네임');
+  });
+});
+
+/** 정해 둔 순서대로 제어 신호를 내는 실행자 (턴 사이마다 하나씩, 다 쓰면 continue) */
+function scriptedControl(signals: ControlSignal[], interruptedAt: number[] = []): RunControl & { calls: number } {
+  let checks = 0;
+  let asks = 0;
+  return {
+    get calls() {
+      return checks;
+    },
+    interrupted: () => interruptedAt.includes(asks++),
+    checkpoint: async () => signals[checks++] ?? 'continue',
+  };
+}
+
+describe('실행자 제어 (F-DB-05)', () => {
+  it('Take over 뒤에는 화면을 다시 관찰하고, 타임라인·개입 표시를 남긴다', async () => {
+    const { llm, env } = setup('profile', [
+      [toolUse('input_text', { element_ref: 'profile_nickname', text: '콩콩이', intent: '닉네임 입력' })],
+      [toolUse('step_done', { case_step_index: 0, summary: '입력함' })],
+    ]);
+    const steps_: string[] = [];
+    const r = await runSteps(
+      { ...env, control: scriptedControl(['continue', 'took_over']), onStep: (s) => steps_.push(s.action) },
+      { caseId: 'TC-1', steps: steps('닉네임 `콩콩이` 입력'), context: '' },
+    );
+    expect(r.status).toBe('done');
+    expect(r.intervened).toBe(true);
+    expect(r.steps.map((s) => s.action)).toEqual(['input', 'takeover']);
+    expect(steps_).toEqual(['input', 'takeover']);
+    expect(JSON.stringify(llm.requests[1]!.messages.at(-1))).toContain('Take over로 디바이스를 직접 조작한 뒤');
+  });
+
+  it('건너뛰기는 지금 단계를 끝난 것으로 넘긴다', async () => {
+    const { device, llm, env } = setup('profile', [
+      [toolUse('input_text', { element_ref: 'profile_nickname', text: '콩콩이', intent: '닉네임 입력' })],
+      [toolUse('step_done', { case_step_index: 1, summary: '입력함' })],
+    ]);
+    const r = await runSteps(
+      { ...env, control: scriptedControl(['skip']) },
+      { caseId: 'TC-1', steps: steps('사진을 고른다', '닉네임 `콩콩이` 입력'), context: '' },
+    );
+    expect(r.status).toBe('done');
+    expect(r.intervened).toBe(true);
+    expect(r.steps.map((s) => [s.action, s.caseStepIndex])).toEqual([
+      ['skip', 0],
+      ['input', 1],
+    ]);
+    expect(device.log).toContain('input 콩콩이');
+    expect(JSON.stringify(llm.requests[0]!.messages[0])).toContain('단계 0(\\"사진을 고른다\\")를 건너뛰었다');
+  });
+
+  it('개입을 누른 사이 Agent가 고른 액션은 실행하지 않는다', async () => {
+    const { device, env } = setup('profile', [
+      [toolUse('tap', { element_ref: 'profile_save', intent: '저장' })],
+      [toolUse('give_up', { kind: 'stuck', reason: '멈춤' })],
+    ]);
+    const r = await runSteps(
+      { ...env, control: scriptedControl([], [0]) },
+      { caseId: 'TC-1', steps: steps('[저장]'), context: '' },
+    );
+    expect(device.current).toBe('profile');
+    expect(r.steps).toEqual([]);
+  });
+
+  it('중단하면 RunAbortedError를 던진다', async () => {
+    const { env } = setup('profile', []);
+    await expect(
+      runSteps({ ...env, control: scriptedControl(['abort']) }, { caseId: 'TC-1', steps: steps('[저장]'), context: '' }),
+    ).rejects.toBeInstanceOf(RunAbortedError);
   });
 });

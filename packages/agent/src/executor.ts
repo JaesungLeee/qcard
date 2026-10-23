@@ -2,6 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import {
   center,
   childLabels,
+  DeviceDisconnectedError,
   DeviceError,
   EnvActionUnavailableError,
   findElement,
@@ -25,6 +26,7 @@ import {
   imageBlock,
   observationBlocks,
   observe,
+  RunAbortedError,
   screenshotBlocker,
   thought,
   type AgentEnv,
@@ -59,9 +61,12 @@ export type ExecOutcome = {
   stepsDone: number;
   /** 디바이스 액션 실패 후 다시 시도한 횟수 (자가 복구) */
   recoveries: number;
+  /** 실행자가 Take over·스텝 건너뛰기로 개입했는가 (F-RP-03 ③) */
+  intervened: boolean;
   /** 마지막 액션 뒤의 화면 = 검증 시점 화면 */
   last: Observation;
-  /** 마지막 단계를 수행하며 본 화면들 (토스트처럼 잠깐 뜨는 요소의 근거). 없으면 [last] */
+  /** 마지막 단계를 수행하며 본 화면들 (토스트처럼 잠깐 뜨는 요소의 근거). 없으면 [last].
+   *  끝 단계들이 기다리기·확인뿐이면 마지막으로 조작한 단계부터 (조작 뒤 뜬 토스트가 대기 단계에서 사라진다) */
   evidence: Observation[];
   /** 다음 관찰 번호 (스크린샷 이름이 겹치지 않게) */
   nextIndex: number;
@@ -104,6 +109,8 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
   let obsIndex = input.firstIndex ?? 0;
   /** 단계 번호 → 그 단계에서 액션 뒤에 본 화면 */
   const seenByStep = new Map<number, Observation[]>();
+  /** 기다리기 말고 디바이스를 조작한 단계 번호 */
+  const operated = new Set<number>();
   const look = async () => {
     const o = await observe(env, caseId, obsIndex++);
     seenByStep.set(pointer, [...(seenByStep.get(pointer) ?? []), o]);
@@ -114,12 +121,29 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
 
   const outcome = (status: ExecOutcome['status'], reason?: string): ExecOutcome => {
     if (reason) thought(env, start, 'system', `${status === 'fail' ? 'Fail' : 'Blocked'}: ${reason}`);
-    const evidence = seenByStep.get(steps.length - 1) ?? [last];
-    return { status, reason, steps: timeline, stepsDone: pointer, recoveries, last, evidence, nextIndex: obsIndex };
+    let from = steps.length - 1;
+    while (from > 0 && !operated.has(from)) from--;
+    if (!operated.has(from)) from = steps.length - 1;
+    const seen = Array.from({ length: steps.length - from }, (_, i) => seenByStep.get(from + i) ?? []).flat();
+    const evidence = seen.length ? seen : [last];
+    return {
+      status,
+      reason,
+      steps: timeline,
+      stepsDone: pointer,
+      recoveries,
+      intervened,
+      last,
+      evidence,
+      nextIndex: obsIndex,
+    };
   };
   // videoTs: Run 영상 시점 (ms)
-  const record = (s: Omit<ExecStep, 'index' | 'videoTs' | 'caseStepIndex'>, at: number) =>
-    timeline.push({ ...s, index: timeline.length, videoTs: at - start, caseStepIndex: pointer });
+  const record = (s: Omit<ExecStep, 'index' | 'videoTs' | 'caseStepIndex'>, at: number) => {
+    const step: ExecStep = { ...s, index: timeline.length, videoTs: at - start, caseStepIndex: pointer };
+    timeline.push(step);
+    env.onStep?.(step);
+  };
   const progress = () =>
     pointer < steps.length ? `진행: 단계 ${pointer} 수행 중 — "${steps[pointer]!.text}"` : '진행: 모든 단계 끝';
 
@@ -140,9 +164,41 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
     return undefined;
   }
 
+  /**
+   * 실행자 제어 (F-DB-05). 턴 사이에 부른다: 일시정지·Take over면 풀릴 때까지 기다리고, Take over 뒤에는 화면을
+   * 다시 관찰한다. 건너뛰기는 지금 단계를 끝난 것으로 넘긴다. 끝내야 하면 결과를 돌려준다
+   */
+  let intervened = false;
+  async function control(): Promise<ExecOutcome | undefined> {
+    if (!env.control) return undefined;
+    const at = clock.now();
+    const signal = await env.control.checkpoint();
+    if (signal === 'continue') return undefined;
+    if (signal === 'abort') throw new RunAbortedError('실행자가 Run을 중단했습니다');
+    intervened = true;
+    if (signal === 'took_over') {
+      record({ action: 'takeover', intent: '실행자가 직접 조작', screenshot: last.screenshot, durationMs: clock.now() - at }, at);
+      thought(env, start, 'system', 'Take over: 실행자가 조작한 뒤 Agent에 반환');
+      notes.push('실행자가 Take over로 디바이스를 직접 조작한 뒤 돌려줬다. 지금 화면에서 이어 간다.');
+    } else {
+      const skipped = steps[pointer]!;
+      record({ action: 'skip', intent: `단계 ${pointer} 건너뜀: ${skipped.text}`, screenshot: last.screenshot, durationMs: 0 }, at);
+      thought(env, start, 'system', `실행자가 단계 ${pointer}를 건너뜀`);
+      notes.push(`실행자가 단계 ${pointer}("${skipped.text}")를 건너뛰었다. 끝난 것으로 보고 다음 단계로 간다.`);
+      pointer++;
+      const manualFail = await handleManual();
+      if (manualFail) return outcome('blocked', manualFail);
+      if (pointer >= steps.length) return outcome('done');
+    }
+    last = await look();
+    return undefined;
+  }
+
   const manualFail = await handleManual();
   if (manualFail) return outcome('blocked', manualFail);
   if (pointer >= steps.length) return outcome('done');
+  const first = await control();
+  if (first) return first;
 
   const stepList = steps.map((s, i) => `${i}. ${s.manual ? '(수동) ' : ''}${s.text}`).join('\n');
   const messages: Anthropic.MessageParam[] = [
@@ -243,6 +299,11 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
         results.push(err(use.id, '한 턴에 액션은 하나만 합니다. 결과 화면을 보고 다시 정하세요.'));
         continue;
       }
+      // 실행자가 개입을 눌렀으면 Agent가 고른 액션은 실행하지 않는다 (사람이 조작하는 중에 누르지 않게)
+      if (env.control?.interrupted()) {
+        results.push(err(use.id, '실행자 개입으로 이 액션은 수행하지 않았습니다. 화면을 다시 보고 정하세요.'));
+        continue;
+      }
       acted = true;
 
       // 같은 화면에서 같은 액션 반복 감지 (F-EX-12)
@@ -256,6 +317,7 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
       try {
         const step = await act(env, call, last, info.size);
         record({ ...step, screenshot: before, durationMs: clock.now() - at }, at);
+        if (call.name !== 'wait') operated.add(pointer);
         thought(env, start, 'act', `${call.name} · ${step.intent}`);
         await clock.sleep(env.settleMs ?? 500);
         last = await look();
@@ -264,6 +326,8 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
         if (e instanceof EnvActionUnavailableError || e instanceof UnsupportedInputError) {
           return outcome('blocked', `환경 조작 불가: ${e.message}`);
         }
+        // 연결이 끊기면 다시 해도 소용없다 — Run을 일시정지하게 올린다
+        if (e instanceof DeviceDisconnectedError) throw e;
         if (!(e instanceof DeviceError || e instanceof ActionInputError)) throw e;
         recoveries++;
         thought(env, start, 'recover', `액션 실패: ${e.message}`);
@@ -273,6 +337,8 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
     }
 
     if (pointer >= steps.length) return outcome('done');
+    const controlled = await control();
+    if (controlled) return controlled;
     messages.push({
       role: 'user',
       content: [

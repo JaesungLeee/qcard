@@ -1,6 +1,7 @@
 import { Navigate, createBrowserRouter } from 'react-router';
 import { UiCatalog } from './dev/UiCatalog';
 import { ConsolePage } from './features/console';
+import { LiveConsolePage } from './features/console/live';
 import { InvitePage, NewProjectPage, ProjectListPage, ProjectSettingsPage } from './features/projects';
 import { NewQaDocPage, PrepFlowPage, QaDocListPage, QaDocReviewPage } from './features/qa-doc';
 import { CycleListPage, NewCyclePage, QaSheetPage, TracePage } from './features/qa-sheet';
@@ -33,5 +34,6 @@ export const router = createBrowserRouter([
     ],
   },
   { path: '/console', element: <ConsolePage /> },
+  { path: '/console/live', element: <LiveConsolePage /> },
   { path: '/__ui', element: <UiCatalog /> },
 ]);

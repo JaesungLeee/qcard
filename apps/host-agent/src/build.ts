@@ -32,12 +32,13 @@ export async function ensureBuild(opts: {
 }): Promise<EnsureBuildResult> {
   const { build, device } = opts;
   const log = opts.log ?? (() => {});
+  // 저장 파일이 없는 빌드(시드)는 설치하지 않으므로 패키지도 맞춰 보지 않는다
+  if (!build.storagePath || !build.fileSha256) return { status: 'no_file' };
   if (build.packageName !== opts.appPackage) {
     throw new BuildInstallError(
       `사이클 빌드의 패키지(${build.packageName})가 실행할 앱(${opts.appPackage})과 다릅니다. --package를 확인하세요`,
     );
   }
-  if (!build.storagePath || !build.fileSha256) return { status: 'no_file' };
 
   const installed = await device.installedApp(build.packageName);
   if (installed?.versionCode === build.buildNumber) {

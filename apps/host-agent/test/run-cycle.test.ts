@@ -4,7 +4,7 @@ import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/
 import { fakeClock } from '@qcard/agent';
 import { createFirebaseApi, writeAll } from '@qcard/data/firebase';
 import { seedDocs } from '@qcard/data/seed';
-import { FakeDevice } from '@qcard/device';
+import { DeviceDisconnectedError, FakeDevice } from '@qcard/device';
 import { APP_PACKAGE, GITHUB, onboardingScenario, PEOPLE } from '@qcard/fixtures';
 import { createLlm, PlanLimitError, UsageMeter, type LlmClient } from '@qcard/llm';
 import { doc, getDoc, setLogLevel, type Firestore } from 'firebase/firestore';
@@ -12,7 +12,8 @@ import { getBytes, ref, type FirebaseStorage } from 'firebase/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { firestoreApply, runCycle, runSink, UploadQueue, type RunTarget } from '../src';
+import type { ConsoleHome, ConsoleServerMessage } from '@qcard/shared';
+import { ConsoleService, firestoreApply, runCycle, runSink, UploadQueue, type RunTarget } from '../src';
 
 /*
  * 호스트 에이전트 실행 → Firestore·Storage 업로드를 에뮬레이터·보안 규칙 위에서 확인한다.
@@ -55,7 +56,7 @@ async function host(name: string, runId = 'run-host-1') {
   const queue = await new UploadQueue(mkdtempSync(join(tmpdir(), 'qcard-queue-')), firestoreApply(db, storage), {
     retryMs: 50,
   }).open();
-  return { db, api, sink: runSink(queue, target), queue };
+  return { db, storage, api, sink: runSink(queue, target), queue };
 }
 
 /** 케이스마다 녹화 폴더가 다르다 (packages/agent e2e와 같은 녹화를 재생) */
@@ -63,8 +64,8 @@ const replay: LlmClient = {
   create: (req, meta) => createLlm({ mode: 'replay', cassetteDir: join(CASSETTES, meta.caseId!) }).create(req, meta),
 };
 
-const agentEnv = (llm: LlmClient) => ({
-  device: new FakeDevice(onboardingScenario()),
+const agentEnv = (llm: LlmClient, device = new FakeDevice(onboardingScenario())) => ({
+  device,
   llm,
   appPackage: APP_PACKAGE,
   clock: fakeClock(Date.UTC(2026, 9, 20)),
@@ -120,6 +121,105 @@ describe('runCycle → Firestore·Storage', () => {
     expect(runs.find((r) => r.id === 'run-host-2')).toMatchObject({ status: 'paused', pauseReason: 'plan_limit' });
   });
 
+  it('디바이스가 잠겨 있으면 LLM을 부르지 않고 Run을 일시정지한다', async () => {
+    const { db, api, sink } = await host(PEOPLE.lead, 'run-host-4');
+    const device = new FakeDevice(onboardingScenario());
+    device.display = { awake: false, locked: true };
+    const never: LlmClient = { create: () => Promise.reject(new Error('부르면 안 된다')) };
+    const out = await runCycle({
+      api,
+      sink,
+      env: agentEnv(never, device),
+      ...REF,
+      deviceId: DEVICE,
+      runId: 'run-host-4',
+    });
+    expect(out).toMatchObject({ status: 'paused', reason: 'device_locked', results: [] });
+    expect(out.status === 'paused' && out.message).toContain('꺼져');
+    const run = (await getDoc(doc(db, 'projects/haru/cycles/cycle-130-1/runs/run-host-4'))).data();
+    expect(run).toMatchObject({ status: 'paused', pauseReason: 'device_locked' });
+  });
+
+  it('실행 중 잠겨 Blocked로 끝난 케이스는 결과를 버리고 일시정지한다 (재개하면 그 케이스부터)', async () => {
+    const { api, sink } = await host(PEOPLE.lead, 'run-host-5');
+    const device = new FakeDevice(onboardingScenario());
+    // 첫 호출 때 화면이 잠기고, Agent는 진행할 수 없다며 멈춘다
+    const lockAndGiveUp: LlmClient = {
+      create: async (req) => {
+        device.display = { awake: true, locked: true };
+        return {
+          id: 'm',
+          type: 'message',
+          role: 'assistant',
+          model: req.model,
+          content: [{ type: 'tool_use', id: 't1', name: 'give_up', input: { kind: 'stuck', reason: '잠금 화면' } }],
+          stop_reason: 'tool_use',
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 1 },
+        } as never;
+      },
+    };
+    const before = (await api.getCycle(REF)).results.find(
+      (r) => r.tcId === 'TC-ONBOARDING-004' && r.deviceId === DEVICE,
+    );
+    const out = await runCycle({
+      api,
+      sink,
+      env: agentEnv(lockAndGiveUp, device),
+      ...REF,
+      deviceId: DEVICE,
+      runId: 'run-host-5',
+      tcIds: ['TC-ONBOARDING-004'],
+    });
+    expect(out).toMatchObject({ status: 'paused', reason: 'device_locked', results: [] });
+    expect(out.status === 'paused' && out.message).toContain('TC-ONBOARDING-004 실행 중');
+    const after = (await api.getCycle(REF)).results.find(
+      (r) => r.tcId === 'TC-ONBOARDING-004' && r.deviceId === DEVICE,
+    );
+    expect(after).toEqual(before);
+  });
+
+  it('실행 중 디바이스 연결이 끊기면 그 케이스 결과는 버리고 "연결 끊김"으로 일시정지한다', async () => {
+    const { api, sink } = await host(PEOPLE.lead, 'run-host-6');
+    const device = new FakeDevice(onboardingScenario());
+    // 첫 액션(탭)에서 USB가 빠진다
+    device.tap = () => Promise.reject(new DeviceDisconnectedError('디바이스 연결이 끊겼습니다'));
+    const before = (await api.getCycle(REF)).results.find(
+      (r) => r.tcId === 'TC-ONBOARDING-004' && r.deviceId === DEVICE,
+    );
+    const out = await runCycle({
+      api,
+      sink,
+      env: agentEnv(replay, device),
+      ...REF,
+      deviceId: DEVICE,
+      runId: 'run-host-6',
+      tcIds: ['TC-ONBOARDING-004'],
+    });
+    expect(out).toMatchObject({ status: 'paused', reason: 'device_disconnected', results: [] });
+    expect(out.status === 'paused' && out.message).toContain('USB를 다시 연결');
+    const after = (await api.getCycle(REF)).results.find(
+      (r) => r.tcId === 'TC-ONBOARDING-004' && r.deviceId === DEVICE,
+    );
+    expect(after).toEqual(before);
+
+    // 시작 전에 이미 빠져 있으면 LLM을 부르지 않고 일시정지
+    const { api: api2, sink: sink2 } = await host(PEOPLE.lead, 'run-host-7');
+    const gone = new FakeDevice(onboardingScenario());
+    gone.screenState = () => Promise.reject(new DeviceDisconnectedError('x'));
+    const never: LlmClient = { create: () => Promise.reject(new Error('부르면 안 된다')) };
+    expect(
+      await runCycle({
+        api: api2,
+        sink: sink2,
+        env: agentEnv(never, gone),
+        ...REF,
+        deviceId: DEVICE,
+        runId: 'run-host-7',
+      }),
+    ).toMatchObject({ status: 'paused', reason: 'device_disconnected' });
+  });
+
   it('Viewer는 실행 결과를 올릴 수 없다 (보안 규칙 — 큐가 멈추고 알린다)', async () => {
     const { api, sink, queue } = await host(PEOPLE.planner, 'run-host-3');
     await expect(
@@ -133,5 +233,71 @@ describe('runCycle → Firestore·Storage', () => {
     await expect(
       runCycle({ api, sink, env: agentEnv(replay), ...REF, deviceId: 'sm-s711n-16', runId: 'x' }),
     ).rejects.toThrow('대상 디바이스가 아닙니다');
+  });
+});
+
+// ---------------------------------------------------------------- 상주 호스트의 로컬 콘솔 (PRD §4 ⑤)
+
+describe('로컬 콘솔 서비스 (serve)', () => {
+  /** 시드 사이클 cycle-130-1의 대상(Galaxy S24 · Android 15)과 같은 가짜 디바이스 */
+  const galaxy = () => {
+    const s = onboardingScenario();
+    return new FakeDevice({ ...s, info: { ...s.info, model: 'Galaxy S24' } });
+  };
+  const serviceFor = async (device: FakeDevice) => {
+    const { api, storage, queue } = await host(PEOPLE.lead, 'unused');
+    const msgs: ConsoleServerMessage[] = [];
+    const service = new ConsoleService({
+      api,
+      storage,
+      queue,
+      executor: PEOPLE.lead,
+      claudeCode: () => ({ installed: true, loggedIn: true }),
+      log: () => {},
+      fallbackPackage: APP_PACKAGE,
+      llm: () => replay,
+      env: { clock: fakeClock(Date.UTC(2026, 9, 20)), vision: false },
+      awakeDir: mkdtempSync(join(tmpdir(), 'qcard-awake-')),
+    });
+    service.subscribe((m) => msgs.push(m));
+    service.setDevice({ driver: device, info: await device.info() });
+    await service.refresh();
+    const home = () => (msgs.filter((m) => m.type === 'home').at(-1) as { home: ConsoleHome }).home;
+    return { service, msgs, home };
+  };
+
+  it('홈에 이 디바이스가 대상인 사이클을 보이고, Run을 시작하면 실행 화면 → 끝나면 홈으로 돌아온다', async () => {
+    const device = galaxy();
+    const { service, msgs, home } = await serviceFor(device);
+    const option = home().cycles.find((c) => c.cycleId === 'cycle-130-1');
+    expect(option).toMatchObject({ projectId: 'haru', deviceId: DEVICE });
+    expect(option!.cases.some((c) => c.tcId === 'TC-ONBOARDING-004')).toBe(true);
+    // 대상이 아닌 사이클은 보이지 않는다
+    expect(home().cycles.every((c) => c.deviceId === DEVICE)).toBe(true);
+
+    service.handle({ type: 'start', projectId: 'haru', cycleId: 'cycle-130-1', tcIds: ['TC-ONBOARDING-004'] });
+    for (let i = 0; i < 100 && !service.running; i++) await new Promise((r) => setTimeout(r, 20));
+    expect(service.running).toBe(true);
+    await service.idle();
+
+    const states = msgs.filter((m) => m.type === 'state');
+    expect(states.length).toBeGreaterThan(0);
+    expect(msgs.at(-1)?.type).toBe('home');
+    expect(home().lastRun).toMatchObject({ status: 'done', judged: 1 });
+    // Run 동안만 화면 켜짐 유지를 켰다가 되돌렸다
+    expect(device.log.filter((l) => l.startsWith('stay-on'))).toEqual(['stay-on 7', 'stay-on 0']);
+    expect(service.running).toBe(false);
+  });
+
+  it('디바이스가 잠겨 있으면 Run을 시작하지 않고 이유를 알린다', async () => {
+    const device = galaxy();
+    const { service, msgs, home } = await serviceFor(device);
+    device.display = { awake: true, locked: true };
+    await service.refresh();
+    expect(home().deviceProblem).toMatch(/잠겨/);
+    service.handle({ type: 'start', projectId: 'haru', cycleId: 'cycle-130-1' });
+    for (let i = 0; i < 50 && !msgs.some((m) => m.type === 'error'); i++) await new Promise((r) => setTimeout(r, 20));
+    expect(msgs.find((m) => m.type === 'error')).toMatchObject({ message: expect.stringMatching(/잠겨/) });
+    expect(service.running).toBe(false);
   });
 });

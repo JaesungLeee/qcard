@@ -21,7 +21,8 @@ export interface RunSink {
   result(r: CaseResult): Promise<void>;
   /** 플랜 한도·로그인 등으로 멈춤 (F-EX-17). 진행 중 케이스 결과는 쓰지 않는다 */
   pause(reason: PauseReason): Promise<void>;
-  finish(): Promise<void>;
+  /** 끝남. aborted = 실행자가 중단 (진행 중 케이스 결과는 쓰지 않는다) */
+  finish(status?: 'done' | 'aborted'): Promise<void>;
   /** 남은 업로드를 보낼 때까지 기다린다. 남은 개수를 돌려준다 */
   drain(timeoutMs?: number): Promise<number>;
 }
@@ -76,11 +77,11 @@ export function runSink(queue: UploadQueue, t: RunTarget): RunSink {
       }),
     pause: (reason) =>
       queue.enqueue({ type: 'update', path: runPath, data: { status: 'paused', pauseReason: reason } }),
-    finish: () =>
+    finish: (status = 'done') =>
       queue.enqueue({
         type: 'update',
         path: runPath,
-        data: { status: 'done' },
+        data: { status },
         remove: ['currentTcId', 'pauseReason'],
       }),
     drain: (timeoutMs) => queue.drain(timeoutMs),

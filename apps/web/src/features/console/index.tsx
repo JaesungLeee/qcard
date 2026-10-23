@@ -1,11 +1,12 @@
 // 로컬 콘솔 (PRD §5.7). 실제 제품에서는 실행자 Mac의 호스트 에이전트가 localhost로 띄우는 화면이다.
 // 지금은 웹 앱의 `/console`에서 fixture 세션을 재생한다. `?at=<스텝>|end|done`이면 그 상태에서 멈춘다.
 import type { ConsoleQueueItem, ConsoleSession } from '@qcard/fixtures';
-import { POINT_METHOD_LABEL } from '@qcard/shared';
+import { POINT_METHOD_LABEL, type ConsoleControl } from '@qcard/shared';
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { QueryState } from '../../components/QueryState';
 import { useConsoleSession } from '../../data/hooks';
+import { MockScreen } from '../../mock/MockScreen';
 import { CasePanel, StepTimeline, UsageCard } from './CasePanel';
 import { DeviceStage } from './DeviceStage';
 import { DeviceInfo, QueuePanel } from './QueuePanel';
@@ -14,8 +15,11 @@ import { ThoughtLog, type LogEntry } from './ThoughtLog';
 import { TopBar } from './TopBar';
 import './console.css';
 import {
+  MANUAL_TIMEOUT_MS,
   VERIFY_MS,
   caseTokens,
+  controlAction,
+  elapsedMs,
   makeScript,
   parseAt,
   stepAt,
@@ -88,46 +92,67 @@ function Console({ session, at }: { session: ConsoleSession; at: JumpTarget | un
   );
   const next = queue.find((q) => q.status === 'pending');
 
+  const onControl = (a: ConsoleControl) => dispatch(controlAction(a));
+  // 케이스가 끝난 뒤 보일 화면 (수동 스텝 이후 화면은 fixture에 없어 앞 화면으로 대신한다)
+  const afterScreen = current.steps.find((s) => s.index === current.pauseAt - 1)?.screenshot;
+
   const decides = log.filter((x) => x.kind === 'decide').length;
   const tokens = caseTokens(decides, verified);
 
   return (
     <div className="qcc">
-      <TopBar session={session} />
+      <TopBar
+        session={{ ...session, executor: session.run.executor, host: { connected: true, label: 'localhost:7420' } }}
+      />
       <main className="qcc-main">
         <StatusBanner
-            state={state}
-            dispatch={dispatch}
-            step={step}
-            caseStepText={step.caseStepIndex !== undefined ? current.case.steps[step.caseStepIndex]?.text : undefined}
-            verified={verified}
-            pointCount={points.length}
-            next={next}
-          />
+          view={{ ...state, manualLeftMs: MANUAL_TIMEOUT_MS - state.waitMs }}
+          onControl={onControl}
+          step={step}
+          caseStepText={step.caseStepIndex !== undefined ? current.case.steps[step.caseStepIndex]?.text : undefined}
+          verified={verified}
+          pointCount={points.length}
+          next={next}
+        />
         <div className="qcc-body">
-        <div className="qcc-col-device">
-          <DeviceStage
-            step={step}
-            afterScreen={current.steps.find((s) => s.index === current.pauseAt - 1)?.screenshot}
-            stepCount={current.steps.length} state={state} dispatch={dispatch} />
-        </div>
-        <div className="qcc-col-detail">
-          <CasePanel tc={current.case} step={step} phase={phase} verified={verified} />
-          <StepTimeline steps={current.steps} current={curIndex} ended={ended} />
-          <ThoughtLog entries={log} steps={current.steps} live={state.live} />
-        </div>
-        <aside className="qcc-col-queue">
-          <DeviceInfo device={session.device} />
-          <UsageCard
-            caseTokens={tokens}
-            limit={session.usage.caseTokenLimit}
-            runTokens={session.usage.tokens + tokens}
-            costUsd={session.usage.costUsd + tokens * 0.0000042}
-            stepNo={curIndex}
-            stepLimit={current.case.steps.length * 3 + 10}
-          />
-          <QueuePanel queue={queue} aborted={phase === 'aborted'} />
-        </aside>
+          <div className="qcc-col-device">
+            <DeviceStage
+              phase={phase}
+              elapsedMs={elapsedMs(state)}
+              stepNo={step.index}
+              stepCount={current.steps.length}
+              canSkip={step.action !== 'manual'}
+              onControl={onControl}
+              screen={(width) => (
+                <MockScreen
+                  screenshot={
+                    afterScreen && (phase === 'done' || phase === 'verifying') ? afterScreen : step.screenshot
+                  }
+                  width={width}
+                  // 액션 오버레이는 Agent가 누르려는 순간에만 보인다 (수동·Take over 중에는 사람이 조작한다)
+                  action={(phase === 'running' || phase === 'paused') && step.action !== 'manual' ? step : undefined}
+                  label={`${step.index}번 스텝 화면`}
+                />
+              )}
+            />
+          </div>
+          <div className="qcc-col-detail">
+            <CasePanel tc={current.case} step={step} phase={phase} verified={verified} />
+            <StepTimeline steps={current.steps} current={curIndex} ended={ended} />
+            <ThoughtLog entries={log} steps={current.steps} live={state.live} />
+          </div>
+          <aside className="qcc-col-queue">
+            <DeviceInfo device={session.device} />
+            <UsageCard
+              caseTokens={tokens}
+              limit={session.usage.caseTokenLimit}
+              runTokens={session.usage.tokens + tokens}
+              costUsd={session.usage.costUsd + tokens * 0.0000042}
+              stepNo={curIndex}
+              stepLimit={current.case.steps.length * 3 + 10}
+            />
+            <QueuePanel queue={queue} aborted={phase === 'aborted'} />
+          </aside>
         </div>
       </main>
     </div>

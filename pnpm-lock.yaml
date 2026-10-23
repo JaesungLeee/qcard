@@ -96,6 +96,9 @@ importers:
       firebase:
         specifier: 13.0.0
         version: 13.0.0
+      ws:
+        specifier: 8.22.0
+        version: 8.22.0
     devDependencies:
       '@firebase/rules-unit-testing':
         specifier: 6.0.0
@@ -103,6 +106,9 @@ importers:
       '@types/node':
         specifier: 24.19.0
         version: 24.19.0
+      '@types/ws':
+        specifier: 8.18.2
+        version: 8.18.2
       tsx:
         specifier: 4.23.15
         version: 4.23.15
@@ -1998,6 +2004,9 @@ packages:
 
   '@types/triple-beam@1.3.5':
     resolution: {integrity: sha512-6WaYesThRMCl19iryMYP7/x2OVgCtbIVflDGFpWnb9irXI3UjYE4AzmYuiUKY1AJstGijoY+MgUszMgRxIYTYw==}
+
+  '@types/ws@8.18.2':
+    resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
 
   '@vitejs/plugin-react@5.2.0':
     resolution: {integrity: sha512-YmKkfhOAi3wsB1PhJq5Scj3GXMn3WvtQ/JC0xoopuHoXSdmtdStOpFrYaT1kie2YgFBcIe64ROzMYRjCrYOdYw==}
@@ -6268,6 +6277,10 @@ snapshots:
       '@types/node': 24.19.0
 
   '@types/triple-beam@1.3.5': {}
+
+  '@types/ws@8.18.2':
+    dependencies:
+      '@types/node': 24.19.0
 
   '@vitejs/plugin-react@5.2.0(vite@7.3.6(@types/node@24.19.0)(tsx@4.23.15)(yaml@2.9.1))':
     dependencies:

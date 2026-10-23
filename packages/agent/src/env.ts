@@ -1,7 +1,7 @@
 import type { DeviceDriver, KeyboardState, UiElement } from '@qcard/device';
 import { formatTree } from '@qcard/device';
 import type { LlmClient, SecretVault } from '@qcard/llm';
-import type { Screenshot, ThoughtEntry } from '@qcard/shared';
+import type { ExecStep, Screenshot, ThoughtEntry } from '@qcard/shared';
 
 /** 시간. 테스트에서는 기다리지 않는 가짜 시계를 쓴다. */
 export interface Clock {
@@ -52,7 +52,26 @@ export type AgentEnv = {
   allowNetworkToggle?: boolean;
   /** 수동 스텝: 실행자에게 알리고 "완료"를 기다린다. 없으면 타임아웃으로 본다 (F-EX-11) */
   onManual?: (instruction: string) => Promise<'done' | 'timeout'>;
+  /** 스텝 타임라인에 한 줄이 생길 때 (로컬 콘솔) */
+  onStep?: (step: ExecStep) => void;
+  /** 실행자 제어: 일시정지·건너뛰기·Take over·중단 (F-DB-05). 없으면 Agent가 혼자 끝까지 간다 */
+  control?: RunControl;
 };
+
+/** 턴 사이에 실행자 제어를 확인한 결과 */
+export type ControlSignal = 'continue' | 'skip' | 'took_over' | 'abort';
+
+export type RunControl = {
+  /** 실행자가 개입을 요청했는가 (일시정지·Take over·건너뛰기·중단). 그렇다면 Agent가 고른 액션을 실행하지 않는다 */
+  interrupted(): boolean;
+  /** 턴 사이에 부른다. 일시정지·Take over 중이면 풀릴 때까지 기다린 뒤 무엇을 할지 돌려준다 */
+  checkpoint(): Promise<ControlSignal>;
+};
+
+/** 실행자가 Run을 중단했다. 현재 케이스는 판정하지 않는다 */
+export class RunAbortedError extends Error {
+  override name = 'RunAbortedError';
+}
 
 export type Observation = {
   index: number;

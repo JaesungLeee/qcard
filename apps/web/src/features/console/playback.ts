@@ -7,14 +7,14 @@
  * 흐름: running → (pauseAt 스텝 도달) manual → [완료] verifying → done(Pass)
  *                                      └ 10분 무응답 → done(Blocked, 수동 스텝 타임아웃) (F-EX-11)
  */
-import type { ThoughtEntry, Verdict } from '@qcard/shared';
+import type { ConsolePhase, ConsoleControl, ThoughtEntry, Verdict } from '@qcard/shared';
 
 /** 수동 스텝·위험 액션 대기 타임아웃 (F-EX-12 임시 기본값) */
 export const MANUAL_TIMEOUT_MS = 10 * 60 * 1000;
 /** [완료] 후 검증 포인트를 확인하는 데 걸리는 시간 (연출) */
 export const VERIFY_MS = 2400;
 
-export type Phase = 'running' | 'paused' | 'takeover' | 'manual' | 'verifying' | 'done' | 'aborted';
+export type Phase = ConsolePhase;
 
 export type ScriptStep = { index: number; durationMs: number };
 export type Script = {
@@ -232,3 +232,6 @@ export const elapsedMs = (s: PlaybackState) => s.t + s.waitMs + s.verifyMs;
 export function caseTokens(decideCount: number, verified: number): number {
   return decideCount * 3100 + verified * 1800;
 }
+
+/** 실행자 제어 → 재생 액션 (재생 화면과 실시간 화면이 같은 제어 버튼을 쓴다) */
+export const controlAction = (a: ConsoleControl): PlaybackAction => ({ type: a });

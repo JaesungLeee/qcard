@@ -107,7 +107,8 @@ export function DeviceInfo({ device }: { device: ConsoleDevice }) {
         />
         <span className={textClass('label1', 'bold')}>{device.model}</span>
         <span className={`${textClass('caption1')} qcc-muted`}>
-          {device.connection} · 배터리 {device.battery}%
+          {device.connection}
+          {device.battery !== undefined && ` · 배터리 ${device.battery}%`}
         </span>
       </div>
       <dl className={`qcc-kv ${textClass('label2')}`}>

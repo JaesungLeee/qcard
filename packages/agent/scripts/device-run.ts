@@ -87,6 +87,13 @@ const serial = values.serial ?? (await listDevices()).find((d) => d.state === 'd
 if (!serial) throw new Error('연결된 디바이스가 없습니다');
 const device = new AdbDriver(serial, { allowDestructive: true });
 const info = await device.info();
+{
+  const screen = await device.screenState();
+  if (!screen.awake || screen.locked) {
+    console.error(`디바이스 화면이 ${screen.awake ? '잠겨' : '꺼져'} 있습니다. 잠금을 풀고 화면을 켜 둔 채 다시 실행하세요`);
+    process.exit(1);
+  }
+}
 
 // 시작 전 네트워크 상태 (복구 기준). 꺼져 있으면 TC-031류 결과가 달라지므로 알린다
 const sh = async (...a: string[]) => (await execAdb()(['-s', serial, 'shell', ...a])).toString().trim();

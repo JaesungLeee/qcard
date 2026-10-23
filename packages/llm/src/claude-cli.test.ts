@@ -1,11 +1,11 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
 import { createClaudeCliLlm, type CliProcess, type CliResult } from './claude-cli';
-import { ClaudeCodeSetupError, LlmOutputError, PlanLimitError, toolUses } from './messages';
+import { ClaudeCodeSetupError, LlmOutputError, LlmTimeoutError, PlanLimitError, toolUses } from './messages';
 import type { LlmRequest } from './types';
 
-/** 보낸 메시지를 기록하고, 정해진 result를 차례로 돌려주는 가짜 claude 프로세스 */
-function fakeCli(results: (Partial<CliResult> | 'exit')[]) {
+/** 보낸 메시지를 기록하고, 정해진 result를 차례로 돌려주는 가짜 claude 프로세스. 'silent'면 답하지 않는다 */
+function fakeCli(results: (Partial<CliResult> | 'exit' | 'silent')[]) {
   const procs: { args: string[]; sent: unknown[]; closed: boolean }[] = [];
   const spawn = (args: string[]): CliProcess => {
     const p = { args, sent: [] as unknown[], closed: false };
@@ -17,6 +17,7 @@ function fakeCli(results: (Partial<CliResult> | 'exit')[]) {
         p.sent.push(m);
         const r = results.shift();
         queueMicrotask(() => {
+          if (r === 'silent') return;
           if (!r || r === 'exit') return onExit();
           onMessage({ type: 'result', subtype: 'success', is_error: false, ...r });
         });
@@ -166,6 +167,18 @@ describe('createClaudeCliLlm', () => {
       )
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(LlmOutputError);
+  });
+
+  it('응답이 없으면 다시 묻지 않고 사유를 담은 응답 오류로 끝낸다 (케이스는 Blocked)', async () => {
+    const cli = fakeCli(['silent', { result: calls('', []), usage }]);
+    const err = await createClaudeCliLlm({ spawn: cli.spawn, turnTimeoutMs: 20 })
+      .create(execReq([{ role: 'user', content: 'x' }]), meta)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(LlmTimeoutError);
+    expect(err).toBeInstanceOf(LlmOutputError);
+    expect((err as Error).message).toMatch(/Claude Code가 0초 동안 응답하지 않았습니다/);
+    // 멈춘 프로세스는 닫고, 새로 띄워 다시 묻지 않는다
+    expect(cli.procs.map((p) => [p.closed, p.sent.length])).toEqual([[true, 1]]);
   });
 
   it('close하면 세션 프로세스를 닫는다', async () => {

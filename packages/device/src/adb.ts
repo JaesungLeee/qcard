@@ -5,12 +5,14 @@ import { join } from 'node:path';
 import { parseUiTree } from './tree';
 import {
   DestructiveActionError,
+  DeviceDisconnectedError,
   DeviceError,
   EnvActionUnavailableError,
   UnsupportedInputError,
   type DeviceDriver,
   type DeviceInfo,
   type InstalledApp,
+  type ScreenState,
   type KeyboardState,
   type NetworkKind,
   type Point,
@@ -44,10 +46,19 @@ export const execAdb =
   (args) =>
     new Promise((resolve, reject) => {
       execFile(bin, args, { encoding: 'buffer', maxBuffer: 64 << 20, timeout: timeoutMs }, (err, stdout, stderr) => {
-        if (err) reject(new AdbCommandError(`adb ${args.join(' ')} 실패: ${stderr.toString().trim() || err.message}`));
-        else resolve(stdout);
+        if (!err) return resolve(stdout);
+        const text = stderr.toString().trim() || err.message;
+        reject(
+          isDisconnected(text)
+            ? new DeviceDisconnectedError(`디바이스 연결이 끊겼습니다 (${text})`)
+            : new AdbCommandError(`adb ${args.join(' ')} 실패: ${text}`),
+        );
       });
     });
+
+/** adb가 디바이스를 찾지 못한다 (USB가 빠짐·Wi-Fi 끊김) */
+export const isDisconnected = (stderr: string) =>
+  /device '.*' not found|device not found|device offline|no devices\/emulators found|device '.*' offline/i.test(stderr);
 
 /** `dumpsys window InputMethod`의 키보드 창 위쪽 y. 버전에 따라 `mFrame=` 또는 `frame=` */
 export function parseImeTop(out: string): number | undefined {
@@ -82,6 +93,14 @@ export function parseInstalledApp(out: string, pkg: string): InstalledApp | unde
   if (!code) return undefined;
   const name = /versionName=(\S+)/.exec(block)?.[1];
   return { versionCode: Number(code), ...(name ? { versionName: name } : {}) };
+}
+
+/** `dumpsys power`의 mWakefulness(Awake·Asleep·Dozing…) + `dumpsys window`의 isKeyguardShowing */
+export function parseScreenState(power: string, window: string): ScreenState {
+  return {
+    awake: /mWakefulness=Awake\b/.test(power),
+    locked: /isKeyguardShowing=true\b/.test(window),
+  };
 }
 
 /** `wm size` / `wm density`: 덮어쓴 값(Override)이 있으면 그것이 실제 화면 기준 */
@@ -254,6 +273,19 @@ export class AdbDriver implements DeviceDriver {
 
   async installedApp(pkg: string) {
     return parseInstalledApp(await this.shell('dumpsys', 'package', pkg), pkg);
+  }
+
+  async stayOnWhilePlugged() {
+    return Number((await this.shell('settings', 'get', 'global', 'stay_on_while_plugged_in')).trim()) || 0;
+  }
+
+  async setStayOnWhilePlugged(value: number) {
+    await this.shell('settings', 'put', 'global', 'stay_on_while_plugged_in', String(Math.trunc(value)));
+  }
+
+  async screenState() {
+    const [power, window] = await Promise.all([this.shell('dumpsys', 'power'), this.shell('dumpsys', 'window')]);
+    return parseScreenState(power, window);
   }
 
 

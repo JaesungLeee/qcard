@@ -3,6 +3,9 @@ import type {
   Build,
   CaseBody,
   CaseResult,
+  ClaudeCodeState,
+  ConsoleDevice,
+  ConsoleQueueItem,
   Defect,
   ExecStep,
   Invitation,
@@ -1164,23 +1167,9 @@ export const defects121: Defect[] = [
 
 // ---------------------------------------------------------------- 로컬 콘솔 세션
 
-export type ConsoleDevice = {
-  serial: string;
-  model: string;
-  osBuild: string;
-  resolution: string;
-  battery: number;
-  connection: 'USB' | 'Wi-Fi';
-  status: 'idle' | 'running';
-};
+export type { ClaudeCodeState, ConsoleDevice, ConsoleQueueItem } from '@qcard/shared';
 
-export type ConsoleQueueItem = {
-  tcId: string;
-  title: string;
-  mode: TestCase['mode'];
-  status: 'done' | 'running' | 'pending';
-  verdict?: Verdict;
-};
+
 
 export type ConsoleSession = {
   projectId: string;
@@ -1205,15 +1194,6 @@ export type ConsoleSession = {
   claudeCode: ClaudeCodeState;
 };
 
-export type ClaudeCodeState = {
-  installed: boolean;
-  version?: string;
-  loggedIn: boolean;
-  /** pro · max */
-  plan?: string;
-  /** 플랜 사용 한도에 닿았으면 풀리는 시각 */
-  limitedUntil?: string;
-};
 
 function thoughtsFor(steps: ExecStep[]): (ThoughtEntry & { stepIndex: number })[] {
   const out: (ThoughtEntry & { stepIndex: number })[] = [];
