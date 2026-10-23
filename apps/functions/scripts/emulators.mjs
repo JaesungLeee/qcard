@@ -6,7 +6,8 @@
  *   node scripts/emulators.mjs dev 'tsx …'            Auth·Firestore·Functions를 띄워 명령 실행 (개발: 시드 후 대기)
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 /** `java -version`은 stderr로 출력한다 */
@@ -44,12 +45,22 @@ const args = [
   ...(process.env.QCARD_EMU_DEBUG ? ['--debug'] : []),
   ...rest,
 ];
+// Storage 에뮬레이터는 업로드를 임시 폴더(<TMPDIR>/firebase/storage)에 쓰고, 끝날 때 그 폴더를 지운다.
+// 같은 폴더를 쓰면 테스트 에뮬레이터(pnpm verify)가 끝날 때 개발용 에뮬레이터의 폴더까지 지워져
+// 다음 업로드에서 개발용이 통째로 죽는다(ENOENT) — 에뮬레이터마다 임시 폴더를 따로 준다
+const tmp =
+  mode === 'dev'
+    ? join(tmpdir(), 'qcard-emu-dev')
+    : mkdtempSync(join(tmpdir(), 'qcard-emu-test-'));
+mkdirSync(tmp, { recursive: true });
+
 const child = spawn('firebase', args, {
   stdio: 'inherit',
   env: {
     ...process.env,
     JAVA_HOME: home,
     PATH: `${join(home, 'bin')}:${process.env.PATH}`,
+    TMPDIR: tmp,
     // 로컬에서는 GCP 메타데이터 서버가 없다 (Admin SDK가 찾느라 기다리고 경고를 내지 않게)
     METADATA_SERVER_DETECTION: 'none',
   },
