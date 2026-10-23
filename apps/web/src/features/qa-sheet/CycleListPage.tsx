@@ -1,8 +1,8 @@
 // 사이클 목록 (PRD §5.4). 사이클마다 빌드·문서 버전·기간·대상 디바이스·진행·판정·실행 중 Run을 보인다.
 import { Button, ContentBadge, Icons, textClass, token } from '@qcard/ui';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import type { CycleSummary } from '../../data/api';
-import { useCycles } from '../../data/hooks';
+import { useCycles, useMyRole } from '../../data/hooks';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
 import { fmtDateTime, fmtPercent } from '../../components/format';
@@ -11,7 +11,10 @@ import './qa-sheet.css';
 
 export function CycleListPage() {
   const { projectId = '' } = useParams();
+  const navigate = useNavigate();
   const cycles = useCycles(projectId);
+  const role = useMyRole(projectId);
+  const canEdit = role.data === 'admin' || role.data === 'qa';
   return (
     <div className="qc-page">
       <PageHeader
@@ -22,8 +25,9 @@ export function CycleListPage() {
             variant="solid"
             color="primary"
             leadingContent={<Icons.IconPlus />}
-            disabled
-            title="백엔드 연결 후 지원합니다"
+            disabled={!canEdit}
+            title={canEdit ? undefined : 'Admin·QA만 만들 수 있습니다'}
+            onClick={() => void navigate(`/p/${projectId}/cycles/new`)}
           >
             사이클 만들기
           </Button>

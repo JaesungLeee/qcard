@@ -12,6 +12,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@qcard/apk": "workspace:*",
     "@qcard/fixtures": "workspace:*",
     "@qcard/shared": "workspace:*",
     "@qcard/spec": "workspace:*",

@@ -18,6 +18,7 @@ import { AdbDriver, listDevices } from '@qcard/device/node';
 import { assertClaudeCodeReady, createLlm, llmProviderFromEnv, UsageMeter } from '@qcard/llm';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { BuildInstallError, ensureBuild } from './build';
 import { connectEmulator } from './connect';
 import { UploadQueue } from './queue';
 import { firestoreApply, runSink } from './sink';
@@ -56,12 +57,29 @@ const serial = values.serial ?? (await listDevices()).find((d) => d.state === 'd
 if (!serial) throw new Error('연결된 디바이스가 없습니다');
 const device = new AdbDriver(serial, { allowDestructive: true });
 const info = await device.info();
-const { cycle } = await api.getCycle({ projectId: values.project, cycleId: values.cycle });
+const { cycle, build } = await api.getCycle({ projectId: values.project, cycleId: values.cycle });
 const target = cycle.targets.find((t) => t.model === info.model && t.osMajor === info.osMajor);
 if (!target) {
   console.error(
     `이 디바이스(${info.model} · Android ${info.osMajor})는 사이클 대상이 아닙니다. 대상: ${cycle.targets.map((t) => t.label).join(', ')}`,
   );
+  process.exit(1);
+}
+
+// ---------------------------------------------------------------- 사이클 빌드 설치 (F-DV-05·06)
+try {
+  const r = await ensureBuild({
+    storage,
+    build,
+    device,
+    appPackage: values.package,
+    cacheDir: join(homedir(), '.qcard', 'builds'),
+    log: (l) => console.log(l),
+  });
+  if (r.status === 'no_file') console.log(`빌드 ${build.version} (${build.buildNumber}): 파일이 없는 빌드라 설치된 앱으로 진행합니다`);
+} catch (e) {
+  if (!(e instanceof BuildInstallError)) throw e;
+  console.error(e.message);
   process.exit(1);
 }
 

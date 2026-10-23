@@ -4,6 +4,7 @@ import {
   EnvActionUnavailableError,
   type DeviceDriver,
   type DeviceInfo,
+  type InstalledApp,
   type NetworkKind,
   type Point,
   type SystemKey,
@@ -85,6 +86,8 @@ export class FakeDevice implements DeviceDriver {
   /** 받은 동작 기록 (테스트 확인용) */
   readonly log: string[] = [];
   readonly installed: string[] = [];
+  /** 설치된 앱 버전 (테스트가 정한다) */
+  readonly apps: Record<string, InstalledApp> = {};
   private focused?: string;
   private observedCurrent = false;
   /** 홈 키로 백그라운드에 간 앱의 화면. 다시 실행하면 여기로 돌아온다 */
@@ -226,6 +229,11 @@ export class FakeDevice implements DeviceDriver {
     this.log.push(`install ${path}`);
     this.installed.push(path);
   }
+
+  async installedApp(pkg: string) {
+    return this.apps[pkg];
+  }
+
 
   async setNetwork(kind: NetworkKind, enabled: boolean) {
     this.log.push(`network ${kind} ${enabled ? 'on' : 'off'}`);

@@ -12,6 +12,7 @@
     "dev:firebase": "VITE_DATA=firebase VITE_FIREBASE_EMULATOR=true vite"
   },
   "dependencies": {
+    "@qcard/apk": "workspace:*",
     "@qcard/data": "workspace:*",
     "@qcard/fixtures": "workspace:*",
     "@qcard/shared": "workspace:*",

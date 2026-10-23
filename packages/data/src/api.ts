@@ -8,6 +8,7 @@ import type {
   Host,
   Invitation,
   Job,
+  QaDocJob,
   InvitationState,
   Member,
   NewProjectInput,
@@ -77,13 +78,26 @@ export interface QcardApi {
    * QA 문서 생성 요청 (PRD §5.2): 스펙 묶음(`<스펙>/spec.md`만)을 변경 불가 스냅샷으로 올리고 Job을 만든다.
    * 처리는 요청자 본인의 호스트 에이전트가 본인 Claude 플랜으로 한다. Admin·QA만
    */
-  requestQaDoc(projectId: string, input: RequestQaDocInput): Promise<Job>;
+  requestQaDoc(projectId: string, input: RequestQaDocInput): Promise<QaDocJob>;
   /** 최근 작업 (새것 먼저) */
   listJobs(projectId: string): Promise<Job[]>;
   /** 실패·일시정지한 내 작업을 다시 대기열에 넣는다 */
   retryJob(projectId: string, jobId: string): Promise<void>;
   /** 내 호스트 에이전트 (연결 상태는 `lastSeen`으로 판단, HOST_ONLINE_MS) */
   myHosts(): Promise<Host[]>;
+
+  /** 올린 빌드 (새것 먼저) */
+  listBuilds(projectId: string): Promise<Build[]>;
+  /**
+   * 빌드 올리기 (F-DV-05): 서명된 APK만. 패키지·버전·서명 지문은 파일에서 읽고, 파일은 그대로 Storage에 둔다.
+   * 서명이 없거나 APK가 아니면 `RuleError`, 같은 파일을 이미 올렸으면 `RuleError`. Admin·QA만
+   */
+  uploadBuild(projectId: string, file: { name: string; bytes: Uint8Array }): Promise<Build>;
+  /**
+   * 사이클 만들기 (F-CY-01·02): QA 문서의 승인된 케이스를 스냅샷으로 고정하고, 케이스 × 대상 디바이스 칸을 N/T로 만든다.
+   * 승인된 케이스가 없거나 대상이 없으면 `RuleError`. Admin·QA만
+   */
+  createCycle(projectId: string, input: NewCycleInput): Promise<TestCycle>;
 
   listCycles(projectId: string): Promise<CycleSummary[]>;
   getCycle(ref: CycleRef): Promise<CycleDetail>;
@@ -103,6 +117,15 @@ export type RequestQaDocInput = {
   files: { path: string; content: string }[];
   /** 비교할 이전 QA 문서 (없으면 모든 케이스가 신규) */
   prevDocId?: string;
+};
+
+export type NewCycleInput = {
+  name: string;
+  docId: string;
+  buildId: string;
+  /** 모델 + OS 메이저. 같은 모델·OS 메이저의 실제 디바이스는 같은 대상으로 본다 */
+  targets: { model: string; osMajor: number; resolution?: string }[];
+  serverEnv: TestCycle['serverEnv'];
 };
 
 /** QA 문서·사이클은 프로젝트 아래에 있다 (Firestore `projects/{p}/qaDocs/{d}`) */

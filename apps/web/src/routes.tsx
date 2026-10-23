@@ -3,7 +3,7 @@ import { UiCatalog } from './dev/UiCatalog';
 import { ConsolePage } from './features/console';
 import { InvitePage, NewProjectPage, ProjectListPage, ProjectSettingsPage } from './features/projects';
 import { NewQaDocPage, PrepFlowPage, QaDocListPage, QaDocReviewPage } from './features/qa-doc';
-import { CycleListPage, QaSheetPage, TracePage } from './features/qa-sheet';
+import { CycleListPage, NewCyclePage, QaSheetPage, TracePage } from './features/qa-sheet';
 import { AppShell } from './shell/AppShell';
 
 /**
@@ -22,6 +22,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="cycles" replace /> },
       { path: 'cycles', element: <CycleListPage /> },
+      { path: 'cycles/new', element: <NewCyclePage /> },
       { path: 'cycles/:cycleId', element: <QaSheetPage /> },
       { path: 'cycles/:cycleId/results/:tcId/:deviceId', element: <TracePage /> },
       { path: 'docs', element: <QaDocListPage /> },

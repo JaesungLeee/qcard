@@ -22,6 +22,7 @@ pnpm workspace + Turborepo, TypeScript 단일 언어.
 | `apps/host-agent`       | 호스트 에이전트: 사이클 케이스를 실기기에서 `runCase`로 실행하고 Run 진행·결과를 Firestore, 스크린샷을 Storage에 올린다(`runCycle`·`firestoreSink`). 웹에서 요청한 QA 문서 생성 작업을 받아 처리한다(`jobs.ts`·`serve`). 플랜 한도·로그인 문제면 일시정지 |
 | `packages/data`         | 데이터 접근 인터페이스 `QcardApi`·오류(`api.ts`), 구현 공용 계산(`logic.ts`), Firestore 구현(`@qcard/data/firebase`), 에뮬레이터 시드(`@qcard/data/seed`). 웹·호스트 에이전트·테스트가 함께 쓴다                             |
 | `packages/spec`         | 스펙 파서(`spec.md` → 요구사항·TS/EC 행·출처 위치·행 해시)와 버전 매칭(출처 ID로 동일·변경·신규·삭제, TC ID 이어받기, F-QD-08). LLM 없음                                                                                     |
+| `packages/apk`          | APK 정보 읽기(브라우저·Node 공용): 바이너리 매니페스트에서 패키지·버전, v1·v2·v3 서명에서 인증서 지문. 테스트 APK는 `scripts/make-fixtures.sh`(Android SDK)로 만든다 |
 | `packages/qadoc`        | QA Doc Generator: 스펙 묶음 + 이전 QA 문서 → 새 QA 문서. 매칭·복사·ID·해시·승인 상태는 코드, 신규·변경 행의 케이스 변환·준비 플로우·확인 질문·보강 제안은 Opus(`prompts.ts`). Firestore를 모른다                            |
 
 Agent 도구·Verifier 출력 스키마는 `packages/shared/src/agent.ts`, 온보딩 합성 시나리오(FakeDevice용)는 `packages/fixtures/src/device.ts`.
@@ -33,9 +34,9 @@ Agent 도구·Verifier 출력 스키마는 `packages/shared/src/agent.ts`, 온�
 pnpm이 전역에 없으면 `npx -y pnpm@10.34.6 <명령>`으로 실행한다.
 
 - `pnpm verify` — 타입 검사 + 테스트 + 색 하드코딩 검사. **작업을 끝내기 전에 반드시 통과**(Stop 훅이 강제한다). Functions·보안 규칙 테스트는 Firestore 에뮬레이터를 띄워 돈다 — **Java 21 이상 필요**(`brew install openjdk@21`, `apps/functions/scripts/emulators.mjs`가 찾아 쓴다)
-- `pnpm emu` — 함수를 번들해 Auth·Firestore·Functions 에뮬레이터를 띄우고 fixture를 시드한다(프로젝트 `demo-qcard`, 실제 Firebase와 연결되지 않음, Ctrl+C로 종료). 시드 사용자 비밀번호 `qcard-dev`
-- `pnpm --filter @qcard/host-agent run-cycle --project haru --cycle cycle-130-device --user jaesung-lee [TC-ID…] [--package com.example.harukong.qa]` — 연결된 실기기에서 사이클 케이스를 실행해 에뮬레이터에 올린다(웹 QA 시트에 바로 보임, 플랜 사용량 차감). 디바이스가 사이클 대상(모델 + OS 메이저)이어야 한다 — 개발 시드의 `cycle-130-device`는 SM-S711N 대상. `pnpm emu`가 떠 있어야 한다. 결과·증거는 업로드 큐(`~/.qcard/upload-queue`)를 거쳐 끊겨도 다음 실행 때 이어 보낸다. `--resume <run id>`로 일시정지 후 재개
-- `pnpm --filter @qcard/host-agent serve --user jaesung-lee` — 호스트 에이전트 상주 모드: 30초마다 연결 신호를 보내고, 웹에서 요청한 내 QA 문서 생성 작업을 받아 이 PC의 Claude Code로 처리한다(플랜 사용량 차감). `pnpm emu`가 떠 있어야 한다. 작업별 호출 녹화는 `~/.qcard/jobs/`(일시정지 후 다시 시도하면 끝난 호출은 재생)
+- `pnpm emu` — 함수를 번들해 Auth·Firestore·Functions 에뮬레이터를 띄우고 fixture를 시드한다(프로젝트 `demo-qcard`, 실제 Firebase와 연결되지 않음, Ctrl+C로 종료). 시드 사용자 비밀번호 `qcard-dev`. **에뮬레이터가 Storage 업로드 중 간헐적으로 통째로 죽는다**(firebase-tools 15.33, 세 번 발생·같은 업로드로 재현 안 됨, 원인 조사 중 — `QCARD_EMU_DEBUG=1 pnpm emu`로 CLI 디버그 로그를 남긴다). 죽으면 남은 Firestore 에뮬레이터(java, 8080)를 끄고 다시 띄운 뒤 `seed-generated`를 다시 넣는다
+- `pnpm --filter @qcard/host-agent run-cycle --project haru --cycle cycle-130-device --user jaesung-lee [TC-ID…] [--package com.example.harukong.qa]` — 연결된 실기기에서 사이클 케이스를 실행해 에뮬레이터에 올린다(웹 QA 시트에 바로 보임, 플랜 사용량 차감). 디바이스가 사이클 대상(모델 + OS 메이저)이어야 한다. 사이클 빌드(APK)가 디바이스의 앱과 다른 버전이면 내려받아(해시 확인, `~/.qcard/builds`) `install -r`로 설치한다 — 낮은 버전·다른 서명은 앱 데이터가 지워져야 해서 자동으로 하지 않고 멈춘다 — 개발 시드의 `cycle-130-device`는 SM-S711N 대상. `pnpm emu`가 떠 있어야 한다. 결과·증거는 업로드 큐(`~/.qcard/upload-queue`)를 거쳐 끊겨도 다음 실행 때 이어 보낸다. `--resume <run id>`로 일시정지 후 재개
+- `pnpm --filter @qcard/host-agent serve --user jaesung-lee` — 호스트 에이전트 상주 모드: 30초마다 연결 신호(연결된 디바이스 포함 — 웹이 사이클 대상을 고를 때 쓴다)를 보내고, 웹에서 요청한 내 QA 문서 생성 작업을 받아 이 PC의 Claude Code로 처리한다(플랜 사용량 차감). `pnpm emu`가 떠 있어야 한다. 작업별 호출 녹화는 `~/.qcard/jobs/`(일시정지 후 다시 시도하면 끝난 호출은 재생)
 - `pnpm --filter @qcard/functions seed-generated <결과.json…>` — `qadoc generate` 결과를 실행 중인 에뮬레이터에 별도 프로젝트(`haru-gen`)로 넣는다(기존 시드는 그대로)
 - `pnpm --filter @qcard/spec check <docs/specs 폴더> [--prev <이전 버전 폴더>]` — 실제 스펙 폴더를 파싱해 개수·경고와 이전 버전 대비 동일·변경·신규·삭제를 보인다(읽기 전용, LLM 없음). 하루콩 스펙은 저장소 밖 `../qcard-specs/`에 둔다(커밋하지 않음)
 - `pnpm --filter @qcard/qadoc generate <docs/specs 폴더> --out <결과.json> [--only a,b] [--prev-doc <이전 결과.json> --prev <이전 스펙 폴더>]` — 실제 스펙으로 QA 문서를 만들어 JSON으로 쓴다(Opus, 플랜 사용량 차감, Firestore에 올리지 않음). 호출은 `../qcard-specs/cassettes/qadoc`에 녹화돼 같은 요청은 재생하므로 중단해도 이어 간다. 프롬프트를 바꾸면 바뀐 호출만 다시 부른다

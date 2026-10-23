@@ -14,6 +14,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { homedir, hostname } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { AdbDriver, listDevices } from '@qcard/device/node';
 import { claudeCodeStatus, createCassetteLlm, createLiveLlm } from '@qcard/llm';
 import { collectionGroup, onSnapshot, query, where } from 'firebase/firestore';
 import { connectEmulator } from './connect';
@@ -30,11 +31,28 @@ const machine = hostname().replace(/\.local$/, '');
 const host = { id: machine.toLowerCase().replace(/[^a-z0-9-]+/g, '-'), name: `${user.name}의 ${machine}` };
 
 // ---------------------------------------------------------------- 연결 신호
+/** 연결된 디바이스 (시리얼별 정보는 한 번만 읽는다) — 웹이 사이클 대상을 고를 때 쓴다. 읽기 전용(getprop·wm) */
+const known = new Map<string, { serial: string; model: string; osMajor: number; resolution: string }>();
+async function devices() {
+  const list = await listDevices().catch(() => []);
+  const out = [];
+  for (const d of list.filter((x) => x.state === 'device')) {
+    if (!known.has(d.serial)) {
+      const i = await new AdbDriver(d.serial).info().catch(() => undefined);
+      if (i) known.set(d.serial, { serial: d.serial, model: i.model, osMajor: i.osMajor, resolution: `${i.size.w}×${i.size.h}` });
+    }
+    const k = known.get(d.serial);
+    if (k) out.push(k);
+  }
+  return out;
+}
+
 async function beat() {
   const s = await claudeCodeStatus();
   await heartbeat(db, user.uid, {
     ...host,
     lastSeen: new Date().toISOString(),
+    devices: await devices(),
     claudeCode: { version: s.version, loggedIn: s.loggedIn, subscriptionType: s.subscriptionType },
   }).catch((e: Error) => console.error(`연결 신호 실패: ${e.message}`));
   return s;
@@ -60,7 +78,7 @@ async function drain() {
       for (const job of await pendingJobs(db, user.uid)) {
         const running = await claimJob(db, job, host.name, new Date().toISOString());
         if (!running) continue;
-        console.log(`\n■ ${job.projectId} · QA 문서 ${job.input.appVersion} 생성 (${job.id})`);
+        console.log(`\n■ ${job.projectId} · QA 문서 ${running.input.appVersion} 생성 (${job.id})`);
         const live = createLiveLlm(undefined, { turnTimeoutMs: 600_000 });
         const awake = keepAwake();
         try {

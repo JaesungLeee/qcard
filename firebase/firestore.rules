@@ -45,9 +45,11 @@ service cloud.firestore {
         allow read: if isMember(p);
         allow write: if canEdit(p);
       }
-      match /builds/{rest=**} {
+      // 빌드: 올린 APK는 바꾸지 않는다 (모든 실행자가 같은 파일을 설치, F-DV-05)
+      match /builds/{id} {
         allow read: if isMember(p);
-        allow write: if canEdit(p);
+        allow create: if canEdit(p);
+        allow update, delete: if false;
       }
       match /cycles/{rest=**} {
         allow read: if isMember(p);

@@ -63,13 +63,17 @@ export interface DeviceDriver {
   stopApp(pkg: string): Promise<void>;
   /** 앱 데이터 삭제 (`pm clear`). 파괴적 — 드라이버가 허용한 경우에만 */
   clearAppData(pkg: string): Promise<void>;
-  /** 파괴적 — 드라이버가 허용한 경우에만 */
+  /** 파괴적 — 드라이버가 허용한 경우에만. 기존 앱 데이터는 유지한다(`install -r`) */
   installApk(path: string): Promise<void>;
+  /** 설치된 앱 버전 (없으면 undefined). 읽기 전용 */
+  installedApp(pkg: string): Promise<InstalledApp | undefined>;
 
   /** 환경 조작 (F-EX-16) */
   setNetwork(kind: NetworkKind, enabled: boolean): Promise<void>;
   setPermission(pkg: string, permission: string, granted: boolean): Promise<void>;
 }
+
+export type InstalledApp = { versionCode: number; versionName?: string };
 
 export class DeviceError extends Error {
   override name = 'DeviceError';

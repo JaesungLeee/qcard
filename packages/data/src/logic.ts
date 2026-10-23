@@ -4,6 +4,8 @@ import {
   type Build,
   type CaseResult,
   type Job,
+  type QaDocJob,
+  type TargetDevice,
   type SpecBundle,
   type QADocument,
   type Run,
@@ -11,12 +13,14 @@ import {
   type TestCycle,
   type Verdict,
 } from '@qcard/shared';
+import type { ApkInfo } from '@qcard/apk';
 import { readBundle } from '@qcard/spec';
 import {
   PermissionError,
   RuleError,
   type ConfirmVerdictInput,
   type CycleSummary,
+  type NewCycleInput,
   type QaDocSummary,
   type QuestionResolution,
   type RequestQaDocInput,
@@ -169,7 +173,7 @@ export function qaDocRequest(
   user: { uid: string; name: string },
   now: string,
   ids: { bundleId: string; jobId: string },
-): { bundle: SpecBundle; uploads: { path: string; content: string }[]; job: Job } {
+): { bundle: SpecBundle; uploads: { path: string; content: string }[]; job: QaDocJob } {
   const appVersion = input.appVersion.trim();
   if (!appVersion) throw new RuleError('앱 버전을 입력하세요.');
   const parsed = readBundle(input.files);
@@ -202,7 +206,7 @@ export function qaDocRequest(
     })),
     ignored: parsed.ignored,
   };
-  const job: Job = {
+  const job: QaDocJob = {
     id: ids.jobId,
     projectId,
     kind: 'qa_doc_generate',
@@ -221,4 +225,96 @@ export function retriedJob(job: Job, uid: string): Job {
   if (job.status !== 'failed' && job.status !== 'paused') throw new RuleError('실패하거나 일시정지한 작업만 다시 시도합니다.');
   const { error: _e, progress: _p, host: _h, ...rest } = job;
   return { ...rest, status: 'queued' };
+}
+
+/**
+ * 빌드 문서 (F-DV-05). `inspectApk` 결과로 만든다. 같은 파일(SHA-256)을 이미 올렸으면 `RuleError`.
+ */
+export function newBuild(
+  projectId: string,
+  info: ApkInfo,
+  fileName: string,
+  existing: Build[],
+  user: { name: string },
+  now: string,
+  id: string,
+): Build {
+  const dup = existing.find((b) => b.fileSha256 === info.fileSha256);
+  if (dup) throw new RuleError(`이미 올린 빌드입니다: ${dup.version} (${dup.buildNumber})`);
+  const safeName = fileName.replace(/[^\w.-]+/g, '_') || 'app.apk';
+  return {
+    id,
+    version: info.versionName ?? String(info.versionCode),
+    buildNumber: info.versionCode,
+    packageName: info.packageName,
+    signingSha1: info.signing.sha1,
+    signingSha256: info.signing.sha256,
+    signingSchemes: info.signing.schemes,
+    ...(info.minSdk !== undefined ? { minSdk: info.minSdk } : {}),
+    fileName,
+    fileSha256: info.fileSha256,
+    size: info.size,
+    storagePath: `projects/${projectId}/builds/${id}/${safeName}`,
+    uploadedBy: user.name,
+    uploadedAt: now,
+  };
+}
+
+/** 대상 디바이스 id: `galaxy-s24-15` */
+export const targetId = (model: string, osMajor: number) =>
+  `${model.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${osMajor}`;
+
+/**
+ * 사이클 만들기 (F-CY-01·02): 승인된 케이스만 스냅샷(TC ID + 내용 해시)으로 고정하고 칸마다 N/T 결과를 만든다.
+ * 삭제 판정 케이스는 넣지 않는다.
+ */
+export function newCycle(
+  projectId: string,
+  input: NewCycleInput,
+  doc: QADocument,
+  build: Build,
+  user: { name: string },
+  now: string,
+  id: string,
+): { cycle: TestCycle; results: CaseResult[] } {
+  const name = input.name.trim();
+  if (!name) throw new RuleError('사이클 이름을 입력하세요.');
+  const targets: TargetDevice[] = [];
+  for (const t of input.targets) {
+    const model = t.model.trim();
+    if (!model || !Number.isInteger(t.osMajor) || t.osMajor < 1) throw new RuleError('대상 디바이스는 모델과 OS 메이저 버전이 필요합니다.');
+    const tid = targetId(model, t.osMajor);
+    if (targets.some((x) => x.id === tid)) continue;
+    targets.push({ id: tid, model, osMajor: t.osMajor, resolution: t.resolution ?? '—', label: `${model} (Android ${t.osMajor})` });
+  }
+  if (!targets.length) throw new RuleError('대상 디바이스를 하나 이상 고르세요.');
+  const approved = doc.cases.filter((c) => c.change !== 'removed' && c.approval.status === 'approved');
+  if (!approved.length) throw new RuleError('승인된 케이스가 없습니다. QA 문서에서 케이스를 승인한 뒤 사이클을 만드세요.');
+  const cycle: TestCycle = {
+    id,
+    projectId,
+    name,
+    docId: doc.id,
+    buildId: build.id,
+    targets,
+    period: { start: now },
+    serverEnv: input.serverEnv,
+    snapshot: approved.map((c) => ({ tcId: c.tcId, contentHash: c.contentHash })),
+    accounts: [],
+    createdBy: user.name,
+  };
+  const results: CaseResult[] = targets.flatMap((t) =>
+    approved.map((c) => ({
+      tcId: c.tcId,
+      deviceId: t.id,
+      verdict: 'nt' as const,
+      autoConfirmed: false,
+      unmetConditions: [],
+      attempts: 0,
+      steps: [],
+      points: [],
+      history: [],
+    })),
+  );
+  return { cycle, results };
 }

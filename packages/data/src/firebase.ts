@@ -14,6 +14,7 @@ import type {
   TestCase,
   TestCycle,
 } from '@qcard/shared';
+import { ApkError, inspectApk } from '@qcard/apk';
 import { FirebaseError } from 'firebase/app';
 import {
   collection,
@@ -24,12 +25,13 @@ import {
   getDocs,
   query,
   runTransaction,
+  setDoc,
   where,
   writeBatch,
   type DocumentData,
   type Firestore,
 } from 'firebase/firestore';
-import { getBytes, ref, uploadString, type FirebaseStorage } from 'firebase/storage';
+import { getBytes, ref, uploadBytes, uploadString, type FirebaseStorage } from 'firebase/storage';
 import {
   ConflictError,
   NotFoundError,
@@ -45,6 +47,8 @@ import {
   confirmedResult,
   cycleSummary,
   isActiveCycle,
+  newBuild,
+  newCycle,
   nextCase,
   qaDocRequest,
   qaDocSummary,
@@ -293,6 +297,44 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       guard(async () => ordered<PrepFlow>((await getDocs(collection(db, P(projectId), 'prepFlows'))).docs)),
 
     // ------------------------------------------------------------ 테스트 사이클
+    // ------------------------------------------------------------ 빌드·사이클 만들기 (F-DV-05, F-CY-01·02)
+    listBuilds: (projectId) =>
+      guard(async () =>
+        ordered<Build>((await getDocs(collection(db, P(projectId), 'builds'))).docs).sort((a, b) =>
+          a.uploadedAt < b.uploadedAt ? 1 : -1,
+        ),
+      ),
+    uploadBuild: (projectId, file) =>
+      guard(async () => {
+        if (!deps.storage) throw new NotFoundError('빌드를 올릴 저장소가 연결되지 않았습니다');
+        const info = await inspectApk(file.bytes).catch((e: unknown) => {
+          throw e instanceof ApkError ? new RuleError(e.message) : e;
+        });
+        const existing = ordered<Build>((await getDocs(collection(db, P(projectId), 'builds'))).docs);
+        const id = `build-${info.versionCode}-${doc(collection(db, P(projectId), 'builds')).id.slice(0, 6)}`;
+        const build = newBuild(projectId, info, file.name, existing, me(), now(), id);
+        // 파일을 먼저 올리고 문서를 만든다 (호스트가 덜 올라간 빌드를 내려받지 않게)
+        await uploadBytes(ref(deps.storage, build.storagePath!), file.bytes, {
+          contentType: 'application/vnd.android.package-archive',
+        });
+        await setDoc(doc(db, P(projectId), 'builds', id), clean(build));
+        return build;
+      }),
+    createCycle: (projectId, input) =>
+      guard(async () => {
+        const [qaDoc, build] = await Promise.all([loadQaDoc(projectId, input.docId), loadBuild(projectId, input.buildId)]);
+        const id = doc(collection(db, P(projectId), 'cycles')).id;
+        const { cycle, results } = newCycle(projectId, input, qaDoc, build, me(), now(), `cycle-${id.slice(0, 8)}`);
+        const base = `${P(projectId)}/cycles/${cycle.id}`;
+        // 결과 칸을 먼저 쓰고 사이클 문서는 마지막에 (목록에 보이는 순간 칸이 다 있다)
+        await writeAll(
+          db,
+          results.map((r, i) => [`${base}/results/${resultId(r.tcId, r.deviceId)}`, { ...r, _i: i }] as [string, DocumentData]),
+        );
+        await setDoc(doc(db, base), clean(cycle));
+        return cycle;
+      }),
+
     listCycles: (projectId) =>
       guard(async () => {
         const snap = await getDocs(collection(db, P(projectId), 'cycles'));

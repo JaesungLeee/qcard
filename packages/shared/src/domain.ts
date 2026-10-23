@@ -252,13 +252,28 @@ export const QADocument = z.object({
 });
 export type QADocument = z.infer<typeof QADocument>;
 
+/**
+ * 빌드 (F-DV-05): 서명된 APK를 웹에서 올려 Storage에 둔다. 버전·빌드 번호·패키지명·서명 지문은 파일에서 읽는다.
+ * 올린 뒤에는 바꾸지 않는다 — 모든 실행자가 같은 파일(`fileSha256`)을 설치한다.
+ */
 export const Build = z.object({
   id: z.string(),
+  /** versionName */
   version: z.string(),
+  /** versionCode */
   buildNumber: z.number(),
   packageName: z.string(),
   signingSha1: z.string(),
   uploadedAt: z.string(),
+  signingSha256: z.string().optional(),
+  signingSchemes: z.array(z.enum(['v1', 'v2', 'v3'])).optional(),
+  minSdk: z.number().optional(),
+  fileName: z.string().optional(),
+  fileSha256: z.string().optional(),
+  size: z.number().optional(),
+  /** Storage 경로 (`projects/{p}/builds/{id}/{파일}`) */
+  storagePath: z.string().optional(),
+  uploadedBy: z.string().optional(),
 });
 export type Build = z.infer<typeof Build>;
 
@@ -519,24 +534,27 @@ export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
   paused: '일시정지',
 };
 
-/**
- * 호스트 에이전트가 처리할 작업 (PRD §6.2·6.4). 웹에서 요청하면 **요청자 본인의 호스트**가 받아
- * 본인 Claude 플랜으로 처리한다. 다른 사람의 호스트는 가져가지 않는다.
- */
-export const Job = z.object({
+/** 작업 공통 필드. 웹에서 요청하면 **요청자 본인의 호스트**가 받아 처리한다. 다른 사람의 호스트는 가져가지 않는다 */
+const JobBase = {
   id: z.string(),
   projectId: z.string(),
-  kind: z.literal('qa_doc_generate'),
   /** 요청자 uid (이 사용자의 호스트만 처리한다) */
   requestedBy: z.string(),
   requestedByName: z.string(),
   createdAt: z.string(),
   status: JobStatus,
-  input: z.object({ bundleId: z.string(), appVersion: z.string(), prevDocId: z.string().optional() }),
   /** 처리 중인 호스트 */
   host: z.string().optional(),
   startedAt: z.string().optional(),
   finishedAt: z.string().optional(),
+  error: z.object({ kind: JobErrorKind, message: z.string() }).optional(),
+};
+
+/** QA 문서 생성 (PRD §5.2): 본인 Claude 플랜으로 */
+export const QaDocJob = z.object({
+  ...JobBase,
+  kind: z.literal('qa_doc_generate'),
+  input: z.object({ bundleId: z.string(), appVersion: z.string(), prevDocId: z.string().optional() }),
   progress: z
     .object({
       phase: z.enum(['plan', 'cases', 'save']),
@@ -556,9 +574,12 @@ export const Job = z.object({
       costUsd: z.number(),
     })
     .optional(),
-  error: z.object({ kind: JobErrorKind, message: z.string() }).optional(),
 });
-export type Job = z.infer<typeof Job>;
+export type QaDocJob = z.infer<typeof QaDocJob>;
+
+/** 호스트 에이전트가 처리할 작업 (PRD §6.2·6.4) */
+export const Job = QaDocJob;
+export type Job = QaDocJob;
 
 /**
  * 호스트 에이전트 연결 상태 (PRD §6.4 Host, F-DB-09). 실행 중인 호스트가 주기적으로 `lastSeen`을 갱신한다.
@@ -568,6 +589,17 @@ export const Host = z.object({
   id: z.string(),
   name: z.string(),
   lastSeen: z.string(),
+  /** 지금 연결된 Android 디바이스 (사이클 대상 고르기에 쓴다, F-DV-02·03) */
+  devices: z
+    .array(
+      z.object({
+        serial: z.string(),
+        model: z.string(),
+        osMajor: z.number(),
+        resolution: z.string().optional(),
+      }),
+    )
+    .optional(),
   claudeCode: z
     .object({
       version: z.string().optional(),

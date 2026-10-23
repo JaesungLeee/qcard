@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@qcard/agent": "workspace:*",
+    "@qcard/apk": "workspace:*",
     "@qcard/data": "workspace:*",
     "@qcard/device": "workspace:*",
     "@qcard/fixtures": "workspace:*",

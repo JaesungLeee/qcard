@@ -1,7 +1,7 @@
 import type { QcardApi } from '@qcard/data';
 import { ClaudeCodeSetupError, PlanLimitError, UsageMeter, withUsage, type LlmClient } from '@qcard/llm';
 import { generateQaDoc } from '@qcard/qadoc';
-import type { Host, Job, JobErrorKind, QADocument, SpecBundle } from '@qcard/shared';
+import type { Host, Job, JobErrorKind, QADocument, QaDocJob, SpecBundle } from '@qcard/shared';
 import { readBundle, type SpecBundle as ParsedBundle } from '@qcard/spec';
 import {
   collection,
@@ -37,7 +37,7 @@ export type JobDeps = {
   /** 처리하는 호스트 이름 (웹에 보인다) */
   host: string;
   /** 작업용 LLM. 작업마다 녹화 폴더를 따로 둔다 */
-  llmFor: (job: Job) => LlmClient;
+  llmFor: (job: QaDocJob) => LlmClient;
   now?: () => string;
   log?: (line: string) => void;
 };
@@ -56,18 +56,18 @@ export async function pendingJobs(db: Firestore, uid: string): Promise<Job[]> {
 }
 
 /** 대기 → 생성 중. 다른 호스트(같은 사용자의 다른 PC)가 먼저 가져갔으면 undefined */
-export async function claimJob(db: Firestore, job: Job, host: string, now: string): Promise<Job | undefined> {
+export async function claimJob<J extends Job>(db: Firestore, job: J, host: string, now: string): Promise<J | undefined> {
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(jobRef(db, job));
-    const current = snap.data() as Job | undefined;
+    const current = snap.data() as J | undefined;
     if (!current || current.status !== 'queued') return undefined;
-    const next: Job = {
+    const next = {
       ...current,
       status: 'running',
       host,
       startedAt: current.startedAt ?? now,
       progress: { phase: 'plan', done: 0, total: 0 },
-    };
+    } as J;
     tx.set(jobRef(db, job), clean(next));
     return next;
   });
@@ -87,7 +87,7 @@ async function loadBundle(db: Firestore, storage: FirebaseStorage, projectId: st
 }
 
 /** 같은 앱 버전 문서가 이미 있으면 뒤에 작업 id를 붙인다 */
-async function docIdFor(db: Firestore, job: Job): Promise<string> {
+async function docIdFor(db: Firestore, job: QaDocJob): Promise<string> {
   const base = `doc-${job.input.appVersion.replace(/[^\w.-]+/g, '-')}`;
   const taken = (await getDoc(doc(db, 'projects', job.projectId, 'qaDocs', base))).exists();
   return taken ? `${base}-${job.id.slice(0, 6)}` : base;
@@ -103,7 +103,7 @@ const errorKind = (e: unknown): JobErrorKind | undefined =>
       : undefined;
 
 /** 생성 중인 작업 하나를 끝까지 처리한다. 결과 작업 상태를 돌려준다 (완료·일시정지·실패) */
-export async function processJob(deps: JobDeps, job: Job): Promise<Job> {
+export async function processJob(deps: JobDeps, job: QaDocJob): Promise<Job> {
   const { db, storage, api } = deps;
   const now = deps.now ?? (() => new Date().toISOString());
   const log = deps.log ?? (() => {});
@@ -169,7 +169,7 @@ export async function processJob(deps: JobDeps, job: Job): Promise<Job> {
     // 문서 머리는 마지막에 쓴다 — 목록에 보이는 순간 케이스가 다 있다
     await setDoc(doc(db, ...base), clean(meta));
 
-    const done: Job = {
+    const done: QaDocJob = {
       ...job,
       status: 'done',
       finishedAt: now(),
@@ -190,8 +190,8 @@ export async function processJob(deps: JobDeps, job: Job): Promise<Job> {
   } catch (e) {
     const kind = errorKind(e);
     const message = (e as Error).message ?? String(e);
-    const latest = ((await getDoc(r)).data() as Job | undefined) ?? job;
-    const next: Job = {
+    const latest = ((await getDoc(r)).data() as QaDocJob | undefined) ?? job;
+    const next: QaDocJob = {
       ...latest,
       status: kind ? 'paused' : 'failed',
       finishedAt: now(),

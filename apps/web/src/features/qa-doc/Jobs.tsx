@@ -1,4 +1,4 @@
-import { HOST_ONLINE_MS, JOB_ERROR_LABEL, JOB_STATUS_LABEL, type Host, type Job, type JobStatus } from '@qcard/shared';
+import { HOST_ONLINE_MS, JOB_ERROR_LABEL, JOB_STATUS_LABEL, type Host, type JobStatus, type QaDocJob } from '@qcard/shared';
 import { Button, Icons, SectionMessage, textClass, token } from '@qcard/ui';
 import { Link } from 'react-router';
 import { fmtDateTime, fmtNumber } from '../../components/format';
@@ -76,7 +76,7 @@ const STATUS_TONE: Record<JobStatus, Tone> = {
 const PHASE_LABEL = { plan: '스펙 계획', cases: '케이스 변환', save: '저장' } as const;
 
 /** 생성 작업 목록 (최근 것부터). 진행 중이면 진행률, 끝났으면 결과·문서 링크, 멈췄으면 이유와 다시 시도 */
-export function JobList({ jobs, projectId, canEdit }: { jobs: Job[]; projectId: string; canEdit: boolean }) {
+export function JobList({ jobs, projectId, canEdit }: { jobs: QaDocJob[]; projectId: string; canEdit: boolean }) {
   if (!jobs.length) return null;
   return (
     <section className="qd-stack" style={{ gap: token('space-8') }} aria-label="QA 문서 생성 작업">
@@ -92,7 +92,7 @@ export function JobList({ jobs, projectId, canEdit }: { jobs: Job[]; projectId: 
   );
 }
 
-function JobCard({ job, projectId, canEdit }: { job: Job; projectId: string; canEdit: boolean }) {
+function JobCard({ job, projectId, canEdit }: { job: QaDocJob; projectId: string; canEdit: boolean }) {
   const api = useApi();
   const retry = useRetryJob(projectId);
   const mine = job.requestedBy === api.currentUid;

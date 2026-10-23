@@ -5,6 +5,7 @@ import {
   isWifiSerial,
   parseDevices,
   parseImeTop,
+  parseInstalledApp,
   parseWm,
   resolveAdb,
   type AdbExec,
@@ -163,6 +164,23 @@ describe('파서·이스케이프', () => {
       { serial: 'R3CX123', state: 'device', model: 'SM_S921N' },
       { serial: 'emulator-5554', state: 'offline', model: undefined },
     ]);
+  });
+
+  it('dumpsys package: 해당 패키지 블록의 버전만 읽는다 (설치 안 됐으면 undefined)', () => {
+    const out = [
+      'Activity Resolver Table:',
+      'Packages:',
+      '  Package [com.example.harukong.qa.helper] (1a2b3c):',
+      '    versionCode=7 minSdk=24 targetSdk=35',
+      '    versionName=0.1',
+      '  Package [com.example.harukong.qa] (4d5e6f):',
+      '    userId=10321',
+      '    versionCode=130 minSdk=26 targetSdk=36',
+      '    versionName=1.3.0-qa',
+      '',
+    ].join('\n');
+    expect(parseInstalledApp(out, 'com.example.harukong.qa')).toEqual({ versionCode: 130, versionName: '1.3.0-qa' });
+    expect(parseInstalledApp('Unable to find package: com.x\n', 'com.x')).toBeUndefined();
   });
 
   it('wm 출력은 Override가 있으면 그 값', () => {

@@ -1,3 +1,4 @@
+import { ApkError, inspectApk } from '@qcard/apk';
 import { createFixtureDb, GITHUB, PEOPLE, type FixtureDb } from '@qcard/fixtures';
 import {
   accepting,
@@ -19,6 +20,7 @@ import {
 import {
   ConflictError,
   NotFoundError,
+  RuleError,
   toApiError,
   type ConfirmVerdictInput,
   type CycleDetail,
@@ -32,6 +34,8 @@ import {
   confirmedResult,
   cycleSummary,
   isActiveCycle,
+  newBuild,
+  newCycle,
   nextCase,
   qaDocRequest,
   qaDocSummary,
@@ -269,6 +273,38 @@ export function createMemoryApi(
       return wait(db.prepFlows);
     },
 
+    // ------------------------------------------------------------ 빌드·사이클 만들기
+    // fixture 빌드는 저장 경로가 없고 하루콩 프로젝트 것이다
+    async listBuilds(projectId) {
+      const mine = db.builds.filter((b) =>
+        b.storagePath ? b.storagePath.startsWith(`projects/${projectId}/`) : projectId === 'haru',
+      );
+      return wait([...mine].sort((a, b) => (a.uploadedAt < b.uploadedAt ? 1 : -1)));
+    },
+    async uploadBuild(projectId, file) {
+      requireEditor(membersOf(projectId), actor().uid);
+      const info = await inspectApk(file.bytes).catch((e: unknown) => {
+        throw e instanceof ApkError ? new RuleError(e.message) : e;
+      });
+      return rules(() => {
+        const build = newBuild(projectId, info, file.name, db.builds, actor(), now(), `build-m${db.builds.length + 1}`);
+        db.builds.push(build);
+        return build;
+      });
+    },
+    async createCycle(projectId, input) {
+      return rules(() => {
+        requireEditor(membersOf(projectId), actor().uid);
+        const id = `cycle-m${db.cycles.length + 1}`;
+        const { cycle, results } = newCycle(projectId, input, doc(input.docId), build(input.buildId), actor(), now(), id);
+        db.cycles.push(cycle);
+        db.results[id] = results;
+        db.runs[id] = [];
+        db.defects[id] = [];
+        return cycle;
+      });
+    },
+
     async listCycles(projectId) {
       await ensureLocal();
       const out: CycleSummary[] = db.cycles
@@ -333,6 +369,7 @@ export function createMemoryApi(
           id: 'macbook-pro',
           name: '이재성의 MacBook Pro',
           lastSeen: now(),
+          devices: [{ serial: 'R5CX10ABCDE', model: 'SM-S711N', osMajor: 16, resolution: '1080×2340' }],
           claudeCode: { version: '2.1.308', loggedIn: true, subscriptionType: 'max' },
         },
       ]);

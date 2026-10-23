@@ -350,3 +350,16 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* 사이클 만들기 폼 */
+.qs-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--qc-space-12);
+}
+.qs-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-6);
+  min-width: 0;
+}

@@ -90,7 +90,7 @@ describe('QA 문서 생성 작업', () => {
 
     const [mine] = await pendingJobs(lead.db, lead.uid);
     expect(mine?.id).toBe(job.id);
-    const running = await claimJob(lead.db, mine!, '이재성의 PC', '2026-10-22T10:00:00Z');
+    const running = await claimJob(lead.db, job, '이재성의 PC', '2026-10-22T10:00:00Z');
     expect(running).toMatchObject({ status: 'running', host: '이재성의 PC' });
     // 같은 작업을 두 번 가져가지 않는다 (같은 사용자의 다른 PC)
     expect(await claimJob(lead.db, mine!, '이재성의 다른 PC', 'now')).toBeUndefined();

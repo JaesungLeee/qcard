@@ -10,6 +10,7 @@ import {
   UnsupportedInputError,
   type DeviceDriver,
   type DeviceInfo,
+  type InstalledApp,
   type KeyboardState,
   type NetworkKind,
   type Point,
@@ -72,6 +73,15 @@ export function parseDevices(out: string): AdbDeviceEntry[] {
 
 export async function listDevices(exec: AdbExec = execAdb()): Promise<AdbDeviceEntry[]> {
   return parseDevices((await exec(['devices', '-l'])).toString());
+}
+
+/** `dumpsys package <pkg>`: 패키지 블록의 versionCode·versionName. 설치돼 있지 않으면 undefined */
+export function parseInstalledApp(out: string, pkg: string): InstalledApp | undefined {
+  const block = out.split(/\n\s*Package \[/).find((b) => b.startsWith(`${pkg}]`));
+  const code = block && /versionCode=(\d+)/.exec(block)?.[1];
+  if (!code) return undefined;
+  const name = /versionName=(\S+)/.exec(block)?.[1];
+  return { versionCode: Number(code), ...(name ? { versionName: name } : {}) };
 }
 
 /** `wm size` / `wm density`: 덮어쓴 값(Override)이 있으면 그것이 실제 화면 기준 */
@@ -241,6 +251,11 @@ export class AdbDriver implements DeviceDriver {
     this.guard('APK 설치');
     await this.run('install', '-r', path);
   }
+
+  async installedApp(pkg: string) {
+    return parseInstalledApp(await this.shell('dumpsys', 'package', pkg), pkg);
+  }
+
 
   async setNetwork(kind: NetworkKind, enabled: boolean) {
     if (!enabled && kind === 'wifi' && (await this.info()).connection === 'wifi') {

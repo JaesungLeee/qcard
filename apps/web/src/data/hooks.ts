@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useRef } from 'react';
 import type {
   ConfirmVerdictInput,
   DocRef,
+  NewCycleInput,
   NewProjectInput,
   QcardApi,
   QuestionResolution,
@@ -34,6 +35,7 @@ export const keys = {
   console: ['console'] as const,
   jobs: (projectId: string) => ['jobs', projectId] as const,
   hosts: ['hosts'] as const,
+  builds: (projectId: string) => ['builds', projectId] as const,
 };
 
 export function useProject(projectId: string) {
@@ -227,5 +229,30 @@ export function useRetryJob(projectId: string) {
   return useMutation({
     mutationFn: (jobId: string) => api.retryJob(projectId, jobId),
     onSettled: () => void qc.invalidateQueries({ queryKey: keys.jobs(projectId) }),
+  });
+}
+
+// ---------------------------------------------------------------- 빌드·사이클 만들기 (F-DV-05, F-CY-01)
+
+export function useBuilds(projectId: string) {
+  const api = useApi();
+  return useQuery({ queryKey: keys.builds(projectId), queryFn: () => api.listBuilds(projectId) });
+}
+
+export function useUploadBuild(projectId: string) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: { name: string; bytes: Uint8Array }) => api.uploadBuild(projectId, file),
+    onSettled: () => void qc.invalidateQueries({ queryKey: keys.builds(projectId) }),
+  });
+}
+
+export function useCreateCycle(projectId: string) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: NewCycleInput) => api.createCycle(projectId, input),
+    onSettled: () => void qc.invalidateQueries({ queryKey: keys.cycles(projectId) }),
   });
 }
