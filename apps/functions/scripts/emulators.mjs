@@ -40,6 +40,8 @@ const args = [
   ...(mode === 'dev'
     ? ['--only', 'auth,firestore,functions,storage']
     : ['--only', 'firestore,storage', '--config', join(import.meta.dirname, '../../../firebase.test.json')]),
+  // QCARD_EMU_DEBUG=1: CLI 디버그 로그 (에뮬레이터가 죽는 원인 확인용)
+  ...(process.env.QCARD_EMU_DEBUG ? ['--debug'] : []),
   ...rest,
 ];
 const child = spawn('firebase', args, {
