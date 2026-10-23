@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { canonicalJson } from './canonical';
 import { ClaudeCodeSetupError, LlmOutputError, LlmTimeoutError, PlanLimitError } from './messages';
-import type { LlmClient, LlmRequest, LlmResponse } from './types';
+import type { LlmClient, LlmRequest, LlmResponse, LlmRetry } from './types';
 
 /*
  * 사용자 PC에 설치·로그인된 Claude Code를 헤드리스(`claude -p`)로 실행해 LLM을 부른다 (PRD §8 옵션 D).
@@ -71,6 +71,8 @@ export function createClaudeCliLlm(
     turnTimeoutMs?: number;
     /** 이어 붙일 요청이 없을 때 세션을 닫기까지 (기본 60초) */
     idleMs?: number;
+    /** Claude Code가 API 오류로 다시 시도할 때 (응답이 늦어지는 이유) */
+    onRetry?: (r: LlmRetry) => void;
   } = {},
 ): LlmClient & { close(): void } {
   const spawnCli = options.spawn ?? spawnClaude;
@@ -99,6 +101,7 @@ export function createClaudeCliLlm(
           config,
           options.idleMs ?? 60_000,
           () => sessions.delete(s),
+          options.onRetry,
         );
         sessions.add(s);
         session = s;
@@ -139,15 +142,22 @@ class Session {
   private dead = false;
   private idle?: NodeJS.Timeout;
   private waiting?: { resolve: (r: CliResult) => void; reject: (e: Error) => void };
+  /** 이번 턴에 Claude Code가 마지막으로 보낸 재시도 알림 */
+  private retry?: LlmRetry;
 
   constructor(
     private readonly proc: CliProcess,
     readonly config: string,
     private readonly idleMs: number,
     private readonly onClose: () => void,
+    private readonly onRetry?: (r: LlmRetry) => void,
   ) {
     proc.onMessage((m) => {
       if (m.type === 'result') this.settle((w) => w.resolve(m as unknown as CliResult));
+      else if (m.type === 'system' && m.subtype === 'api_retry') {
+        this.retry = parseRetry(m);
+        this.onRetry?.(this.retry);
+      }
     });
     proc.onExit((e) => {
       this.dead = true;
@@ -163,6 +173,7 @@ class Session {
   async turn(content: Anthropic.ContentBlockParam[], timeoutMs: number): Promise<CliResult> {
     clearTimeout(this.idle);
     this.busy = true;
+    this.retry = undefined;
     try {
       const result = new Promise<CliResult>((resolve, reject) => (this.waiting = { resolve, reject }));
       const timer = setTimeout(
@@ -170,7 +181,9 @@ class Session {
           this.settle((w) =>
             w.reject(
               new LlmTimeoutError(
-                `이 PC의 Claude Code가 ${Math.round(timeoutMs / 1000)}초 동안 응답하지 않았습니다 (Claude Code·네트워크 상태를 확인하세요)`,
+                this.retry
+                  ? `이 PC의 Claude Code가 ${Math.round(timeoutMs / 1000)}초 동안 응답하지 않았습니다 — ${this.retry.reason}로 ${this.retry.attempt}번 다시 시도하는 중이었습니다`
+                  : `이 PC의 Claude Code가 ${Math.round(timeoutMs / 1000)}초 동안 응답하지 않았습니다 (Claude Code·네트워크 상태를 확인하세요)`,
               ),
             ),
           ),
@@ -202,6 +215,29 @@ class Session {
     this.waiting = undefined;
     if (w) fn(w);
   }
+}
+
+/** stream-json `system/api_retry` → LlmRetry */
+export function parseRetry(m: Record<string, unknown>): LlmRetry {
+  const num = (v: unknown) => (typeof v === 'number' ? v : undefined);
+  const status = num(m.error_status);
+  return {
+    attempt: num(m.attempt) ?? 1,
+    maxRetries: num(m.max_retries) ?? 0,
+    delayMs: num(m.retry_delay_ms) ?? 0,
+    ...(status !== undefined ? { status } : {}),
+    reason: retryReason(typeof m.error === 'string' ? m.error : '', status, Boolean(m.no_response)),
+  };
+}
+
+/** 재시도 이유를 사람이 읽는 말로 */
+export function retryReason(error: string, status?: number, noResponse = false): string {
+  if (noResponse) return 'Claude 서버 응답 없음';
+  if (status === 529 || /overload/i.test(error)) return 'Claude 서버 혼잡(529)';
+  if (status === 429 || /rate.?limit/i.test(error)) return '요청 한도 초과(429)';
+  if (status !== undefined && status >= 500) return `Claude 서버 오류(${status})`;
+  if (/connect|network|timeout|ECONN|socket/i.test(error)) return '네트워크 연결 오류';
+  return `API 오류${status ? `(${status})` : ''}${error ? ` ${error}` : ''}`;
 }
 
 /** 로그인·한도 오류는 Run을 멈춰야 하므로 따로 구분한다. 나머지는 응답 오류(→ Blocked) */

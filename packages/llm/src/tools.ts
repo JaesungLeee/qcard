@@ -34,7 +34,10 @@ function strictify(node: Json): Json {
   // nullable은 `type: [x, 'null']` 대신 anyOf로 쓴다
   if (Array.isArray(out.type)) {
     const { type, description, ...rest } = out;
-    return { ...(description ? { description } : {}), anyOf: (type as string[]).map((t) => (t === 'null' ? { type: t } : { ...rest, type: t })) };
+    return {
+      ...(description ? { description } : {}),
+      anyOf: (type as string[]).map((t) => (t === 'null' ? { type: t } : { ...rest, type: t })),
+    };
   }
   return out;
 }

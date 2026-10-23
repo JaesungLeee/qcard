@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createCassetteLlm } from './cassette';
 import { createClaudeCliLlm } from './claude-cli';
 import { withSecretGuard, type SecretVault } from './secrets';
-import type { LlmClient } from './types';
+import type { LlmClient, LlmRetry } from './types';
 import { withUsage, type UsageMeter } from './usage';
 
 /**
@@ -39,7 +39,7 @@ export function llmProviderFromEnv(value = process.env.LLM_PROVIDER): LlmProvide
 /** 실제 호출 구현. claude-cli는 세션 프로세스를 닫을 수 있게 `close`를 함께 돌려준다 */
 export function createLiveLlm(
   provider = llmProviderFromEnv(),
-  options: { turnTimeoutMs?: number } = {},
+  options: { turnTimeoutMs?: number; onRetry?: (r: LlmRetry) => void } = {},
 ): LlmClient & { close?: () => void } {
   return provider === 'api' ? createAnthropicLlm() : createClaudeCliLlm(options);
 }
@@ -54,9 +54,11 @@ export function createLlm(options: {
   vault?: SecretVault;
   meter?: UsageMeter;
   live?: LlmClient;
+  /** 실제 호출이 Claude Code일 때, API 오류로 다시 시도하는 중임을 알린다 */
+  onRetry?: (r: LlmRetry) => void;
 }): LlmClient {
   const mode = options.mode ?? llmModeFromEnv();
-  const live = () => options.live ?? createLiveLlm();
+  const live = () => options.live ?? createLiveLlm(undefined, { onRetry: options.onRetry });
   let client: LlmClient =
     mode === 'replay'
       ? createCassetteLlm({ dir: options.cassetteDir, mode: 'replay' })

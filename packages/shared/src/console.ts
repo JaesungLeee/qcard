@@ -81,8 +81,11 @@ export type LiveConsole = {
   reason?: string;
   /** Run 동안 폰의 "충전 중 화면 켜짐 유지"를 켜 두었다 (끝나면 되돌린다) */
   stayAwake?: boolean;
-  /** Agent가 모델 응답을 기다리는 중. since = 호출 시작 (epoch ms), limitMs = 넘으면 그 케이스는 Blocked */
-  llmWait?: { since: number; limitMs: number };
+  /**
+   * Agent가 모델 응답을 기다리는 중. since = 호출 시작 (epoch ms), limitMs = 넘으면 그 케이스는 Blocked.
+   * retry = Claude Code가 API 오류로 다시 시도하는 중 (reason: 사람이 읽는 이유)
+   */
+  llmWait?: { since: number; limitMs: number; retry?: { attempt: number; maxRetries: number; reason: string } };
   /** 수동 스텝 대기 (phase manual). deadline = 타임아웃 시각 (epoch ms) */
   manual?: { instruction: string; deadline: number };
   /** Run 상태. paused·aborted·done이면 message에 이유 */
@@ -130,9 +133,7 @@ export type ConsoleHome = {
 
 /** 호스트 → 화면. home = Run이 없을 때, state = Run 중 */
 export type ConsoleServerMessage =
-  | { type: 'state'; state: LiveConsole }
-  | { type: 'home'; home: ConsoleHome }
-  | { type: 'error'; message: string };
+  { type: 'state'; state: LiveConsole } | { type: 'home'; home: ConsoleHome } | { type: 'error'; message: string };
 /** 화면 → 호스트 */
 export type ConsoleClientMessage =
   | { type: 'control'; action: ConsoleControl }

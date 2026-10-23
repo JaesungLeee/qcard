@@ -126,7 +126,17 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
   };
 
   async function start(): Promise<CycleRunOutcome> {
-    const inner = deps.llm?.(meter) ?? createLlm({ mode: 'live', cassetteDir: '', meter });
+    const inner =
+      deps.llm?.(meter) ??
+      createLlm({
+        mode: 'live',
+        cassetteDir: '',
+        meter,
+        onRetry: (r) => {
+          log(`  Claude Code 재시도 ${r.attempt}/${r.maxRetries} — ${r.reason}`);
+          hub.llmRetry(r);
+        },
+      });
     // 모델 응답을 기다리는 동안을 콘솔에 알린다 (오래 걸리면 실행자가 알 수 있게)
     const llm: LlmClient = {
       create: async (r, m) => {

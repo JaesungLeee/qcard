@@ -2,10 +2,13 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
 import { createClaudeCliLlm, type CliProcess, type CliResult } from './claude-cli';
 import { ClaudeCodeSetupError, LlmOutputError, LlmTimeoutError, PlanLimitError, toolUses } from './messages';
-import type { LlmRequest } from './types';
+import type { LlmRequest, LlmRetry } from './types';
 
-/** 보낸 메시지를 기록하고, 정해진 result를 차례로 돌려주는 가짜 claude 프로세스. 'silent'면 답하지 않는다 */
-function fakeCli(results: (Partial<CliResult> | 'exit' | 'silent')[]) {
+/**
+ * 보낸 메시지를 기록하고, 정해진 result를 차례로 돌려주는 가짜 claude 프로세스. 'silent'면 답하지 않는다.
+ * 'overloaded'면 서버 혼잡으로 다시 시도한다는 알림만 보내고 답하지 않는다
+ */
+function fakeCli(results: (Partial<CliResult> | 'exit' | 'silent' | 'overloaded')[]) {
   const procs: { args: string[]; sent: unknown[]; closed: boolean }[] = [];
   const spawn = (args: string[]): CliProcess => {
     const p = { args, sent: [] as unknown[], closed: false };
@@ -18,6 +21,19 @@ function fakeCli(results: (Partial<CliResult> | 'exit' | 'silent')[]) {
         const r = results.shift();
         queueMicrotask(() => {
           if (r === 'silent') return;
+          if (r === 'overloaded') {
+            for (const attempt of [1, 2])
+              onMessage({
+                type: 'system',
+                subtype: 'api_retry',
+                attempt,
+                max_retries: 10,
+                retry_delay_ms: 1000,
+                error_status: 529,
+                error: 'server_error',
+              });
+            return;
+          }
           if (!r || r === 'exit') return onExit();
           onMessage({ type: 'result', subtype: 'success', is_error: false, ...r });
         });
@@ -179,6 +195,20 @@ describe('createClaudeCliLlm', () => {
     expect((err as Error).message).toMatch(/Claude Code가 0초 동안 응답하지 않았습니다/);
     // 멈춘 프로세스는 닫고, 새로 띄워 다시 묻지 않는다
     expect(cli.procs.map((p) => [p.closed, p.sent.length])).toEqual([[true, 1]]);
+  });
+
+  it('Claude Code가 API 오류로 다시 시도하면 알리고, 응답이 끝내 없으면 그 이유를 사유에 담는다', async () => {
+    const cli = fakeCli(['overloaded']);
+    const retries: LlmRetry[] = [];
+    const err = await createClaudeCliLlm({ spawn: cli.spawn, turnTimeoutMs: 20, onRetry: (r) => retries.push(r) })
+      .create(execReq([{ role: 'user', content: 'x' }]), meta)
+      .catch((e: unknown) => e);
+    expect(retries.map((r) => [r.attempt, r.maxRetries, r.reason])).toEqual([
+      [1, 10, 'Claude 서버 혼잡(529)'],
+      [2, 10, 'Claude 서버 혼잡(529)'],
+    ]);
+    expect(err).toBeInstanceOf(LlmTimeoutError);
+    expect((err as Error).message).toMatch(/Claude 서버 혼잡\(529\)로 2번 다시 시도하는 중이었습니다/);
   });
 
   it('close하면 세션 프로세스를 닫는다', async () => {

@@ -92,7 +92,15 @@ function Demo({ demo }: { demo: string }) {
         const state = {
           ...base,
           stayAwake: true,
-          ...(demo === 'waiting' ? { llmWait: { since: now - 75_000, limitMs: 180_000 } } : {}),
+          ...(demo === 'waiting'
+            ? {
+                llmWait: {
+                  since: now - 75_000,
+                  limitMs: 180_000,
+                  retry: { attempt: 4, maxRetries: 10, reason: 'Claude 서버 혼잡(529)' },
+                },
+              }
+            : {}),
         };
         const shot = (state.current!.steps.at(-1) ?? session.current.steps[0]!).screenshot;
         return (
@@ -320,11 +328,14 @@ function LlmWaitNotice({ state, now }: { state: LiveConsole; now: number }) {
   const wait = state.llmWait;
   if (!wait || state.phase === 'paused' || state.phase === 'takeover') return null;
   const waited = now - wait.since;
-  if (waited < LLM_WAIT_NOTICE_MS) return null;
+  if (waited < LLM_WAIT_NOTICE_MS && !wait.retry) return null;
+  const why = wait.retry
+    ? `${wait.retry.reason}로 Claude Code가 다시 시도하고 있습니다 (${wait.retry.attempt}/${wait.retry.maxRetries}회).`
+    : '이 PC의 Claude Code가 아직 응답하지 않았습니다.';
   return (
     <SectionMessage
       variant="cautionary"
-      description={`이 PC의 Claude Code가 아직 응답하지 않았습니다. ${fmtTs(wait.limitMs)}이 지나면 이 케이스는 Blocked로 기록하고 다음 케이스로 넘어갑니다 (남은 시간 ${fmtTs(Math.max(0, wait.limitMs - waited))}).`}
+      description={`${why} ${fmtTs(wait.limitMs)}이 지나면 이 케이스는 Blocked로 기록하고 다음 케이스로 넘어갑니다 (남은 시간 ${fmtTs(Math.max(0, wait.limitMs - waited))}).`}
     >
       {`Agent 응답을 기다리고 있습니다 · ${fmtTs(waited)}`}
     </SectionMessage>

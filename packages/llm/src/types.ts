@@ -11,6 +11,12 @@ export type LlmResponse = Anthropic.Message;
  * Claude 호출. 요청·응답은 SDK 타입 그대로 쓴다.
  * 구현: 실제 호출(`createAnthropicLlm`), 녹화·재생(`createCassetteLlm`), 감싸기(`withUsage`·`withSecretGuard`).
  */
+/**
+ * Claude Code가 API 오류로 혼자 다시 시도하는 중 (stream-json `system/api_retry`).
+ * reason은 사람이 읽는 이유 (`retryReason`)
+ */
+export type LlmRetry = { attempt: number; maxRetries: number; delayMs: number; status?: number; reason: string };
+
 export interface LlmClient {
   create(req: LlmRequest, meta: LlmCallMeta): Promise<LlmResponse>;
 }

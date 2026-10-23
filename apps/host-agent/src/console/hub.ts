@@ -126,6 +126,13 @@ export class ConsoleHub implements RunControl {
     this.set({ llmWait: { since: this.now(), limitMs } });
   }
 
+  /** Claude Code가 API 오류로 다시 시도하는 중 (응답이 늦어지는 이유) */
+  llmRetry(r: { attempt: number; maxRetries: number; reason: string }) {
+    const wait = this.state.llmWait;
+    if (wait)
+      this.set({ llmWait: { ...wait, retry: { attempt: r.attempt, maxRetries: r.maxRetries, reason: r.reason } } });
+  }
+
   llmEnded() {
     if (this.state.llmWait) this.set({ llmWait: undefined });
   }
