@@ -11,6 +11,7 @@ import type { ReactNode } from 'react';
 import { Link, NavLink, Outlet, useParams } from 'react-router';
 import { fmtDate } from '../components/format';
 import { useProject } from '../data/hooks';
+import { ConsoleNavLink } from '../features/console/Open';
 import { CurrentUser } from './DevUserSwitch';
 import { PlainShell } from './PlainShell';
 import './shell.css';
@@ -66,10 +67,7 @@ export function AppShell() {
               {n.label}
             </NavLink>
           ))}
-          <NavLink to="/console" className={textClass('label1', 'medium')}>
-            <Icons.IconPhone />
-            로컬 콘솔
-          </NavLink>
+          <ConsoleNavLink className={textClass('label1', 'medium')} />
         </nav>
         <div className="qc-sidebar-foot">
           <ThemeSwitch />

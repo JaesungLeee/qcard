@@ -39,6 +39,7 @@ import {
   newCycle,
   nextCase,
   qaDocRequest,
+  runRequest,
   qaDocSummary,
   resolveQuestionIn,
   retriedJob,
@@ -379,6 +380,14 @@ export function createMemoryApi(
         return job;
       });
     },
+    async requestRun(projectId, input) {
+      return rules(() => {
+        requireEditor(membersOf(projectId), actor().uid);
+        const job = runRequest(projectId, input, actor(), now(), `job-m${db.jobs.length + 1}`);
+        db.jobs.unshift(job);
+        return job;
+      });
+    },
     async listJobs(projectId) {
       return wait(db.jobs.filter((j) => j.projectId === projectId));
     },
@@ -398,7 +407,8 @@ export function createMemoryApi(
           id: 'macbook-pro',
           name: '이재성의 MacBook Pro',
           lastSeen: now(),
-          devices: [{ serial: 'R5CX10ABCDE', model: 'SM-S711N', osMajor: 16, resolution: '1080×2340' }],
+          // 시드 사이클(1.3.0 1차 회귀)의 대상 — 웹에서 [내 호스트에서 실행]을 볼 수 있게
+          devices: [{ serial: '3A281FDH2000AB', model: 'Pixel 8', osMajor: 16, resolution: '1080×2400' }],
           claudeCode: { version: '2.1.308', loggedIn: true, subscriptionType: 'max' },
         },
       ]);

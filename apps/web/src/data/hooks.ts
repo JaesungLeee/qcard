@@ -9,6 +9,7 @@ import type {
   QcardApi,
   QuestionResolution,
   RequestQaDocInput,
+  RequestRunInput,
 } from './api';
 import type { Role } from '@qcard/shared';
 
@@ -249,6 +250,16 @@ export function useRetryJob(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (jobId: string) => api.retryJob(projectId, jobId),
+    onSettled: () => void qc.invalidateQueries({ queryKey: keys.jobs(projectId) }),
+  });
+}
+
+/** 웹에서 내 호스트로 Run 시작 요청 (작업 kind `run_cycle`) */
+export function useRequestRun(projectId: string) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RequestRunInput) => api.requestRun(projectId, input),
     onSettled: () => void qc.invalidateQueries({ queryKey: keys.jobs(projectId) }),
   });
 }

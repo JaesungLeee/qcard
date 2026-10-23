@@ -11,6 +11,7 @@ import { DefectsTab } from './DefectsTab';
 import { EnvTab } from './EnvTab';
 import { indexResults, parseTab, type QaTab, type ResultIndex } from './model';
 import { SERVER_ENV_LABEL, periodLabel } from './parts';
+import { RunLaunchActions, RunLaunchMessage } from './RunLaunch';
 import { SummaryTab } from './SummaryTab';
 import { TraceabilityTab } from './TraceabilityTab';
 import './qa-sheet.css';
@@ -73,7 +74,9 @@ function Sheet({ d, projectId }: { d: CycleDetail; projectId: string }) {
             {check > 0 && <span style={{ color: token('qcard-verdict-check-fg') }}>확인필요 {check}칸</span>}
           </span>
         }
+        actions={<RunLaunchActions d={d} projectId={projectId} />}
       />
+      <RunLaunchMessage d={d} projectId={projectId} />
       <Tab value={tab} onValueChange={setTab}>
         <div className="qs-scroll-x">
           <TabList size="medium" resize="hug">

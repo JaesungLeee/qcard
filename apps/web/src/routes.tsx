@@ -2,6 +2,7 @@ import { Navigate, createBrowserRouter } from 'react-router';
 import { UiCatalog } from './dev/UiCatalog';
 import { ConsolePage } from './features/console';
 import { LiveConsolePage } from './features/console/live';
+import { ConsoleOpenPage } from './features/console/Open';
 import { InvitePage, NewProjectPage, ProjectListPage, ProjectSettingsPage } from './features/projects';
 import { NewQaDocPage, PrepFlowPage, QaDocListPage, QaDocReviewPage } from './features/qa-doc';
 import { CycleListPage, NewCyclePage, QaSheetPage, TracePage } from './features/qa-sheet';
@@ -31,6 +32,7 @@ export const router = createBrowserRouter([
       { path: 'docs/:docId', element: <QaDocReviewPage /> },
       { path: 'prep-flows', element: <PrepFlowPage /> },
       { path: 'settings', element: <ProjectSettingsPage /> },
+      { path: 'console', element: <ConsoleOpenPage /> },
     ],
   },
   { path: '/console', element: <ConsolePage /> },

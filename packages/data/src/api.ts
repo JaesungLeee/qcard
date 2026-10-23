@@ -9,6 +9,7 @@ import type {
   Invitation,
   Job,
   QaDocJob,
+  RunCycleJob,
   InvitationState,
   Member,
   NewProjectInput,
@@ -79,6 +80,11 @@ export interface QcardApi {
    * 처리는 요청자 본인의 호스트 에이전트가 본인 Claude 플랜으로 한다. Admin·QA만
    */
   requestQaDoc(projectId: string, input: RequestQaDocInput): Promise<QaDocJob>;
+  /**
+   * 내 호스트에서 Run 시작 (웹 → 작업 → 호스트). 호스트가 받아 시작하면 작업이 완료되고 `result.runId`가 생긴다.
+   * 폰이 잠겼거나 다른 Run이 진행 중이면 호스트가 실패로 남긴다. Admin·QA만
+   */
+  requestRun(projectId: string, input: RequestRunInput): Promise<RunCycleJob>;
   /** 최근 작업 (새것 먼저) */
   listJobs(projectId: string): Promise<Job[]>;
   /** 실패·일시정지한 내 작업을 다시 대기열에 넣는다 */
@@ -115,6 +121,9 @@ export interface QcardApi {
   /** 로컬 콘솔 (호스트 에이전트가 제공할 데이터) */
   getConsoleSession(): Promise<ConsoleSession>;
 }
+
+/** 웹에서 내 호스트로 Run 시작 요청 */
+export type RequestRunInput = RunCycleJob['input'];
 
 /** 업로드한 파일 (폴더·ZIP에서 읽은 상대 경로 + 내용). `<스펙>/spec.md`가 아닌 파일은 올리지 않는다 */
 export type RequestQaDocInput = {

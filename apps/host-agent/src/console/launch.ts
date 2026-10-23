@@ -5,6 +5,8 @@ import { startScrcpy, VideoHub } from './video';
 
 /** 개발 서버(pnpm dev). 떠 있으면 콘솔 화면은 여기서 열고, /console-api는 Vite가 콘솔 서버로 넘긴다 */
 export const DEV_WEB = 'http://localhost:5173';
+/** 웹 대시보드에 실어 보내는 콘솔 주소의 수명 (연결 신호마다 새로 만든다) */
+export const WEB_CONSOLE_URL_TTL_MS = 120_000;
 
 /**
  * 로컬 콘솔 서버를 띄우고 한 번만 열 수 있는 주소를 출력한다.
@@ -13,7 +15,8 @@ export const DEV_WEB = 'http://localhost:5173';
 export async function launchConsole(
   backend: ConsoleBackend,
   log: (line: string) => void,
-): Promise<{ server: ConsoleServer; printUrl: () => void } | undefined> {
+  opts: { onLogin?: () => void } = {},
+): Promise<{ server: ConsoleServer; printUrl: () => void; webUrl: () => string } | undefined> {
   const devUp = await fetch(DEV_WEB, { signal: AbortSignal.timeout(1000) }).then(
     (r) => r.ok,
     () => false,
@@ -26,6 +29,7 @@ export async function launchConsole(
     staticDir: useDist ? dist : undefined,
     allowedOrigins: [DEV_WEB],
     log,
+    onLogin: opts.onLogin,
   }).catch((e: Error) => {
     log(`로컬 콘솔을 띄우지 못했습니다 (${e.message}) — 콘솔 없이 진행합니다`);
     return undefined;
@@ -37,7 +41,9 @@ export async function launchConsole(
       `로컬 콘솔: ${server.loginUrl(useDist ? undefined : DEV_WEB)}\n  (한 번만 열 수 있는 주소${useDist ? ' · 웹 빌드 apps/web/dist' : ' · pnpm dev가 떠 있어야 합니다'})`,
     );
   printUrl();
-  return { server, printUrl };
+  /** 웹 사이드바의 [로컬 콘솔]이 열 주소 (내 호스트 문서에 실어 보낸다, 본인만 읽는다) */
+  const webUrl = () => server.loginUrl(useDist ? undefined : DEV_WEB, WEB_CONSOLE_URL_TTL_MS);
+  return { server, printUrl, webUrl };
 }
 
 /** 디바이스 화면 스트림을 띄워 콘솔에 붙인다. 실패하면 화면 없이 진행한다 */

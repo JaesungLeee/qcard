@@ -74,12 +74,17 @@ export type ConsoleServerOptions = {
   allowedOrigins?: string[];
   /** 콘솔 주소 열림·로그인 기록 */
   log?: (line: string) => void;
+  /** 일회용 주소로 로그인했을 때 (웹에 실어 둔 주소를 새것으로 바꾸게) */
+  onLogin?: () => void;
 };
 
 export type ConsoleServer = {
   port: number;
-  /** 브라우저로 열 일회용 URL. 부를 때마다 새로 만든다 (한 번 쓰면 무효) */
-  loginUrl(origin?: string): string;
+  /**
+   * 브라우저로 열 일회용 URL. 부를 때마다 새로 만든다 (한 번 쓰면 무효).
+   * ttlMs를 주면 그 시간이 지나도 무효 (웹에 실어 보내는 주소, 터미널에 찍는 주소는 만료 없음)
+   */
+  loginUrl(origin?: string, ttlMs?: number): string;
   /** 화면 스트림을 나중에 붙인다 (scrcpy가 뜬 뒤) */
   attachVideo(video: VideoFeed): void;
   close(): Promise<void>;
@@ -97,8 +102,8 @@ const MIME: Record<string, string> = {
 };
 
 export async function startConsoleServer(opts: ConsoleServerOptions): Promise<ConsoleServer> {
-  /** 일회용 토큰. 주소를 줄 때마다 새로 만들고, 쓰면 지운다 */
-  const tokens = new Set<string>();
+  /** 일회용 토큰 → 만료 시각(없으면 만료 없음). 주소를 줄 때마다 새로 만들고, 쓰거나 만료되면 지운다 */
+  const tokens = new Map<string, number | undefined>();
   const sessions = new Set<string>();
   let port = 0;
   let video = opts.video;
@@ -120,7 +125,9 @@ export async function startConsoleServer(opts: ConsoleServerOptions): Promise<Co
   };
   const findToken = (got: string) => {
     const a = Buffer.from(got);
-    for (const t of tokens) {
+    const now = Date.now();
+    for (const [t, until] of tokens) if (until !== undefined && until < now) tokens.delete(t);
+    for (const t of tokens.keys()) {
       const b = Buffer.from(t);
       if (a.length === b.length && timingSafeEqual(a, b)) return t;
     }
@@ -173,6 +180,7 @@ export async function startConsoleServer(opts: ConsoleServerOptions): Promise<Co
       if (!used) return void expired(res);
       const id = randomBytes(24).toString('base64url');
       sessions.add(id);
+      opts.onLogin?.();
       return void res
         .writeHead(303, {
           'set-cookie': `${COOKIE}=${id}; HttpOnly; SameSite=Strict; Path=/`,
@@ -244,9 +252,9 @@ export async function startConsoleServer(opts: ConsoleServerOptions): Promise<Co
 
   return {
     port,
-    loginUrl: (origin = `http://127.0.0.1:${port}`) => {
+    loginUrl: (origin = `http://127.0.0.1:${port}`, ttlMs) => {
       const token = randomBytes(24).toString('base64url');
-      tokens.add(token);
+      tokens.set(token, ttlMs === undefined ? undefined : Date.now() + ttlMs);
       return `${origin}/console-api/auth?token=${token}`;
     },
     attachVideo: (v) => (video = v),

@@ -1,7 +1,7 @@
 import type { QcardApi } from '@qcard/data';
 import { ClaudeCodeSetupError, PlanLimitError, UsageMeter, withUsage, type LlmClient } from '@qcard/llm';
 import { generateQaDoc } from '@qcard/qadoc';
-import type { Host, Job, JobErrorKind, QADocument, QaDocJob, SpecBundle } from '@qcard/shared';
+import type { Host, Job, JobErrorKind, QADocument, QaDocJob, RunCycleJob, SpecBundle } from '@qcard/shared';
 import { readBundle, type SpecBundle as ParsedBundle } from '@qcard/spec';
 import {
   collection,
@@ -71,7 +71,7 @@ export async function claimJob<J extends Job>(
       status: 'running',
       host,
       startedAt: current.startedAt ?? now,
-      progress: { phase: 'plan', done: 0, total: 0 },
+      ...(current.kind === 'qa_doc_generate' ? { progress: { phase: 'plan', done: 0, total: 0 } } : {}),
     } as J;
     tx.set(jobRef(db, job), clean(next));
     return next;
@@ -206,6 +206,60 @@ export async function processJob(deps: JobDeps, job: QaDocJob): Promise<Job> {
     log(`${kind ? '일시정지' : '실패'}: ${message}`);
     return next;
   }
+}
+
+/**
+ * Run 시작 요청 작업의 결과를 남긴다: 시작했으면 완료(runId), 못 했으면 실패(이유는 웹에 그대로 보인다).
+ * Run 진행은 Run 문서로 본다 — 이 작업은 시작까지만이다
+ */
+export async function finishRunJob(
+  db: Firestore,
+  job: RunCycleJob,
+  outcome: { runId: string } | { error: string },
+  now: string,
+): Promise<RunCycleJob> {
+  const next: RunCycleJob =
+    'runId' in outcome
+      ? { ...job, status: 'done', finishedAt: now, result: { runId: outcome.runId } }
+      : { ...job, status: 'failed', finishedAt: now, error: { kind: 'failed', message: outcome.error } };
+  await setDoc(jobRef(db, job), clean(next));
+  return next;
+}
+
+/**
+ * 내가 웹에서 요청한 Run 시작 작업을 차례로 받아 시작한다 (QA 문서 생성과 따로 — 생성 중이어도 기다리지 않는다).
+ * start는 로컬 콘솔의 [실행]과 같은 경로(ConsoleService.startRun)
+ */
+export async function startRunJobs(deps: {
+  db: Firestore;
+  uid: string;
+  host: string;
+  start: (req: {
+    projectId: string;
+    cycleId: string;
+    tcIds?: string[];
+    resumeRunId?: string;
+  }) => Promise<{ runId: string } | { error: string }>;
+  now?: () => string;
+  log?: (line: string) => void;
+}): Promise<RunCycleJob[]> {
+  const now = deps.now ?? (() => new Date().toISOString());
+  const out: RunCycleJob[] = [];
+  for (const job of await pendingJobs(deps.db, deps.uid)) {
+    if (job.kind !== 'run_cycle') continue;
+    const claimed = await claimJob(deps.db, job, deps.host, now());
+    if (!claimed) continue;
+    deps.log?.(`■ ${job.projectId} · 웹에서 Run 시작 요청 (${job.input.cycleId}, ${job.requestedByName})`);
+    const { cycleId, tcIds, resumeRunId } = claimed.input;
+    const outcome = await deps.start({
+      projectId: claimed.projectId,
+      cycleId,
+      ...(tcIds ? { tcIds } : {}),
+      ...(resumeRunId ? { resumeRunId } : {}),
+    });
+    out.push(await finishRunJob(deps.db, claimed, outcome, now()));
+  }
+  return out;
 }
 
 /** 호스트 연결 신호 (웹의 "호스트 연결됨" 표시, F-DB-09) */

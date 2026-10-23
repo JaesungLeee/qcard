@@ -13,7 +13,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import type { ConsoleHome, ConsoleServerMessage } from '@qcard/shared';
-import { ConsoleService, firestoreApply, runCycle, runSink, UploadQueue, type RunTarget } from '../src';
+import { ConsoleService, firestoreApply, runCycle, runSink, startRunJobs, UploadQueue, type RunTarget } from '../src';
 
 /*
  * 호스트 에이전트 실행 → Firestore·Storage 업로드를 에뮬레이터·보안 규칙 위에서 확인한다.
@@ -399,6 +399,57 @@ describe('로컬 콘솔 서비스 (serve)', () => {
       });
       expect(run).toMatchObject({ status: 'paused', pauseReason: 'host_lost' });
     });
+  });
+
+  it('웹에서 요청한 Run 시작을 받아 콘솔과 같은 경로로 시작하고, 작업에 Run id를 남긴다', async () => {
+    const { db, api } = await host(PEOPLE.lead, 'unused');
+    const { service, msgs } = await serviceFor(galaxy());
+    const job = await api.requestRun('haru', {
+      cycleId: 'cycle-130-1',
+      deviceId: DEVICE,
+      tcIds: ['TC-ONBOARDING-004'],
+    });
+    const [done] = await startRunJobs({
+      db,
+      uid: GITHUB[PEOPLE.lead]!,
+      host: '테스트 맥',
+      start: (req) => service.startRun(req),
+    });
+    expect(done).toMatchObject({
+      id: job.id,
+      status: 'done',
+      host: '테스트 맥',
+      result: { runId: expect.any(String) },
+    });
+    expect(service.running).toBe(true);
+    await service.idle();
+    const first = msgs.find((m) => m.type === 'state' && m.state.queue.length > 0);
+    expect(first?.type === 'state' && first.state.queue.map((q) => q.tcId)).toEqual(['TC-ONBOARDING-004']);
+    const saved = (await api.listJobs('haru')).find((j) => j.id === job.id);
+    expect(saved).toMatchObject({ status: 'done', result: { runId: done!.result!.runId } });
+    // 다시 받아도 같은 요청을 두 번 시작하지 않는다
+    expect(
+      await startRunJobs({ db, uid: GITHUB[PEOPLE.lead]!, host: '테스트 맥', start: () => Promise.reject() }),
+    ).toEqual([]);
+  });
+
+  it('폰이 잠겨 있으면 웹 요청을 시작하지 않고 이유를 작업에 남긴다', async () => {
+    const { db, api } = await host(PEOPLE.lead, 'unused');
+    const device = galaxy();
+    const { service } = await serviceFor(device);
+    device.display = { awake: true, locked: true };
+    await api.requestRun('haru', { cycleId: 'cycle-130-1', deviceId: DEVICE });
+    const [failed] = await startRunJobs({
+      db,
+      uid: GITHUB[PEOPLE.lead]!,
+      host: '테스트 맥',
+      start: (req) => service.startRun(req),
+    });
+    expect(failed).toMatchObject({
+      status: 'failed',
+      error: { kind: 'failed', message: expect.stringMatching(/잠겨/) },
+    });
+    expect(service.running).toBe(false);
   });
 
   it('디바이스가 잠겨 있으면 Run을 시작하지 않고 이유를 알린다', async () => {

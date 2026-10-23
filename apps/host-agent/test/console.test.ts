@@ -245,4 +245,28 @@ describe('로컬 콘솔 서버', () => {
       await server.close();
     }
   });
+
+  it('웹에 실어 보내는 주소는 정해진 시간이 지나면 못 쓰고, 로그인하면 알린다 (새 주소를 올리게)', async () => {
+    const hub = newHub();
+    let logins = 0;
+    const server = await startConsoleServer({ backend: hubBackend(hub), onLogin: () => logins++ });
+    const base = `http://127.0.0.1:${server.port}`;
+    const post = (link: string) =>
+      fetch(`${base}/console-api/auth`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+        body: new URLSearchParams({ token: new URL(link).searchParams.get('token')! }).toString(),
+      });
+    try {
+      const expired = server.loginUrl(undefined, -1);
+      expect((await fetch(expired, { redirect: 'manual' })).status).toBe(403);
+      expect((await post(expired)).status).toBe(403);
+      expect(logins).toBe(0);
+      expect((await post(server.loginUrl(undefined, 60_000))).status).toBe(303);
+      expect(logins).toBe(1);
+    } finally {
+      await server.close();
+    }
+  });
 });

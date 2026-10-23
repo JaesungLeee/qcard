@@ -620,9 +620,30 @@ export const QaDocJob = z.object({
 });
 export type QaDocJob = z.infer<typeof QaDocJob>;
 
+/**
+ * 웹에서 내 호스트로 Run 시작 요청: 호스트가 받아 로컬 콘솔의 [실행]과 같은 경로로 시작한다.
+ * 작업은 시작까지만 — 시작하면 완료(result.runId), 폰 잠김·다른 Run 진행 중 등으로 못 하면 실패(error)로 남는다.
+ * 진행은 Run 문서로 본다
+ */
+export const RunCycleJob = z.object({
+  ...JobBase,
+  kind: z.literal('run_cycle'),
+  input: z.object({
+    cycleId: z.string(),
+    /** 대상 디바이스 칸 (요청할 때 내 호스트에 연결된 폰으로 고른 것) */
+    deviceId: z.string(),
+    /** 없으면 남은 자동 케이스 전체 */
+    tcIds: z.array(z.string()).optional(),
+    /** 일시정지된 내 Run을 이어서 */
+    resumeRunId: z.string().optional(),
+  }),
+  result: z.object({ runId: z.string() }).optional(),
+});
+export type RunCycleJob = z.infer<typeof RunCycleJob>;
+
 /** 호스트 에이전트가 처리할 작업 (PRD §6.2·6.4) */
-export const Job = QaDocJob;
-export type Job = QaDocJob;
+export const Job = z.discriminatedUnion('kind', [QaDocJob, RunCycleJob]);
+export type Job = QaDocJob | RunCycleJob;
 
 /**
  * 호스트 에이전트 연결 상태 (PRD §6.4 Host, F-DB-09). 실행 중인 호스트가 주기적으로 `lastSeen`을 갱신한다.
@@ -650,6 +671,11 @@ export const Host = z.object({
       subscriptionType: z.string().optional(),
     })
     .optional(),
+  /**
+   * 로컬 콘솔 일회용 주소 (웹 사이드바의 [로컬 콘솔]이 새 탭으로 연다). 연결 신호마다 새로 만들고 2분 뒤·한 번 쓰면 무효.
+   * 콘솔은 127.0.0.1에만 열려 있어 이 주소는 그 PC의 브라우저에서만 쓸 수 있다
+   */
+  consoleUrl: z.string().optional(),
 });
 export type Host = z.infer<typeof Host>;
 /** 이 시간 안에 신호가 있으면 연결된 것으로 본다 (호스트는 30초마다 갱신) */

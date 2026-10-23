@@ -54,7 +54,9 @@ export function QaDocListPage() {
         }
       />
       {canEdit && <HostStatus />}
-      {jobs.data && <JobList jobs={jobs.data} projectId={projectId} canEdit={canEdit} />}
+      {jobs.data && (
+        <JobList jobs={jobs.data.filter((j) => j.kind === 'qa_doc_generate')} projectId={projectId} canEdit={canEdit} />
+      )}
       <QueryState query={docs}>
         {(list) => {
           const sorted = [...list].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));

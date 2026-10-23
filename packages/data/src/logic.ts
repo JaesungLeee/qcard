@@ -5,6 +5,7 @@ import {
   type CaseResult,
   type Job,
   type QaDocJob,
+  type RunCycleJob,
   type TargetDevice,
   type SpecBundle,
   type QADocument,
@@ -25,6 +26,7 @@ import {
   type QaDocSummary,
   type QuestionResolution,
   type RequestQaDocInput,
+  type RequestRunInput,
   type VerdictCounts,
 } from './api';
 
@@ -228,8 +230,40 @@ export function retriedJob(job: Job, uid: string): Job {
   if (job.requestedBy !== uid) throw new PermissionError('요청한 사람만 다시 시도할 수 있습니다.');
   if (job.status !== 'failed' && job.status !== 'paused')
     throw new RuleError('실패하거나 일시정지한 작업만 다시 시도합니다.');
+  if (job.kind === 'run_cycle') {
+    const { error: _e, host: _h, result: _r, ...rest } = job;
+    return { ...rest, status: 'queued' };
+  }
   const { error: _e, progress: _p, host: _h, ...rest } = job;
   return { ...rest, status: 'queued' };
+}
+
+/**
+ * 웹에서 내 호스트로 Run 시작 요청 (작업 kind `run_cycle`). 호스트가 받아 로컬 콘솔과 같은 경로로 시작한다.
+ * 고른 케이스가 비어 있으면 남은 자동 케이스 전체다
+ */
+export function runRequest(
+  projectId: string,
+  input: RequestRunInput,
+  user: { uid: string; name: string },
+  now: string,
+  jobId: string,
+): RunCycleJob {
+  return {
+    id: jobId,
+    projectId,
+    kind: 'run_cycle',
+    requestedBy: user.uid,
+    requestedByName: user.name,
+    createdAt: now,
+    status: 'queued',
+    input: {
+      cycleId: input.cycleId,
+      deviceId: input.deviceId,
+      ...(input.tcIds?.length ? { tcIds: input.tcIds } : {}),
+      ...(input.resumeRunId ? { resumeRunId: input.resumeRunId } : {}),
+    },
+  };
 }
 
 /**

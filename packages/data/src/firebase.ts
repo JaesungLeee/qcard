@@ -59,6 +59,7 @@ import {
   qaDocSummary,
   retriedJob,
   resolveQuestionIn,
+  runRequest,
   verdictChange,
 } from './logic';
 
@@ -543,6 +544,13 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
         batch.set(bundleRef, clean(bundle));
         batch.set(jobRef, clean(job));
         await batch.commit();
+        return job;
+      }),
+    requestRun: (projectId, input) =>
+      guard(async () => {
+        const r = doc(collection(db, P(projectId), 'jobs'));
+        const job = runRequest(projectId, input, me(), now(), r.id);
+        await setDoc(r, clean(job));
         return job;
       }),
     listJobs: (projectId) =>

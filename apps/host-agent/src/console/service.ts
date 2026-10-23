@@ -203,9 +203,20 @@ export class ConsoleService implements ConsoleBackend {
   private fail(message: string) {
     this.deps.log(message);
     this.broadcast({ type: 'error', message });
+    return { error: message };
   }
 
-  private async start(m: Extract<ConsoleClientMessage, { type: 'start' }>) {
+  /**
+   * 웹에서 요청한 Run 시작 (작업 kind `run_cycle`). 로컬 콘솔의 [실행]과 같은 경로이고, 시작하면 콘솔이 실행 화면으로 바뀐다.
+   * 시작하지 못하면 이유를 돌려준다 (작업 실패로 웹에 보인다)
+   */
+  startRun(req: Omit<Extract<ConsoleClientMessage, { type: 'start' }>, 'type'>) {
+    return this.start({ type: 'start', ...req });
+  }
+
+  private async start(
+    m: Extract<ConsoleClientMessage, { type: 'start' }>,
+  ): Promise<{ runId: string } | { error: string }> {
     const dev = this.device;
     if (this.run) return this.fail('이미 Run이 진행 중입니다');
     if (!dev) return this.fail('연결된 디바이스가 없습니다');
@@ -274,6 +285,7 @@ export class ConsoleService implements ConsoleBackend {
         void this.refresh();
       });
     this.run = { hub, off, done, runId: prepared.runId };
+    return { runId: prepared.runId };
   }
 
   /** 진행 중인 Run이 끝날 때까지 (테스트·종료용) */

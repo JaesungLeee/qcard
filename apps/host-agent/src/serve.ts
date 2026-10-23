@@ -12,6 +12,7 @@
  *   사이클을 골라 Run을 시작·이어서 실행한다. 폰을 뺐다 꽂으면 30초 안에 알아챈다
  *
  * - 30초마다 연결 신호(+ Claude Code 상태)를 보내 웹이 "호스트 연결됨"을 표시한다 (F-DB-09)
+ * - 웹에서 요청한 Run 시작(작업 kind `run_cycle`)을 받아 로컬 콘솔의 [실행]과 같은 경로로 시작한다. QA 문서 생성 중이어도 기다리지 않는다
  * - 내 작업만 받는다(요청자 = 나). 한 번에 하나씩, 처리 중에는 맥이 잠들지 않게 한다(caffeinate)
  * - 작업마다 호출을 ~/.qcard/jobs/<작업>/llm에 녹화한다. 플랜 한도로 멈춘 작업을 웹에서 다시 시도하면
  *   끝난 호출은 재생하고 남은 것만 부른다
@@ -28,7 +29,7 @@ import { collectionGroup, onSnapshot, query, where } from 'firebase/firestore';
 import { connectEmulator } from './connect';
 import { attachScreen, ConsoleService, launchConsole } from './console';
 import { RESTORED, restoreAwake } from './awake';
-import { claimJob, heartbeat, pendingJobs, processJob } from './jobs';
+import { claimJob, heartbeat, pendingJobs, processJob, startRunJobs } from './jobs';
 import { UploadQueue } from './queue';
 import { firestoreApply } from './sink';
 
@@ -85,6 +86,7 @@ async function beat() {
     lastSeen: new Date().toISOString(),
     devices: list,
     claudeCode: { version: s.version, loggedIn: s.loggedIn, subscriptionType: s.subscriptionType },
+    ...(consoleUi ? { consoleUrl: consoleUi.webUrl() } : {}),
   }).catch((e: Error) => console.error(`연결 신호 실패: ${e.message}`));
   return s;
 }
@@ -108,7 +110,8 @@ const service = new ConsoleService({
   fallbackPackage: values.package,
   allowNetworkToggle: values['allow-network'],
 });
-const consoleUi = values.headless ? undefined : await launchConsole(service, log);
+// 웹 사이드바의 [로컬 콘솔]로 들어오면 그 주소는 쓴 것이라, 연결 신호로 새 주소를 바로 올린다
+const consoleUi = values.headless ? undefined : await launchConsole(service, log, { onLogin: () => void beat() });
 // 터미널에서 Enter를 누르면 새 주소 (다른 브라우저에서 열 때 — 주소는 한 번만 쓸 수 있다)
 if (consoleUi && process.stdin.isTTY) {
   log('  (Enter: 새 콘솔 주소)');
@@ -179,6 +182,7 @@ async function drain() {
     do {
       again = false;
       for (const job of await pendingJobs(db, user.uid)) {
+        if (job.kind !== 'qa_doc_generate') continue;
         const running = await claimJob(db, job, host.name, new Date().toISOString());
         if (!running) continue;
         console.log(`\n■ ${job.projectId} · QA 문서 ${running.input.appVersion} 생성 (${job.id})`);
@@ -221,10 +225,36 @@ function keepAwake(): ChildProcess | undefined {
   return spawn('caffeinate', ['-i', '-w', String(process.pid)], { stdio: 'ignore' });
 }
 
+// ---------------------------------------------------------------- 웹에서 요청한 Run 시작 (QA 문서 생성을 기다리지 않는다)
+let starting = false;
+let startAgain = false;
+async function startRuns() {
+  if (starting) return void (startAgain = true);
+  starting = true;
+  try {
+    do {
+      startAgain = false;
+      await startRunJobs({
+        db,
+        uid: user.uid,
+        host: host.name,
+        start: (req) => service.startRun(req),
+        log: (l) => console.log(`\n${l}`),
+      });
+    } while (startAgain);
+  } catch (e) {
+    console.error(`Run 시작 요청 처리 실패: ${(e as Error).message}`);
+  } finally {
+    starting = false;
+  }
+}
+
 onSnapshot(
   query(collectionGroup(db, 'jobs'), where('requestedBy', '==', user.uid)),
   (snap) => {
-    if (snap.docChanges().some((c) => c.doc.data().status === 'queued')) void drain();
+    const queued = snap.docChanges().filter((c) => c.doc.data().status === 'queued');
+    if (queued.some((c) => c.doc.data().kind === 'run_cycle')) void startRuns();
+    if (queued.some((c) => c.doc.data().kind !== 'run_cycle')) void drain();
   },
   (e) => console.error(`작업 구독 실패: ${e.message}`),
 );

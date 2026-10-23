@@ -2,6 +2,7 @@ import { createFixtureDb } from '@qcard/fixtures';
 import { isRunStale, type CaseResult } from '@qcard/shared';
 import { describe, expect, it } from 'vitest';
 import { createMemoryApi } from '../../data/memory';
+import { consoleUrlOf } from '../console/Open';
 import {
   autoConfirmChecks,
   caseVerdictCounts,
@@ -15,6 +16,7 @@ import {
   primaryDevice,
   progressMatrix,
   resultKey,
+  runLaunch,
   traceability,
   traceSummary,
   worstVerdict,
@@ -32,6 +34,52 @@ describe('worstVerdict', () => {
     expect(worstVerdict(['pass', 'na'])).toBe('pass');
     expect(worstVerdict(['na'])).toBe('na');
     expect(worstVerdict([])).toBeUndefined();
+  });
+});
+
+describe('웹에서 내 호스트로 Run 시작 (runLaunch)', () => {
+  const host = (devices: { model: string; osMajor: number }[], lastSeen = new Date().toISOString()) => ({
+    id: 'h1',
+    name: '내 맥',
+    lastSeen,
+    devices: devices.map((x, i) => ({ serial: `s${i}`, ...x })),
+  });
+  it('호스트가 꺼져 있거나 폰이 대상이 아니면 실행할 수 없다', async () => {
+    const d = await load();
+    expect(runLaunch(d, [], '이재성').state).toBe('no_host');
+    expect(runLaunch(d, [host([{ model: 'Pixel 8', osMajor: 16 }], '2026-01-01T00:00:00Z')], '이재성').state).toBe(
+      'no_host',
+    );
+    expect(runLaunch(d, [host([{ model: 'SM-S711N', osMajor: 16 }])], '이재성')).toMatchObject({
+      state: 'no_device',
+      devices: ['SM-S711N (Android 16)'],
+    });
+  });
+
+  it('폰이 대상이면 그 칸의 남은 자동 케이스와 이어서 실행할 내 Run을 준다', async () => {
+    const d = await load();
+    const p8 = runLaunch(d, [host([{ model: 'Pixel 8', osMajor: 16 }])], '이재성');
+    expect(p8).toMatchObject({ state: 'ready', target: { id: 'pixel-8-16' } });
+    if (p8.state !== 'ready') throw new Error();
+    const done = new Set(d.results.filter((r) => r.deviceId === 'pixel-8-16' && r.verdict !== 'nt').map((r) => r.tcId));
+    expect(p8.remaining).toBe(d.cases.filter((c) => c.mode === 'auto' && !done.has(c.tcId)).length);
+    expect(p8.paused?.executor).toBe('이재성');
+    // 다른 사람의 일시정지 Run은 이어서 실행 대상이 아니다
+    const other = runLaunch(d, [host([{ model: 'Pixel 8', osMajor: 16 }])], '김민지');
+    expect(other.state === 'ready' && other.paused).toBeFalsy();
+  });
+});
+
+describe('사이드바 [로컬 콘솔] 주소', () => {
+  it('연결된 내 호스트가 실어 보낸 주소만 쓴다', () => {
+    const now = Date.parse('2026-10-23T10:00:00Z');
+    const h = (lastSeen: string, consoleUrl?: string) => ({ id: lastSeen, name: 'h', lastSeen, consoleUrl });
+    expect(consoleUrlOf([], now)).toBeUndefined();
+    expect(consoleUrlOf([h('2026-10-23T09:00:00Z', 'http://old')], now)).toBeUndefined();
+    expect(consoleUrlOf([h('2026-10-23T09:59:40Z')], now)).toBeUndefined();
+    expect(consoleUrlOf([h('2026-10-23T09:00:00Z', 'http://old'), h('2026-10-23T09:59:40Z', 'http://new')], now)).toBe(
+      'http://new',
+    );
   });
 });
 

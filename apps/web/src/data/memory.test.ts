@@ -265,6 +265,25 @@ describe('프로젝트·멤버·초대 (F-TM-09~13)', () => {
   });
 });
 
+describe('웹에서 내 호스트로 Run 시작', () => {
+  it('요청은 내 이름의 대기 작업이 되고, Viewer는 요청할 수 없다', async () => {
+    const api = createMemoryApi();
+    const job = await api.requestRun('haru', { cycleId: 'cycle-130-1', deviceId: 'pixel-8-16', tcIds: [] });
+    expect(job).toMatchObject({
+      kind: 'run_cycle',
+      status: 'queued',
+      requestedByName: PEOPLE.lead,
+      input: { cycleId: 'cycle-130-1', deviceId: 'pixel-8-16' },
+    });
+    expect(job.input.tcIds).toBeUndefined();
+    expect((await api.listJobs('haru'))[0]).toEqual(job);
+    api.switchUser(PEOPLE.planner);
+    await expect(api.requestRun('haru', { cycleId: 'cycle-130-1', deviceId: 'pixel-8-16' })).rejects.toBeInstanceOf(
+      PermissionError,
+    );
+  });
+});
+
 describe('QA 문서 생성 요청 (PRD §5.2)', () => {
   const SPEC = `# 스펙 명세서: 샘플
 

@@ -2,6 +2,8 @@
 import {
   AUTO_CONFIRM_LABEL,
   isRunStale,
+  HOST_ONLINE_MS,
+  type Host,
   type AutoConfirmCondition,
   type CaseResult,
   type PauseReason,
@@ -11,7 +13,7 @@ import {
   type TestCase,
   type Verdict,
 } from '@qcard/shared';
-import type { VerdictCounts } from '../../data/api';
+import type { CycleDetail, VerdictCounts } from '../../data/api';
 import { countVerdicts, passRate } from '../../data/memory';
 
 export const VERDICTS: Verdict[] = ['pass', 'fail', 'blocked', 'check', 'nt', 'na'];
@@ -61,6 +63,44 @@ export function deviceStats(
   );
   const overall = stat({ id: 'all', model: '전체', osMajor: 0, resolution: '', label: '전체' }, results);
   return { overall, perDevice };
+}
+
+/**
+ * 웹에서 내 호스트로 Run 시작 (작업 kind `run_cycle`): 연결된 내 호스트의 폰이 이 사이클 대상인지,
+ * 그 칸에 남은 자동 케이스·이어서 실행할 내 Run이 있는지
+ */
+export type RunLaunch =
+  | { state: 'no_host' }
+  | { state: 'no_device'; devices: string[] }
+  | {
+      state: 'ready' | 'running';
+      host: Host;
+      target: TargetDevice;
+      remaining: number;
+      paused?: Run;
+    };
+export function runLaunch(d: CycleDetail, hosts: Host[], me: string, now = Date.now()): RunLaunch {
+  const online = hosts.filter((h) => now - Date.parse(h.lastSeen) < HOST_ONLINE_MS);
+  if (!online.length) return { state: 'no_host' };
+  for (const host of online) {
+    for (const dev of host.devices ?? []) {
+      const target = d.cycle.targets.find((t) => t.model === dev.model && t.osMajor === dev.osMajor);
+      if (!target) continue;
+      const mine = d.runs.filter((r) => r.executor === me && r.deviceId === target.id);
+      const running = mine.some((r) => r.status === 'running' && !isRunStale(r, now));
+      const paused = mine
+        .filter((r) => r.status === 'paused')
+        .sort((a, b) => a.startedAt.localeCompare(b.startedAt))
+        .at(-1);
+      const done = new Set(d.results.filter((r) => r.deviceId === target.id && r.verdict !== 'nt').map((r) => r.tcId));
+      const remaining = d.cases.filter((c) => c.mode === 'auto' && !done.has(c.tcId)).length;
+      return { state: running ? 'running' : 'ready', host, target, remaining, ...(paused ? { paused } : {}) };
+    }
+  }
+  return {
+    state: 'no_device',
+    devices: online.flatMap((h) => (h.devices ?? []).map((x) => `${x.model} (Android ${x.osMajor})`)),
+  };
 }
 
 export type CellState = 'done' | 'running' | 'remaining';
