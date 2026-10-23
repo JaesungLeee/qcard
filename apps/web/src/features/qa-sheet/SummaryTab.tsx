@@ -17,7 +17,19 @@ import { useMemo } from 'react';
 import { Link } from 'react-router';
 import { fmtDate, fmtPercent } from '../../components/format';
 import { deviceStats, oneLineSummary, progressMatrix, resultKey, type MatrixRow } from './model';
-import { Card, KV, Mono, RunState, SERVER_ENV_LABEL, Stat, TabBody, VerdictBar, periodLabel, traceUrl } from './parts';
+import {
+  Card,
+  KV,
+  Mono,
+  RunState,
+  SERVER_ENV_LABEL,
+  Stat,
+  TabBody,
+  VerdictBar,
+  periodLabel,
+  traceUrl,
+  useNow,
+} from './parts';
 import type { SheetProps } from './QaSheetPage';
 
 const SEVERITY_RANK: Severity[] = ['critical', 'major', 'minor', 'trivial'];
@@ -25,7 +37,8 @@ export const DEFECT_STATUS_LABEL: Record<Defect['status'], string> = { open: 'ì—
 
 export function SummaryTab({ d, index, projectId, projectName }: SheetProps) {
   const { overall, perDevice } = useMemo(() => deviceStats(d.cycle.targets, d.results), [d]);
-  const matrix = useMemo(() => progressMatrix(d.cases, d.cycle.targets, index, d.runs), [d, index]);
+  const now = useNow();
+  const matrix = useMemo(() => progressMatrix(d.cases, d.cycle.targets, index, d.runs, now), [d, index, now]);
   const caseOf = (tcId: string) => d.cases.find((c) => c.tcId === tcId);
   const deviceOf = (id: string) => d.cycle.targets.find((t) => t.id === id);
   const issues = d.results
@@ -230,7 +243,7 @@ function MatrixLine({
         </span>
         {running && (
           <span className={`qs-row ${textClass('caption1')}`} style={{ gap: token('space-4') }}>
-            <RunState paused={Boolean(running.paused)} reason={running.pauseReason} />
+            <RunState paused={Boolean(running.paused)} reason={running.pauseReason} stale={running.stale} />
             <span className="qs-muted">{running.executor}</span>
           </span>
         )}

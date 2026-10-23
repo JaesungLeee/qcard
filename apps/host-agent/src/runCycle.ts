@@ -2,7 +2,7 @@ import { runCase, RunAbortedError, type AgentEnv } from '@qcard/agent';
 import type { QcardApi } from '@qcard/data';
 import { ClaudeCodeSetupError, PlanLimitError, type UsageMeter } from '@qcard/llm';
 import { DeviceDisconnectedError } from '@qcard/device';
-import type { CaseResult, PauseReason, TestCase } from '@qcard/shared';
+import { RUN_HEARTBEAT_MS, type CaseResult, type PauseReason, type TestCase } from '@qcard/shared';
 import type { RunSink } from './sink';
 
 /*
@@ -94,46 +94,53 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
     }
   };
   await sink.start(cases.map((c) => c.tcId));
-  for (const testCase of cases) {
-    const before = await deviceProblem();
-    if (before) return paused(before.reason, before.message);
-    await sink.progress(testCase.tcId);
-    input.onCaseStart?.(testCase);
-    try {
-      const result = await runCase(
-        { ...input.env, saveScreenshot: sink.saveScreenshot },
-        { testCase, prepFlows, deviceId, runId: input.runId, meter: input.meter, onPhase: input.onPhase },
-      );
-      if (result.verdict === 'blocked') {
-        const during = await deviceProblem();
-        if (during) return paused(during.reason, `${testCase.tcId} 실행 중 ${during.message}`);
+  // 호스트가 살아 있다는 신호 (F-DV-04): 끊기면 웹은 "호스트 연결 끊김"으로 보이고, 다시 켠 호스트가 일시정지로 정리한다
+  const beat = setInterval(() => void sink.heartbeat().catch(() => {}), RUN_HEARTBEAT_MS);
+  beat.unref?.();
+  try {
+    for (const testCase of cases) {
+      const before = await deviceProblem();
+      if (before) return paused(before.reason, before.message);
+      await sink.progress(testCase.tcId);
+      input.onCaseStart?.(testCase);
+      try {
+        const result = await runCase(
+          { ...input.env, saveScreenshot: sink.saveScreenshot },
+          { testCase, prepFlows, deviceId, runId: input.runId, meter: input.meter, onPhase: input.onPhase },
+        );
+        if (result.verdict === 'blocked') {
+          const during = await deviceProblem();
+          if (during) return paused(during.reason, `${testCase.tcId} 실행 중 ${during.message}`);
+        }
+        await sink.result(result);
+        results.push(result);
+        input.onCase?.(testCase, result);
+      } catch (e) {
+        // 실행자가 중단: 진행 중 케이스는 판정하지 않고 Run을 끝낸다 (남은 칸은 N/T로 남는다)
+        if (e instanceof RunAbortedError) {
+          await sink.finish('aborted');
+          return { status: 'aborted', results, pendingUploads: await sink.drain(input.drainTimeoutMs) };
+        }
+        const reason: PauseReason | undefined =
+          e instanceof PlanLimitError
+            ? 'plan_limit'
+            : e instanceof ClaudeCodeSetupError
+              ? e.reason === 'outdated'
+                ? 'claude_outdated'
+                : 'not_logged_in'
+              : undefined;
+        // 실행 중 연결이 끊김: 진행 중 케이스 결과는 쓰지 않는다 (이어서 실행하면 그 케이스부터)
+        if (e instanceof DeviceDisconnectedError) {
+          return paused('device_disconnected', `${testCase.tcId} 실행 중 ${DISCONNECTED}`);
+        }
+        if (!reason) throw e;
+        return paused(reason, (e as Error).message);
       }
-      await sink.result(result);
-      results.push(result);
-      input.onCase?.(testCase, result);
-    } catch (e) {
-      // 실행자가 중단: 진행 중 케이스는 판정하지 않고 Run을 끝낸다 (남은 칸은 N/T로 남는다)
-      if (e instanceof RunAbortedError) {
-        await sink.finish('aborted');
-        return { status: 'aborted', results, pendingUploads: await sink.drain(input.drainTimeoutMs) };
-      }
-      const reason: PauseReason | undefined =
-        e instanceof PlanLimitError
-          ? 'plan_limit'
-          : e instanceof ClaudeCodeSetupError
-            ? e.reason === 'outdated'
-              ? 'claude_outdated'
-              : 'not_logged_in'
-            : undefined;
-      // 실행 중 연결이 끊김: 진행 중 케이스 결과는 쓰지 않는다 (이어서 실행하면 그 케이스부터)
-      if (e instanceof DeviceDisconnectedError) {
-        return paused('device_disconnected', `${testCase.tcId} 실행 중 ${DISCONNECTED}`);
-      }
-      if (!reason) throw e;
-      return paused(reason, (e as Error).message);
     }
+    await sink.finish();
+    const pendingUploads = await sink.drain(input.drainTimeoutMs);
+    return { status: 'done', results, pendingUploads };
+  } finally {
+    clearInterval(beat);
   }
-  await sink.finish();
-  const pendingUploads = await sink.drain(input.drainTimeoutMs);
-  return { status: 'done', results, pendingUploads };
 }

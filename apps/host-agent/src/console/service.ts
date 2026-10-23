@@ -9,6 +9,7 @@ import type {
   ConsoleServerMessage,
   Run,
 } from '@qcard/shared';
+import { isRunStale } from '@qcard/shared';
 import type { FirebaseStorage } from 'firebase/storage';
 import type { UploadQueue } from '../queue';
 import { consoleDevice, CycleRunError, prepareCycleRun, type CycleRunDeps } from '../run';
@@ -40,7 +41,7 @@ export class ConsoleService implements ConsoleBackend {
   private listeners = new Set<(m: ConsoleServerMessage) => void>();
   private home: ConsoleHome;
   private device: { driver: DeviceDriver; info: DeviceInfo } | undefined;
-  private run: { hub: ConsoleHub; off: () => void; done: Promise<void> } | undefined;
+  private run: { hub: ConsoleHub; off: () => void; done: Promise<void>; runId: string } | undefined;
   private refreshing: Promise<void> | undefined;
 
   constructor(private readonly deps: ConsoleServiceDeps) {
@@ -151,7 +152,18 @@ export class ConsoleService implements ConsoleBackend {
         const done = new Set(
           d.results.filter((r) => r.deviceId === target.id && r.verdict !== 'nt').map((r) => r.tcId),
         );
-        const paused = d.runs
+        // 이 디바이스로 돌리던 내 Run이 호스트 신호 없이 "실행 중"으로 남아 있으면(호스트가 죽음) 일시정지로 정리한다 (F-DV-04)
+        const runs = d.runs.map((r) => {
+          if (r.executor !== executor || r.deviceId !== target.id || r.id === this.run?.runId) return r;
+          if (!isRunStale(r, Date.now())) return r;
+          void this.deps.queue.enqueue({
+            type: 'update',
+            path: `projects/${project.id}/cycles/${s.cycle.id}/runs/${r.id}`,
+            data: { status: 'paused', pauseReason: 'host_lost' },
+          });
+          return { ...r, status: 'paused' as const, pauseReason: 'host_lost' as const };
+        });
+        const paused = runs
           .filter((r) => r.status === 'paused' && r.executor === executor && r.deviceId === target.id)
           .sort((a, b) => a.startedAt.localeCompare(b.startedAt))
           .at(-1);
@@ -261,7 +273,7 @@ export class ConsoleService implements ConsoleBackend {
         this.broadcast({ type: 'home', home: this.home });
         void this.refresh();
       });
-    this.run = { hub, off, done };
+    this.run = { hub, off, done, runId: prepared.runId };
   }
 
   /** 진행 중인 Run이 끝날 때까지 (테스트·종료용) */

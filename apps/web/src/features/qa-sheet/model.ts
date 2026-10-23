@@ -1,6 +1,7 @@
 // QA 시트 화면이 쓰는 순수 계산. 화면 코드와 분리해 단위 테스트한다.
 import {
   AUTO_CONFIRM_LABEL,
+  isRunStale,
   type AutoConfirmCondition,
   type CaseResult,
   type PauseReason,
@@ -70,6 +71,8 @@ export type MatrixCell = {
   executor?: string;
   paused?: boolean;
   pauseReason?: PauseReason;
+  /** 실행 중인데 호스트 신호가 끊김 (F-DV-04) */
+  stale?: boolean;
 };
 export type MatrixRow = { device: TargetDevice; cells: MatrixCell[]; done: number; running: number; remaining: number };
 
@@ -79,6 +82,7 @@ export function progressMatrix(
   targets: TargetDevice[],
   index: ResultIndex,
   runs: Run[],
+  now = Date.now(),
 ): MatrixRow[] {
   return targets.map((device) => {
     const active = runs.filter(
@@ -95,6 +99,7 @@ export function progressMatrix(
           executor: run.executor,
           paused: run.status === 'paused',
           pauseReason: run.pauseReason,
+          stale: isRunStale(run, now),
         };
       return { tcId: tc.tcId, state: verdict === 'nt' ? 'remaining' : 'done', verdict };
     });

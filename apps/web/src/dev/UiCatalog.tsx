@@ -191,6 +191,7 @@ export function UiCatalog() {
       <Section title="실행 상태 · Claude Code">
         <div style={row}>
           <RunState paused={false} />
+          <RunState paused={false} stale />
           <RunState paused />
           {PauseReason.options.map((r) => (
             <RunState key={r} paused reason={r} />

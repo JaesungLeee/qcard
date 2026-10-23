@@ -467,6 +467,7 @@ export const PauseReason = z.enum([
   'claude_outdated',
   'device_locked',
   'device_disconnected',
+  'host_lost',
 ]);
 export type PauseReason = z.infer<typeof PauseReason>;
 export const PAUSE_REASON_LABEL: Record<PauseReason, string> = {
@@ -477,6 +478,7 @@ export const PAUSE_REASON_LABEL: Record<PauseReason, string> = {
   claude_outdated: 'Claude Code 업데이트 필요',
   device_locked: '디바이스 잠김',
   device_disconnected: '디바이스 연결 끊김',
+  host_lost: '호스트 연결 끊김',
 };
 
 export const Run = z.object({
@@ -491,8 +493,18 @@ export const Run = z.object({
   /** 이 Run의 실행 큐 — 이어서 실행할 때 같은 케이스를 돌린다 (없으면 예전 Run: 남은 자동 케이스 전체) */
   tcIds: z.array(z.string()).optional(),
   startedAt: z.string(),
+  /** 호스트가 Run 동안 RUN_HEARTBEAT_MS마다 남기는 연결 신호 (F-DV-04). 없으면 예전 Run */
+  heartbeatAt: z.string().optional(),
 });
 export type Run = z.infer<typeof Run>;
+
+/** 호스트가 Run 연결 신호를 남기는 주기 */
+export const RUN_HEARTBEAT_MS = 30_000;
+/** 이 시간 넘게 신호가 없는 실행 중 Run은 호스트가 죽거나 끊긴 것으로 본다 */
+export const RUN_STALE_MS = 90_000;
+/** 실행 중인데 호스트 신호가 끊긴 Run (신호를 남기지 않은 예전 Run은 판단하지 않는다) */
+export const isRunStale = (run: Pick<Run, 'status' | 'heartbeatAt'>, now: number) =>
+  run.status === 'running' && !!run.heartbeatAt && now - new Date(run.heartbeatAt).getTime() > RUN_STALE_MS;
 
 export const TestCycle = z.object({
   id: z.string(),

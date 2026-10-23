@@ -5,6 +5,7 @@ import {
   POINT_RESULT_LABEL,
   PRIORITY_LABEL,
   TEST_TYPE_LABEL,
+  isRunStale,
   type CaseResult,
   type PointResult,
   type TestCase,
@@ -36,7 +37,7 @@ import { MockScreen } from '../../mock/MockScreen';
 import { ConfirmPanel } from './ConfirmPanel';
 import { EvidenceBand } from './EvidenceBand';
 import { autoConfirmChecks, decidedByLabel, isAutoPassReversal, neighbors, resultKey, shortId } from './model';
-import { Card, KV, Mono, RunState, traceUrl } from './parts';
+import { Card, KV, Mono, RunState, traceUrl, useNow } from './parts';
 import './qa-sheet.css';
 
 export function TracePage() {
@@ -75,6 +76,7 @@ function Trace({ d }: { d: CycleDetail }) {
   const { prev, next, index } = neighbors(d.cases, tcId);
   const go = (t: string, dev: string) => navigate(traceUrl(projectId, d.cycle.id, t, dev));
   const manual = tc.mode === 'manual';
+  const now = useNow();
   const running = d.runs.find(
     (x) => x.deviceId === deviceId && x.currentTcId === tcId && (x.status === 'running' || x.status === 'paused'),
   );
@@ -214,7 +216,11 @@ function Trace({ d }: { d: CycleDetail }) {
               <span className={`${textClass('label1')} qs-muted`}>
                 {running ? (
                   <span className="qs-row" style={{ gap: token('space-6'), justifyContent: 'center' }}>
-                    <RunState paused={running.status === 'paused'} reason={running.pauseReason} />
+                    <RunState
+                      paused={running.status === 'paused'}
+                      reason={running.pauseReason}
+                      stale={isRunStale(running, now)}
+                    />
                     {running.executor}의 Run이 이 칸을 잡고 있습니다.
                   </span>
                 ) : (

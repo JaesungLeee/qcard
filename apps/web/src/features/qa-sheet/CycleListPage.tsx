@@ -6,7 +6,8 @@ import { useCycles, useMyRole } from '../../data/hooks';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
 import { fmtDateTime, fmtPercent } from '../../components/format';
-import { Mono, RunState, SERVER_ENV_LABEL, VerdictBar, VerdictCountList, periodLabel } from './parts';
+import { Mono, RunState, SERVER_ENV_LABEL, VerdictBar, VerdictCountList, periodLabel, useNow } from './parts';
+import { isRunStale } from '@qcard/shared';
 import './qa-sheet.css';
 
 export function CycleListPage() {
@@ -58,6 +59,7 @@ export function CycleListPage() {
 }
 
 function CycleCard({ s, projectId }: { s: CycleSummary; projectId: string }) {
+  const now = useNow();
   const { cycle, build } = s;
   const completed = Boolean(cycle.period.end);
   const progress = s.total ? s.done / s.total : 0;
@@ -156,7 +158,7 @@ function CycleCard({ s, projectId }: { s: CycleSummary; projectId: string }) {
                 style={{ flexDirection: 'column', alignItems: 'flex-start' }}
               >
                 <span className="qs-row" style={{ gap: token('space-6') }}>
-                  <RunState paused={r.status === 'paused'} reason={r.pauseReason} />
+                  <RunState paused={r.status === 'paused'} reason={r.pauseReason} stale={isRunStale(r, now)} />
                   <b>{r.executor}</b>
                   <span className="qs-muted">{deviceLabel(r.deviceId)}</span>
                 </span>

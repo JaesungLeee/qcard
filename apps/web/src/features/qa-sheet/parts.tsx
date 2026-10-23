@@ -1,7 +1,7 @@
 // QA 시트 화면들이 함께 쓰는 작은 조각.
 import { PAUSE_REASON_LABEL, VERDICT_LABEL, type PauseReason, type Verdict } from '@qcard/shared';
 import { Icons, VerdictBadge, textClass, token } from '@qcard/ui';
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { VerdictCounts } from '../../data/api';
 import { fmtDate } from '../../components/format';
 import { VERDICTS } from './model';
@@ -98,7 +98,28 @@ export function Mono({ children, className = '' }: { children: ReactNode; classN
 }
 
 /** 실행 중 / 일시정지 표시 (아이콘 + 글자). 일시정지면 이유를 붙인다 (F-DB-07) */
-export function RunState({ paused, reason }: { paused: boolean; reason?: PauseReason }) {
+/** 지금 시각 (ms). 화면에 떠 있는 동안 주기적으로 갱신한다 — 데이터가 바뀌지 않아도 "호스트 연결 끊김"이 보이게 */
+export function useNow(intervalMs = 15_000) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(t);
+  }, [intervalMs]);
+  return now;
+}
+
+/** stale: 실행 중인데 호스트 신호가 끊긴 Run (F-DV-04, isRunStale) */
+export function RunState({ paused, reason, stale }: { paused: boolean; reason?: PauseReason; stale?: boolean }) {
+  if (stale && !paused)
+    return (
+      <span
+        className={`qs-row ${textClass('caption1', 'medium')}`}
+        style={{ gap: token('space-2'), color: token('foreground-cautionary-primary') }}
+      >
+        <Icons.IconTriangleExclamation aria-hidden />
+        호스트 연결 끊김
+      </span>
+    );
   return (
     <span
       className={`qs-row ${textClass('caption1', 'medium')}`}

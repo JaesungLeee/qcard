@@ -1,5 +1,5 @@
 import { createFixtureDb } from '@qcard/fixtures';
-import type { CaseResult } from '@qcard/shared';
+import { isRunStale, type CaseResult } from '@qcard/shared';
 import { describe, expect, it } from 'vitest';
 import { createMemoryApi } from '../../data/memory';
 import {
@@ -20,7 +20,8 @@ import {
   worstVerdict,
 } from './model';
 
-const load = (id = 'cycle-130-1') => createMemoryApi({ db: createFixtureDb() }).getCycle({ projectId: 'haru', cycleId: id });
+const load = (id = 'cycle-130-1') =>
+  createMemoryApi({ db: createFixtureDb() }).getCycle({ projectId: 'haru', cycleId: id });
 const bySrc = (cases: { sourceId: string; tcId: string }[], id: string) =>
   cases.find((c) => c.sourceId === `onboarding-flow/${id}`)!.tcId;
 
@@ -31,6 +32,24 @@ describe('worstVerdict', () => {
     expect(worstVerdict(['pass', 'na'])).toBe('pass');
     expect(worstVerdict(['na'])).toBe('na');
     expect(worstVerdict([])).toBeUndefined();
+  });
+});
+
+describe('호스트 연결 끊김 (F-DV-04)', () => {
+  const now = Date.parse('2026-10-23T10:00:00Z');
+  const run = { status: 'running' as const, heartbeatAt: '2026-10-23T09:59:00Z' };
+  it('실행 중 Run은 신호가 90초 넘게 없으면 끊긴 것으로 본다. 일시정지·신호 없는 예전 Run은 아니다', () => {
+    expect(isRunStale(run, now)).toBe(false);
+    expect(isRunStale({ ...run, heartbeatAt: '2026-10-23T09:58:00Z' }, now)).toBe(true);
+    expect(isRunStale({ ...run, status: 'paused', heartbeatAt: '2026-10-23T09:00:00Z' }, now)).toBe(false);
+    expect(isRunStale({ status: 'running' }, now)).toBe(false);
+  });
+
+  it('진행 매트릭스의 실행 중 칸에 끊김을 표시한다', async () => {
+    const d = await load();
+    const runs = d.runs.map((r) => ({ ...r, status: 'running' as const, heartbeatAt: '2026-10-23T09:00:00Z' }));
+    const [, p8] = progressMatrix(d.cases, d.cycle.targets, indexResults(d.results), runs, now);
+    expect(p8!.cells.find((c) => c.state === 'running')!.stale).toBe(true);
   });
 });
 

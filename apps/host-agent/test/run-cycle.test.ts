@@ -7,9 +7,9 @@ import { seedDocs } from '@qcard/data/seed';
 import { DeviceDisconnectedError, FakeDevice } from '@qcard/device';
 import { APP_PACKAGE, GITHUB, onboardingScenario, PEOPLE } from '@qcard/fixtures';
 import { createLlm, PlanLimitError, UsageMeter, type LlmClient } from '@qcard/llm';
-import { deleteDoc, doc, getDoc, setLogLevel, type Firestore } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, setLogLevel, updateDoc, type Firestore } from 'firebase/firestore';
 import { getBytes, ref, type FirebaseStorage } from 'firebase/storage';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import type { ConsoleHome, ConsoleServerMessage } from '@qcard/shared';
@@ -365,6 +365,40 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     service.handle({ type: 'control', action: 'abort' });
     await service.idle();
     expect(first?.type === 'state' && first.state.queue.map((q) => q.tcId)).toEqual(['TC-ONBOARDING-004']);
+  });
+
+  it('호스트가 죽어 "실행 중"으로 남은 내 Run은 다시 켤 때 일시정지로 정리해 이어서 실행할 수 있다 (F-DV-04)', async () => {
+    const { queue } = await host(PEOPLE.lead, 'unused');
+    const dead = runSink(queue, {
+      ...REF,
+      deviceId: DEVICE,
+      runId: 'run-dead',
+      executor: PEOPLE.lead,
+      screen: { w: 1080, h: 2340 },
+    });
+    await dead.start(['TC-ONBOARDING-004']);
+    await dead.drain();
+    // 마지막 신호가 5분 전
+    const path = 'projects/haru/cycles/cycle-130-1/runs/run-dead';
+    await env.withSecurityRulesDisabled((c) =>
+      updateDoc(doc(c.firestore() as unknown as Firestore, path), {
+        heartbeatAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+      }),
+    );
+
+    const { service, home } = await serviceFor(galaxy());
+    expect(home().cycles.find((c) => c.cycleId === 'cycle-130-1')?.pausedRun).toMatchObject({
+      id: 'run-dead',
+      reason: 'host_lost',
+    });
+    await service.idle();
+    await vi.waitFor(async () => {
+      let run: unknown;
+      await env.withSecurityRulesDisabled(async (c) => {
+        run = (await getDoc(doc(c.firestore() as unknown as Firestore, path))).data();
+      });
+      expect(run).toMatchObject({ status: 'paused', pauseReason: 'host_lost' });
+    });
   });
 
   it('디바이스가 잠겨 있으면 Run을 시작하지 않고 이유를 알린다', async () => {

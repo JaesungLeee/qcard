@@ -22,6 +22,8 @@ export interface RunSink {
    * 칸 선점(F-CY-06)은 아직 없어서 두 실행자가 같은 대상 디바이스로 동시에 돌리면 같은 칸을 중복 실행한다
    */
   progress(tcId: string): Promise<void>;
+  /** 호스트가 살아 있다는 신호 (F-DV-04). Run 동안 RUN_HEARTBEAT_MS마다 */
+  heartbeat(): Promise<void>;
   saveScreenshot: SaveScreenshot;
   result(r: CaseResult): Promise<void>;
   /** 플랜 한도·로그인 등으로 멈춤 (F-EX-17). 진행 중 케이스 결과는 쓰지 않는다 */
@@ -60,6 +62,7 @@ export function runSink(queue: UploadQueue, t: RunTarget): RunSink {
         status: 'running',
         tcIds,
         startedAt: new Date().toISOString(),
+        heartbeatAt: new Date().toISOString(),
       };
       await queue.enqueue({ type: 'set', path: runPath, data: { ...run, _i: Date.now() } });
     },
@@ -67,9 +70,10 @@ export function runSink(queue: UploadQueue, t: RunTarget): RunSink {
       queue.enqueue({
         type: 'update',
         path: runPath,
-        data: { status: 'running', currentTcId: tcId },
+        data: { status: 'running', currentTcId: tcId, heartbeatAt: new Date().toISOString() },
         remove: ['pauseReason'],
       }),
+    heartbeat: () => queue.enqueue({ type: 'update', path: runPath, data: { heartbeatAt: new Date().toISOString() } }),
     async saveScreenshot(png, { caseId, index }) {
       const path = `${runPath}/${caseId}/obs-${String(index).padStart(2, '0')}.png`;
       await queue.enqueue({ type: 'upload', path, contentType: 'image/png' }, png);
