@@ -10,6 +10,7 @@ import {
   type TestCase,
 } from '@qcard/shared';
 import { matchVersions, sourceId, type RowPlan, type SpecBundle, type SpecDoc, type SpecRow } from '@qcard/spec';
+import { nameChecker, unmarkUnknownNames } from './names';
 import { CASE_SYSTEM, CaseBatchOutput, PLAN_SYSTEM, SpecPlanOutput, type GenCase } from './prompts';
 
 /*
@@ -88,6 +89,16 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
   const startOf = new Map<string, { prepFlowIds: string[]; cleanState: boolean }>();
   const newSuggestions: (Omit<SpecSuggestion, 'id'> & { spec: string })[] = [];
   const replannedSpecs = new Set<string>();
+  // 버튼 이름의 근거: 스펙 본문 + 사람이 검토한 기존 준비 플로우
+  const reviewedFlows = input.prepFlows.flatMap((f) => [f.check, ...f.steps]);
+  const unmark = (texts: string[], sources: string[], where: string) => {
+    const known = nameChecker(sources);
+    return texts.map((t) => {
+      const r = unmarkUnknownNames(t, known);
+      if (r.guessed.length) warnings.push(`${where}: 스펙에 없는 버튼 이름 ${r.guessed.map((n) => `[${n}]`).join(' ')}을 추정으로 표시했다`);
+      return r.text;
+    });
+  };
 
   const planSpecs = bundle.specs.filter((s) => targets.some((r) => r.spec === s));
   for (const [index, spec] of planSpecs.entries()) {
@@ -102,7 +113,8 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
         warnings.push(`${spec.name}: 준비 플로우 ID ${f.id}가 이미 있어 기존 것을 쓴다`);
         continue;
       }
-      const flow: PrepFlow = { id: f.id, name: f.name, kind: f.kind, check: f.check, steps: f.steps };
+      const steps = unmark(f.steps, [...specSources(spec), ...reviewedFlows], `${spec.name}/${f.id}`);
+      const flow: PrepFlow = { id: f.id, name: f.name, kind: f.kind, check: f.check, steps };
       flows.push(flow);
       added.push(flow);
     }
@@ -187,7 +199,15 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
       cases.push({ ...old, ...where, change: 'same' });
       continue;
     }
-    const g = generated.get(r.sourceId)!;
+    const generatedCase = generated.get(r.sourceId)!;
+    const prevSteps = r.previous ? r.previous.steps.map((x) => x.text) : [];
+    const g: GenCase = {
+      ...generatedCase,
+      steps: generatedCase.steps.map((x, i) => ({
+        ...x,
+        text: unmark([x.text], [...specSources(r.spec), ...reviewedFlows, ...prevSteps], `${r.tcId} 단계 ${i + 1}`)[0]!,
+      })),
+    };
     if (g.platform === 'ios') {
       skipped.push({ sourceId: r.sourceId, reason: 'iOS 전용 (MVP는 공통·Android 케이스만 만든다)' });
       continue;
@@ -307,6 +327,14 @@ const maxNum = (ids: string[], prefix: string) =>
 function missingRows(rows: RowPlan[], out: { row_id: string }[]): string[] {
   const got = new Set(out.map((o) => o.row_id));
   return rows.filter((r) => !got.has(r.row.id)).map((r) => r.row.id);
+}
+
+/** 스펙에 쓰인 글 (버튼 이름의 근거) */
+function specSources(spec: SpecDoc): string[] {
+  return [
+    ...spec.requirements.map((r) => r.text),
+    ...spec.rows.flatMap((r) => [r.title, r.given, r.when, r.then]),
+  ];
 }
 
 // ---------------------------------------------------------------- 프롬프트 본문

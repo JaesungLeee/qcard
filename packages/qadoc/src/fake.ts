@@ -5,7 +5,7 @@ import type { GenCase, SpecPlanOutput } from './prompts';
  * 테스트용 가짜 생성 모델 (QA Doc Generator). 실제 모델 없이 생성 흐름·저장·작업 처리를 시험한다.
  * 프롬프트에서 행 ID를 읽어 행마다 정해진 케이스를 돌려준다.
  *   - 스펙 계획: 준비 플로우 pf-home(없으면 새로), 모든 행 [pf-home, pf-clean, pf-nope] (코드가 순서·없는 ID를 바로잡는지)
- *   - 케이스: TS-003은 iOS 전용(제외), EC-001은 확인 질문 1개
+ *   - 케이스: TS-003은 iOS 전용(제외), EC-001은 확인 질문 1개, TS-002는 스펙에 있는 버튼 이름 + 지어낸 이름([다음])
  *   - drop: 그 행을 첫 응답에서 뺀다 · failOn: n번째 호출에서 오류를 던진다
  */
 /** 요청을 보고 답하는 가짜 모델. 스펙 계획인지 케이스 변환인지는 출력 스키마로 구분한다 */
@@ -43,7 +43,13 @@ export function fakeGeneratorLlm(opts: { drop?: string; failOn?: { call: number;
           preconditions: ['처음 설치함'],
           data: null,
           account_role: null,
-          steps: [{ text: '앱을 연다', manual: false }],
+          steps:
+            row_id === 'TS-002'
+              ? [
+                  { text: '[시작하기]를 누른다', manual: false },
+                  { text: '[다음]을 누른다', manual: false },
+                ]
+              : [{ text: '앱을 연다', manual: false }],
           points: [{ target: '버튼 개수', compare: 'count', expected: '2', method: 'tree' }],
           priority: 'medium',
           type: 'functional',

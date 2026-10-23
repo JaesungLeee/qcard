@@ -91,6 +91,11 @@ describe('generateQaDoc — 첫 버전', async () => {
     expect(warnings.join('\n')).toContain('pf-nope');
   });
 
+  it('스펙에 없는 버튼 이름은 추정으로 표시한다', () => {
+    expect(byId('TS-002').steps.map((s) => s.text)).toEqual(['[시작하기]를 누른다', '다음(추정)을 누른다']);
+    expect(warnings.join('\n')).toContain('TC-SAMPLE-002 단계 2: 스펙에 없는 버튼 이름 [다음]');
+  });
+
   it('질문이 생긴 케이스는 보류, 질문은 요구사항·케이스에 연결된다 (F-QD-03)', () => {
     expect(byId('EC-001').approval.status).toBe('held');
     expect(doc.questions).toEqual([
