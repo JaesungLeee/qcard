@@ -289,6 +289,34 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     expect(service.running).toBe(false);
   });
 
+  it('이어서 실행하면 그 Run의 큐를 다시 돌린다 — 이전 결과가 있어 다시 실행하려고 고른 칸도', async () => {
+    // TC-004(시드에 이전 결과 있음)를 다시 실행하려고 골랐다가 연결이 끊겨 멈춘 Run
+    const { queue } = await host(PEOPLE.lead, 'unused');
+    const paused = runSink(queue, {
+      ...REF,
+      deviceId: DEVICE,
+      runId: 'run-paused',
+      executor: PEOPLE.lead,
+      screen: { w: 1080, h: 2340 },
+    });
+    await paused.start(['TC-ONBOARDING-004']);
+    await paused.pause('device_disconnected');
+    await paused.drain();
+
+    const { service, msgs, home } = await serviceFor(galaxy());
+    const option = home().cycles.find((c) => c.cycleId === 'cycle-130-1');
+    expect(option?.pausedRun).toMatchObject({ id: 'run-paused', total: 1, left: 1 });
+
+    service.handle({ type: 'start', ...REF, resumeRunId: 'run-paused' });
+    for (let i = 0; i < 100 && !service.running; i++) await new Promise((r) => setTimeout(r, 20));
+    await service.idle();
+    const first = msgs.find((m) => m.type === 'state' && m.state.queue.length > 0);
+    expect(first?.type === 'state' && first.state.queue.map((q) => q.tcId)).toEqual(['TC-ONBOARDING-004']);
+    // 이번에 결과를 냈으니 더 이어서 실행할 것이 없다
+    await service.refresh();
+    expect(home().cycles.find((c) => c.cycleId === 'cycle-130-1')?.pausedRun).toBeUndefined();
+  });
+
   it('디바이스가 잠겨 있으면 Run을 시작하지 않고 이유를 알린다', async () => {
     const device = galaxy();
     const { service, msgs, home } = await serviceFor(device);

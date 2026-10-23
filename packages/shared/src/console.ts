@@ -104,7 +104,8 @@ export type ConsoleCycleOption = {
   /** 자동 케이스 (수동 케이스는 웹·콘솔에서 사람이 입력한다) */
   cases: { tcId: string; title: string; done: boolean }[];
   /** 내가 이 디바이스로 돌리다 일시정지된 Run (이어서 실행) */
-  pausedRun?: { id: string; reason?: string };
+  /** total: 그 Run의 큐 크기 (예전 Run이면 없음), left: 이어서 실행할 케이스 수 */
+  pausedRun?: { id: string; reason?: string; total?: number; left: number };
 };
 
 /** Run이 없을 때 콘솔: 연결된 디바이스, 고를 수 있는 사이클, 지난 Run 결과 */

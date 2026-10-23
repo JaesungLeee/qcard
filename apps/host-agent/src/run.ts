@@ -63,7 +63,10 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
   const { api, info, log } = deps;
   // 지난 Run에서 멈춘 업로드가 있으면 다시 보내 본다 (같은 오류면 이번 Run도 멈추고 알린다)
   deps.queue.retry();
-  const { cycle, build } = await api.getCycle({ projectId: req.projectId, cycleId: req.cycleId });
+  const { cycle, build, runs } = await api.getCycle({ projectId: req.projectId, cycleId: req.cycleId });
+  // 이어서 실행하면 그 Run의 큐를 그대로 쓴다 (남은 전체로 넓어지지 않게)
+  const resumed = req.resumeRunId ? runs.find((r) => r.id === req.resumeRunId) : undefined;
+  const tcIds = req.tcIds?.length ? req.tcIds : resumed?.tcIds?.length ? resumed.tcIds : undefined;
   const target = cycle.targets.find((t) => t.model === info.model && t.osMajor === info.osMajor);
   if (!target) {
     throw new CycleRunError(
@@ -171,7 +174,7 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
       cycleId: req.cycleId,
       deviceId: target!.id,
       runId,
-      tcIds: req.tcIds?.length ? req.tcIds : undefined,
+      tcIds,
       skipDone: Boolean(req.resumeRunId),
       meter,
       onCase: (tc, r) => {

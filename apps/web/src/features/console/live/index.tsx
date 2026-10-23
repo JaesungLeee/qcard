@@ -126,7 +126,7 @@ export function demoHome(session: ConsoleSession): ConsoleHome {
         docVersion: session.build.version,
         deviceId: 'pixel-8-16',
         cases,
-        pausedRun: { id: session.run.id, reason: 'plan_limit' },
+        pausedRun: { id: session.run.id, reason: 'plan_limit', total: 3, left: 2 },
       },
       {
         projectId: session.projectId,

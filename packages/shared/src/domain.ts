@@ -465,6 +465,8 @@ export const Run = z.object({
   /** status가 paused일 때 */
   pauseReason: PauseReason.optional(),
   currentTcId: z.string().optional(),
+  /** 이 Run의 실행 큐 — 이어서 실행할 때 같은 케이스를 돌린다 (없으면 예전 Run: 남은 자동 케이스 전체) */
+  tcIds: z.array(z.string()).optional(),
   startedAt: z.string(),
 });
 export type Run = z.infer<typeof Run>;

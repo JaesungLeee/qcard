@@ -212,6 +212,8 @@ function CycleCard({
   onStart: (r: StartRun) => void;
 }) {
   const remaining = c.cases.filter((x) => !x.done);
+  const resumeLeft = c.pausedRun?.left ?? 0;
+  const resumeTotal = c.pausedRun?.total;
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
   const toggle = (id: string, on: boolean) =>
@@ -246,7 +248,7 @@ function CycleCard({
       {c.pausedRun && (
         <SectionMessage
           variant="cautionary"
-          description={`사유: ${c.pausedRun.reason ? (PAUSE_REASON_LABEL[c.pausedRun.reason as PauseReason] ?? c.pausedRun.reason) : '알 수 없음'} · 결과가 있는 칸은 건너뜁니다`}
+          description={`사유: ${c.pausedRun.reason ? (PAUSE_REASON_LABEL[c.pausedRun.reason as PauseReason] ?? c.pausedRun.reason) : '알 수 없음'} · ${resumeTotal ? `${resumeTotal}건 중 남은 ${resumeLeft}건` : `남은 ${resumeLeft}건`}을 이어서 실행합니다`}
         >
           일시정지된 Run이 있습니다
         </SectionMessage>
@@ -257,10 +259,10 @@ function CycleCard({
             size="small"
             variant="solid"
             color="primary"
-            disabled={!canStart}
+            disabled={!canStart || resumeLeft === 0}
             onClick={() => onStart({ ...ref, resumeRunId: c.pausedRun!.id })}
           >
-            이어서 실행
+            {`이어서 실행 (${resumeLeft}건)`}
           </Button>
         )}
         <Button

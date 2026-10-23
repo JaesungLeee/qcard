@@ -25,7 +25,10 @@ export type RunCycleInput = {
   runId: string;
   /** 지정하면 이 케이스만 */
   tcIds?: string[];
-  /** 이미 결과가 있는 칸은 건너뛴다 (일시정지 후 재개) */
+  /**
+   * 일시정지된 Run을 이어서: tcIds(그 Run의 큐)가 있으면 이 Run에서 결과를 낸 칸만, 없으면 결과가 있는 칸을 모두 건너뛴다.
+   * 다시 실행하려고 고른 칸(이전 결과 있음)이 이어서 실행할 때 빠지지 않게
+   */
   skipDone?: boolean;
   /** 사용량·실행 한도 (F-EX-12). 케이스별로 집계되고, env.llm도 같은 미터로 감싸야 한도가 걸린다 */
   meter?: UsageMeter;
@@ -57,7 +60,11 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
   if (!detail.cycle.targets.some((t) => t.id === deviceId)) {
     throw new Error(`이 사이클의 대상 디바이스가 아닙니다: ${deviceId}`);
   }
-  const done = new Set(detail.results.filter((r) => r.deviceId === deviceId && r.verdict !== 'nt').map((r) => r.tcId));
+  const done = new Set(
+    detail.results
+      .filter((r) => r.deviceId === deviceId && r.verdict !== 'nt' && (!input.tcIds || r.runId === input.runId))
+      .map((r) => r.tcId),
+  );
   const cases = runOrder(
     detail.cases.filter(
       (c) =>
@@ -86,7 +93,7 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
       throw e;
     }
   };
-  await sink.start();
+  await sink.start(cases.map((c) => c.tcId));
   for (const testCase of cases) {
     const before = await deviceProblem();
     if (before) return paused(before.reason, before.message);

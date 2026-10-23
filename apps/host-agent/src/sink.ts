@@ -14,7 +14,8 @@ import type { ApplyOp, UploadQueue } from './queue';
  */
 
 export interface RunSink {
-  start(): Promise<void>;
+  /** tcIds: 실행 큐 (이어서 실행할 때 쓴다) */
+  start(tcIds: string[]): Promise<void>;
   /** 이 케이스 칸을 잡는다 (F-CY-06 칸 자동 선점) */
   progress(tcId: string): Promise<void>;
   saveScreenshot: SaveScreenshot;
@@ -46,13 +47,14 @@ export function runSink(queue: UploadQueue, t: RunTarget): RunSink {
   const cycle = `projects/${t.projectId}/cycles/${t.cycleId}`;
   const runPath = `${cycle}/runs/${t.runId}`;
   return {
-    async start() {
+    async start(tcIds) {
       const run: Run = {
         id: t.runId,
         cycleId: t.cycleId,
         executor: t.executor,
         deviceId: t.deviceId,
         status: 'running',
+        tcIds,
         startedAt: new Date().toISOString(),
       };
       await queue.enqueue({ type: 'set', path: runPath, data: { ...run, _i: Date.now() } });

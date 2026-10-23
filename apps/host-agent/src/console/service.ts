@@ -1,11 +1,13 @@
 import type { QcardApi } from '@qcard/data';
 import type { DeviceDriver, DeviceInfo } from '@qcard/device';
 import type {
+  CaseResult,
   ClaudeCodeState,
   ConsoleClientMessage,
   ConsoleCycleOption,
   ConsoleHome,
   ConsoleServerMessage,
+  Run,
 } from '@qcard/shared';
 import type { FirebaseStorage } from 'firebase/storage';
 import type { UploadQueue } from '../queue';
@@ -165,7 +167,18 @@ export class ConsoleService implements ConsoleBackend {
             .filter((c) => c.mode === 'auto')
             .map((c) => ({ tcId: c.tcId, title: c.title, done: done.has(c.tcId) })),
           ...(paused
-            ? { pausedRun: { id: paused.id, ...(paused.pauseReason ? { reason: paused.pauseReason } : {}) } }
+            ? {
+                pausedRun: {
+                  id: paused.id,
+                  ...(paused.pauseReason ? { reason: paused.pauseReason } : {}),
+                  ...resumable(
+                    paused,
+                    d.results,
+                    target.id,
+                    d.cases.filter((c) => c.mode === 'auto' && !done.has(c.tcId)).length,
+                  ),
+                },
+              }
             : {}),
         });
       }
@@ -255,4 +268,14 @@ export class ConsoleService implements ConsoleBackend {
   async idle() {
     await this.run?.done;
   }
+}
+
+/** 일시정지된 Run을 이어서 실행하면 돌 케이스 수 (runCycle의 skipDone과 같은 규칙) */
+function resumable(run: Run, results: CaseResult[], deviceId: string, remaining: number) {
+  // 큐를 남기지 않은 예전 Run: 결과가 없는 자동 케이스 전체
+  if (!run.tcIds) return { left: remaining };
+  const here = new Set(
+    results.filter((r) => r.deviceId === deviceId && r.runId === run.id && r.verdict !== 'nt').map((r) => r.tcId),
+  );
+  return { total: run.tcIds.length, left: run.tcIds.filter((id) => !here.has(id)).length };
 }
