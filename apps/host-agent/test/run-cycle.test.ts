@@ -7,7 +7,7 @@ import { seedDocs } from '@qcard/data/seed';
 import { DeviceDisconnectedError, FakeDevice } from '@qcard/device';
 import { APP_PACKAGE, GITHUB, onboardingScenario, PEOPLE } from '@qcard/fixtures';
 import { createLlm, PlanLimitError, UsageMeter, type LlmClient } from '@qcard/llm';
-import { doc, getDoc, setLogLevel, type Firestore } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, setLogLevel, type Firestore } from 'firebase/firestore';
 import { getBytes, ref, type FirebaseStorage } from 'firebase/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtempSync } from 'node:fs';
@@ -95,6 +95,17 @@ describe('runCycle → Firestore·Storage', () => {
       (r) => r.tcId === 'TC-ONBOARDING-004' && r.deviceId === DEVICE,
     )!;
     expect(after).toMatchObject({ verdict: 'pass', runId: 'run-host-1', attempts: before!.attempts + 1 });
+    // 이전 시도는 요약이 결과에, 전체 내용이 attempts에 남는다 (F-CY-04). 판정 이력도 그대로다
+    expect(after.previousAttempts?.at(-1)).toMatchObject({
+      attempt: before!.attempts,
+      verdict: before!.verdict,
+      runId: before!.runId,
+    });
+    expect(after.history).toEqual(before!.history);
+    const kept = await getDoc(
+      doc(db, `projects/haru/cycles/cycle-130-1/attempts/TC-ONBOARDING-004__${DEVICE}__${before!.attempts}`),
+    );
+    expect(kept.data()).toMatchObject({ verdict: before!.verdict, runId: before!.runId, steps: before!.steps });
     // 스크린샷은 다운로드 URL이 아니라 Storage 경로로 남는다 — 멤버만 보안 규칙을 거쳐 읽는다
     const shot = after.steps[0]!.screenshot;
     expect(shot).toMatchObject({ kind: 'storage', w: 1080, h: 2340 });
@@ -107,6 +118,19 @@ describe('runCycle → Firestore·Storage', () => {
     const run = (await getDoc(doc(db, 'projects/haru/cycles/cycle-130-1/runs/run-host-1'))).data();
     expect(run).toMatchObject({ status: 'done', executor: PEOPLE.lead, deviceId: DEVICE });
     expect(run?.currentTcId).toBeUndefined();
+  });
+
+  it('같은 시도를 다시 보내면(업로드 재시도) 이전 시도로 보관하지 않는다', async () => {
+    const { db, storage, api } = await host(PEOPLE.lead);
+    const before = (await api.getCycle(REF)).results.find((r) => r.verdict !== 'nt' && r.deviceId === DEVICE)!;
+    const path = `projects/haru/cycles/cycle-130-1/results/${before.tcId}__${DEVICE}`;
+    const rerun = { ...before, verdict: 'fail', runId: 'run-x', executedAt: '2026-10-23T10:00:00.000Z', history: [] };
+    const apply = firestoreApply(db, storage);
+    await apply({ type: 'result', path, data: rerun });
+    await apply({ type: 'result', path, data: rerun });
+    const after = (await api.getCycle(REF)).results.find((r) => r.tcId === before.tcId && r.deviceId === DEVICE)!;
+    expect(after.attempts).toBe(before.attempts + 1);
+    expect(after.previousAttempts).toHaveLength((before.previousAttempts?.length ?? 0) + 1);
   });
 
   it('플랜 한도에 닿으면 결과를 쓰지 않고 Run을 일시정지한다', async () => {
@@ -315,6 +339,32 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     // 이번에 결과를 냈으니 더 이어서 실행할 것이 없다
     await service.refresh();
     expect(home().cycles.find((c) => c.cycleId === 'cycle-130-1')?.pausedRun).toBeUndefined();
+  });
+
+  it('케이스를 고르지 않고 시작하면 결과가 없는 칸만 돌린다 ([남은 N건 실행])', async () => {
+    // 시드는 이 칸의 자동 케이스에 모두 결과가 있다 — TC-004만 비운다
+    await env.withSecurityRulesDisabled((c) =>
+      deleteDoc(
+        doc(
+          c.firestore() as unknown as Firestore,
+          'projects/haru/cycles/cycle-130-1/results/TC-ONBOARDING-004__' + DEVICE,
+        ),
+      ),
+    );
+    const { service, msgs, home } = await serviceFor(galaxy());
+    const option = home().cycles.find((c) => c.cycleId === 'cycle-130-1')!;
+    expect(option.cases.length).toBeGreaterThan(1);
+    expect(option.cases.filter((c) => !c.done).map((c) => c.tcId)).toEqual(['TC-ONBOARDING-004']);
+
+    service.handle({ type: 'start', ...REF });
+    let first: ConsoleServerMessage | undefined;
+    for (let i = 0; i < 100 && !first; i++) {
+      await new Promise((r) => setTimeout(r, 20));
+      first = msgs.find((m) => m.type === 'state' && m.state.queue.length > 0);
+    }
+    service.handle({ type: 'control', action: 'abort' });
+    await service.idle();
+    expect(first?.type === 'state' && first.state.queue.map((q) => q.tcId)).toEqual(['TC-ONBOARDING-004']);
   });
 
   it('디바이스가 잠겨 있으면 Run을 시작하지 않고 이유를 알린다', async () => {

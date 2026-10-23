@@ -24,6 +24,7 @@ import {
   toApiError,
   type ConfirmVerdictInput,
   type CycleDetail,
+  type CycleRef,
   type CycleSummary,
   type ProjectSummary,
   type QcardApi,
@@ -69,6 +70,8 @@ export function createMemoryApi(
         const { cycle, build } = localRunCycle(run, doc);
         db.cycles.push(cycle);
         db.builds.push(build);
+        const byId = new Map(doc.cases.map((c) => [c.tcId, c]));
+        db.cycleCases[cycle.id] = structuredClone(cycle.snapshot.flatMap((s) => byId.get(s.tcId) ?? []));
         db.results[cycle.id] = run.results;
         db.defects[cycle.id] = [];
         db.runs[cycle.id] = [];
@@ -123,7 +126,15 @@ export function createMemoryApi(
     }
   };
 
-  return {
+  // 사이클 구독 (watchCycle): 쓰기가 일어나면 그 사이클을 다시 읽어 알린다
+  const watchers = new Map<string, Set<(d: CycleDetail) => void>>();
+  const notify = (ref: CycleRef) => {
+    const set = watchers.get(ref.cycleId);
+    if (!set?.size) return;
+    void api.getCycle(ref).then((d) => set.forEach((fn) => fn(d)));
+  };
+
+  const api: MemoryApi = {
     get currentUser() {
       return currentUser;
     },
@@ -296,8 +307,17 @@ export function createMemoryApi(
       return rules(() => {
         requireEditor(membersOf(projectId), actor().uid);
         const id = `cycle-m${db.cycles.length + 1}`;
-        const { cycle, results } = newCycle(projectId, input, doc(input.docId), build(input.buildId), actor(), now(), id);
+        const { cycle, cases, results } = newCycle(
+          projectId,
+          input,
+          doc(input.docId),
+          build(input.buildId),
+          actor(),
+          now(),
+          id,
+        );
         db.cycles.push(cycle);
+        db.cycleCases[id] = cases;
         db.results[id] = results;
         db.runs[id] = [];
         db.defects[id] = [];
@@ -317,18 +337,23 @@ export function createMemoryApi(
     async getCycle({ cycleId }) {
       await ensureLocal();
       const c = cycle(cycleId);
-      const d = doc(c.docId);
-      const byId = new Map(d.cases.map((x) => [x.tcId, x]));
       const detail: CycleDetail = {
         cycle: c,
         build: build(c.buildId),
-        doc: d,
-        cases: c.snapshot.map((s) => byId.get(s.tcId)!).filter(Boolean),
+        doc: doc(c.docId),
+        cases: db.cycleCases[c.id] ?? [],
         results: db.results[c.id] ?? [],
         defects: db.defects[c.id] ?? [],
         runs: db.runs[c.id] ?? [],
       };
       return wait(detail);
+    },
+    watchCycle(ref, onChange, onError) {
+      const fn = (d: CycleDetail) => onChange(d);
+      const set = watchers.get(ref.cycleId) ?? new Set();
+      watchers.set(ref.cycleId, set.add(fn));
+      api.getCycle(ref).then((d) => set.has(fn) && fn(d), onError);
+      return () => void set.delete(fn);
     },
     async confirmVerdict(input: ConfirmVerdictInput) {
       await ensureLocal();
@@ -336,6 +361,7 @@ export function createMemoryApi(
       const i = results.findIndex((x) => x.tcId === input.tcId && x.deviceId === input.deviceId);
       if (i < 0) throw new NotFoundError(`결과 없음: ${input.tcId} × ${input.deviceId}`);
       results[i] = confirmedResult(results[i]!, input, currentUser, now());
+      notify(input);
       return wait(results[i]);
     },
 
@@ -345,7 +371,10 @@ export function createMemoryApi(
       return rules(() => {
         requireEditor(membersOf(projectId), actor().uid);
         const n = db.jobs.length + 1;
-        const { job } = qaDocRequest(projectId, input, actor(), now(), { bundleId: `bundle-m${n}`, jobId: `job-m${n}` });
+        const { job } = qaDocRequest(projectId, input, actor(), now(), {
+          bundleId: `bundle-m${n}`,
+          jobId: `job-m${n}`,
+        });
         db.jobs.unshift(job);
         return job;
       });
@@ -383,4 +412,5 @@ export function createMemoryApi(
       return wait(db.console);
     },
   };
+  return api;
 }

@@ -101,6 +101,11 @@ export interface QcardApi {
 
   listCycles(projectId: string): Promise<CycleSummary[]>;
   getCycle(ref: CycleRef): Promise<CycleDetail>;
+  /**
+   * 사이클 실시간 구독 (F-CY-05·F-DB-07): 처음 한 번과, 사이클·결과·Run·결함이 바뀔 때마다 최신 내용을 준다.
+   * 다른 실행자의 진행·판정도 들어온다. 돌려준 함수로 구독을 끊는다
+   */
+  watchCycle(ref: CycleRef, onChange: (detail: CycleDetail) => void, onError?: (e: unknown) => void): () => void;
   /** 사람 확정·오버라이드 (F-RP-04). 판정 변경 이력이 쌓인다. */
   confirmVerdict(input: ConfirmVerdictInput): Promise<CaseResult>;
 
@@ -179,7 +184,7 @@ export type CycleDetail = {
   cycle: TestCycle;
   build: Build;
   doc: QADocument;
-  /** 스냅샷에 고정된 케이스 (문서에서 스냅샷 해시로 찾은 것) */
+  /** 스냅샷에 고정된 케이스 (사이클을 만들 때 복사한 내용) */
   cases: TestCase[];
   results: CaseResult[];
   defects: Defect[];

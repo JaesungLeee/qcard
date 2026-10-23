@@ -12,6 +12,7 @@ import {
   type TestCase,
   type TestCycle,
   type Verdict,
+  type VerdictChange,
 } from '@qcard/shared';
 import type { ApkInfo } from '@qcard/apk';
 import { readBundle } from '@qcard/spec';
@@ -122,12 +123,15 @@ export function resolveQuestionIn(
   return { questions, released };
 }
 
+/** 사람 확정·오버라이드 (F-RP-04)가 남기는 판정 기록 한 건. 판정이 같아도 사람이 확정했다는 기록으로 남긴다 */
+export function verdictChange(r: CaseResult, input: ConfirmVerdictInput, user: string, now: string): VerdictChange {
+  return { at: now, by: user, from: r.verdict, to: input.verdict, ...(input.note ? { note: input.note } : {}) };
+}
+
 /** 사람 확정·오버라이드 (F-RP-04): 판정 변경 이력을 남긴다 */
 export function confirmedResult(r: CaseResult, input: ConfirmVerdictInput, user: string, now: string): CaseResult {
   const next: CaseResult = structuredClone(r);
-  if (r.verdict !== input.verdict || input.note) {
-    next.history.push({ at: now, by: user, from: r.verdict, to: input.verdict, note: input.note });
-  }
+  next.history.push(verdictChange(r, input, user, now));
   next.verdict = input.verdict;
   next.decidedBy = { kind: 'human', name: user };
   next.autoConfirmed = false;
@@ -222,7 +226,8 @@ export function qaDocRequest(
 /** 다시 시도: 실패·일시정지한 작업만, 요청자 본인만 */
 export function retriedJob(job: Job, uid: string): Job {
   if (job.requestedBy !== uid) throw new PermissionError('요청한 사람만 다시 시도할 수 있습니다.');
-  if (job.status !== 'failed' && job.status !== 'paused') throw new RuleError('실패하거나 일시정지한 작업만 다시 시도합니다.');
+  if (job.status !== 'failed' && job.status !== 'paused')
+    throw new RuleError('실패하거나 일시정지한 작업만 다시 시도합니다.');
   const { error: _e, progress: _p, host: _h, ...rest } = job;
   return { ...rest, status: 'queued' };
 }
@@ -262,10 +267,15 @@ export function newBuild(
 
 /** 대상 디바이스 id: `galaxy-s24-15` */
 export const targetId = (model: string, osMajor: number) =>
-  `${model.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${osMajor}`;
+  `${model
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')}-${osMajor}`;
 
 /**
  * 사이클 만들기 (F-CY-01·02): 승인된 케이스만 스냅샷(TC ID + 내용 해시)으로 고정하고 칸마다 N/T 결과를 만든다.
+ * 케이스 내용은 복사해 둔다(cases) — 사이클을 만든 뒤 QA 문서를 고쳐도 이 사이클은 만들 때 내용으로 실행한다.
  * 삭제 판정 케이스는 넣지 않는다.
  */
 export function newCycle(
@@ -276,20 +286,28 @@ export function newCycle(
   user: { name: string },
   now: string,
   id: string,
-): { cycle: TestCycle; results: CaseResult[] } {
+): { cycle: TestCycle; cases: TestCase[]; results: CaseResult[] } {
   const name = input.name.trim();
   if (!name) throw new RuleError('사이클 이름을 입력하세요.');
   const targets: TargetDevice[] = [];
   for (const t of input.targets) {
     const model = t.model.trim();
-    if (!model || !Number.isInteger(t.osMajor) || t.osMajor < 1) throw new RuleError('대상 디바이스는 모델과 OS 메이저 버전이 필요합니다.');
+    if (!model || !Number.isInteger(t.osMajor) || t.osMajor < 1)
+      throw new RuleError('대상 디바이스는 모델과 OS 메이저 버전이 필요합니다.');
     const tid = targetId(model, t.osMajor);
     if (targets.some((x) => x.id === tid)) continue;
-    targets.push({ id: tid, model, osMajor: t.osMajor, resolution: t.resolution ?? '—', label: `${model} (Android ${t.osMajor})` });
+    targets.push({
+      id: tid,
+      model,
+      osMajor: t.osMajor,
+      resolution: t.resolution ?? '—',
+      label: `${model} (Android ${t.osMajor})`,
+    });
   }
   if (!targets.length) throw new RuleError('대상 디바이스를 하나 이상 고르세요.');
   const approved = doc.cases.filter((c) => c.change !== 'removed' && c.approval.status === 'approved');
-  if (!approved.length) throw new RuleError('승인된 케이스가 없습니다. QA 문서에서 케이스를 승인한 뒤 사이클을 만드세요.');
+  if (!approved.length)
+    throw new RuleError('승인된 케이스가 없습니다. QA 문서에서 케이스를 승인한 뒤 사이클을 만드세요.');
   const cycle: TestCycle = {
     id,
     projectId,
@@ -316,5 +334,5 @@ export function newCycle(
       history: [],
     })),
   );
-  return { cycle, results };
+  return { cycle, cases: structuredClone(approved), results };
 }

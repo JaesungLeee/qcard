@@ -43,6 +43,34 @@ describe('트리 포인트 코드 비교', () => {
     expect(compareTree(point('state'), undefined, 420).result).toBe('unknown');
   });
 
+  it('앱 상태는 요소가 있기만 해서는 일치가 아니다 — 기대 텍스트가 있으면 비교한다', () => {
+    expect(compareTree(point('state', '온보딩이 완료로 기록된다'), el(), 420).result).toBe('unknown');
+    const p = point('state', '스텝 표시가 "2/4"다');
+    expect(compareTree(p, el({ text: '2/4' }), 420).result).toBe('match');
+    expect(compareTree(p, el({ text: '1/4' }), 420).result).toBe('mismatch');
+  });
+
+  it('개수: 같은 id(없으면 같은 부모·클래스·크기)의 요소를 센다', () => {
+    const dots = [0, 1, 2, 3, 4].map((i) =>
+      el({ ref: `e${i + 2}`, resourceId: undefined, cls: 'android.view.View', parent: 'e1' }),
+    );
+    const tree = [el({ ref: 'e1', resourceId: undefined, cls: 'android.view.View' }), ...dots];
+    expect(compareTree(point('count', '5'), dots[0], 420, tree)).toMatchObject({
+      result: 'match',
+      observed: expect.stringContaining('5개'),
+    });
+    expect(compareTree(point('count', '4개'), dots[0], 420, tree).result).toBe('mismatch');
+    // 적게 셌으면 판단불가: 선택된 dot처럼 그림으로만 그린 요소는 트리에 없다 (실기기 SM-S711N 튜토리얼 dot 5개 중 4개만 트리에 있음)
+    expect(compareTree(point('count', '5'), dots[0], 420, tree.slice(0, 5)).result).toBe('unknown');
+    expect(compareTree(point('count', '1'), undefined, 420).result).toBe('unknown');
+    const items = [el({ ref: 'e1' }), el({ ref: 'e2' }), el({ ref: 'e3', resourceId: 'other' })];
+    expect(compareTree(point('count', '2'), items[0], 420, items).result).toBe('match');
+    // 없음은 0개
+    expect(compareTree(point('count', '0'), undefined, 420).result).toBe('match');
+    expect(compareTree(point('count', '0'), el(), 420).result).toBe('mismatch');
+    expect(compareTree(point('count', '몇 개'), el(), 420).result).toBe('unknown');
+  });
+
   it('텍스트 존재: 따옴표·백틱 안의 텍스트를 비교한다', () => {
     const p = point('text_exists', '`함께할 메이트를 불러볼까요?`가 보인다');
     expect(compareTree(p, el({ text: '함께할 메이트를 불러볼까요?' }), 420).result).toBe('match');
@@ -161,8 +189,15 @@ describe('잠깐 뜨는 요소와 화면 안정화', () => {
     const device = new FakeDevice({ ...onboardingScenario(), start: 'invite-toast' });
     const env = { device, appPackage: 'com.example.harukong', vision: true, clock: fakeClock() };
     const withToast = await observe({ ...env, llm: scriptedLlm([]).client }, 'TC', 3);
-    const evidence = await settle({ ...env, llm: scriptedLlm([]).client }, { caseId: 'TC', evidence: [withToast], nextIndex: 4 });
-    const llm = scriptedLlm([json({ points: [{ point_id: 'T', result: 'match', observed: '토스트', reason: '앞선 화면', target_element: null }] })]);
+    const evidence = await settle(
+      { ...env, llm: scriptedLlm([]).client },
+      { caseId: 'TC', evidence: [withToast], nextIndex: 4 },
+    );
+    const llm = scriptedLlm([
+      json({
+        points: [{ point_id: 'T', result: 'match', observed: '토스트', reason: '앞선 화면', target_element: null }],
+      }),
+    ]);
     const [r] = await verifyPoints(
       { ...env, llm: llm.client },
       { caseId: 'TC', evidence, points: [{ ...point('visible', '복사 완료 토스트가 뜬다', 'vision'), id: 'T' }] },
@@ -173,7 +208,9 @@ describe('잠깐 뜨는 요소와 화면 안정화', () => {
     expect(content.map((b) => b.text ?? '').join('\n')).toMatch(/\[앞선 화면 · 관찰 3\][\s\S]*\[검증 시점 화면\]/);
 
     // 화면 비교뿐이면 검증 시점 화면만
-    const only = scriptedLlm([json({ points: [{ point_id: 'S', result: 'match', observed: '', reason: '', target_element: null }] })]);
+    const only = scriptedLlm([
+      json({ points: [{ point_id: 'S', result: 'match', observed: '', reason: '', target_element: null }] }),
+    ]);
     await verifyPoints(
       { ...env, llm: only.client },
       { caseId: 'TC', evidence, points: [{ ...point('screen', '메이트 초대 스텝', 'vision'), id: 'S' }] },
@@ -300,5 +337,4 @@ describe('runCase', () => {
       '준비 플로우 없음: pf-ghost',
     );
   });
-
 });

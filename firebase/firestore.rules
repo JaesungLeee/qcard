@@ -23,6 +23,27 @@ service cloud.firestore {
       return isMember(p) && role(p) in ['admin', 'qa'];
     }
 
+    // 사람 판정(decidedBy.kind == 'human')이 새로 생기거나 바뀌면, 이 요청에서 만든 로그(_decision)가 그 판정을 기록해야 한다
+    function decisionLogged(p, c) {
+      let next = request.resource.data;
+      let human = next.get('decidedBy', {}).get('kind', '') == 'human';
+      let unchanged = resource != null
+        && resource.data.verdict == next.verdict
+        && resource.data.get('decidedBy', null) == next.get('decidedBy', null)
+        && resource.data.get('_decision', '') == next.get('_decision', '');
+      return !human || unchanged || newLogMatches(p, c, next);
+    }
+    function newLogMatches(p, c, next) {
+      let path = /databases/$(database)/documents/projects/$(p)/cycles/$(c)/verdictLog/$(next.get('_decision', '-'));
+      let log = getAfter(path).data;
+      return !exists(path) && existsAfter(path)
+        && log.byUid == request.auth.uid
+        && log.by == next.decidedBy.name
+        && log.to == next.verdict
+        && log.tcId == next.tcId
+        && log.deviceId == next.deviceId;
+    }
+
     match /projects/{p} {
       allow read: if isMember(p);
       allow write: if false;
@@ -51,9 +72,44 @@ service cloud.firestore {
         allow create: if canEdit(p);
         allow update, delete: if false;
       }
-      match /cycles/{rest=**} {
+      // 테스트 사이클. 만들 때 고정한 스냅샷(TC ID·내용 해시)과 케이스 사본은 바꾸지 않는다 (F-CY-02)
+      match /cycles/{c} {
         allow read: if isMember(p);
-        allow write: if canEdit(p);
+        allow create, delete: if canEdit(p);
+        allow update: if canEdit(p)
+          && request.resource.data.snapshot == resource.data.snapshot
+          && request.resource.data.docId == resource.data.docId;
+      }
+      match /cycles/{c}/cases/{tcId} {
+        allow read: if isMember(p);
+        allow create: if canEdit(p);
+        allow update, delete: if false;
+      }
+      // 판정 변경 이력 (F-RP-04): 판정자 = 로그인 사용자(프로필 이름), 시각 = 서버 시각. 남긴 뒤에는 바꾸지 못한다
+      match /cycles/{c}/verdictLog/{id} {
+        allow read: if isMember(p);
+        allow create: if canEdit(p)
+          && request.resource.data.byUid == request.auth.uid
+          && request.resource.data.by == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
+          && request.resource.data.at == request.time;
+        allow update, delete: if false;
+      }
+      // 결과 칸: 사람 판정으로 바꾸는 쓰기는 같은 요청에서 새 판정 로그를 남겨야 한다 (판정자·판정이 로그와 같다)
+      match /cycles/{c}/results/{r} {
+        allow read: if isMember(p);
+        allow create, update: if canEdit(p) && decisionLogged(p, c);
+        allow delete: if canEdit(p);
+      }
+      // 다시 실행해 밀려난 이전 시도 (F-CY-04): 보관만 하고 바꾸지 않는다
+      match /cycles/{c}/attempts/{id} {
+        allow read: if isMember(p);
+        allow create: if canEdit(p);
+        allow update, delete: if false;
+      }
+      // Run·결함 등 (cases·verdictLog·results·attempts는 위 규칙만 — 여기서 쓰기를 열지 않는다)
+      match /cycles/{c}/{sub}/{rest=**} {
+        allow read: if isMember(p);
+        allow write: if canEdit(p) && !(sub in ['cases', 'verdictLog', 'results', 'attempts']);
       }
       match /defects/{rest=**} {
         allow read: if isMember(p);

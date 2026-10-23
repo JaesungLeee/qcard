@@ -1,6 +1,6 @@
 import type { SaveScreenshot } from '@qcard/agent';
-import type { CaseResult, PauseReason, Run } from '@qcard/shared';
-import { deleteField, doc, getDoc, setDoc, updateDoc, type Firestore } from 'firebase/firestore';
+import type { AttemptSummary, CaseResult, PauseReason, Run } from '@qcard/shared';
+import { deleteField, doc, getDoc, setDoc, updateDoc, writeBatch, type Firestore } from 'firebase/firestore';
 import { ref, uploadBytes, type FirebaseStorage } from 'firebase/storage';
 import type { ApplyOp, UploadQueue } from './queue';
 
@@ -9,14 +9,18 @@ import type { ApplyOp, UploadQueue } from './queue';
  * 기록은 업로드 큐를 거친다 — 네트워크가 끊겨도 로컬에 남았다가 연결되면 순서대로 보낸다 (F-EX-13).
  *
  *   projects/{p}/cycles/{c}/runs/{run}                 Run (현재 케이스·일시정지 이유)
- *   projects/{p}/cycles/{c}/results/{tc}__{device}     CaseResult (칸을 덮어쓰고 시도 횟수를 올린다)
+ *   projects/{p}/cycles/{c}/results/{tc}__{device}     CaseResult (최신 시도. 다시 실행하면 시도 횟수를 올린다)
+ *   projects/{p}/cycles/{c}/attempts/{tc}__{device}__{n}  밀려난 n번째 시도 전체 (F-CY-04, 바꾸지 않는다)
  *   Storage projects/{p}/cycles/{c}/runs/{run}/{tc}/obs-NN.png   스크린샷 (결과에는 경로만 남긴다)
  */
 
 export interface RunSink {
   /** tcIds: 실행 큐 (이어서 실행할 때 쓴다) */
   start(tcIds: string[]): Promise<void>;
-  /** 이 케이스 칸을 잡는다 (F-CY-06 칸 자동 선점) */
+  /**
+   * 지금 실행 중인 케이스를 Run 문서(`currentTcId`)에 알린다. 진행 표시용이며 잠금이 아니다 —
+   * 칸 선점(F-CY-06)은 아직 없어서 두 실행자가 같은 대상 디바이스로 동시에 돌리면 같은 칸을 중복 실행한다
+   */
   progress(tcId: string): Promise<void>;
   saveScreenshot: SaveScreenshot;
   result(r: CaseResult): Promise<void>;
@@ -90,6 +94,20 @@ export function runSink(queue: UploadQueue, t: RunTarget): RunSink {
   };
 }
 
+const attemptSummary = (r: CaseResult): AttemptSummary =>
+  JSON.parse(
+    JSON.stringify({
+      attempt: r.attempts,
+      verdict: r.verdict,
+      decidedBy: r.decidedBy,
+      executor: r.executor,
+      executedAt: r.executedAt,
+      runId: r.runId,
+      actualSummary: r.actualSummary,
+      blockedReason: r.blockedReason,
+    }),
+  ) as AttemptSummary;
+
 /** 큐 작업을 Firestore·Storage에 보낸다 */
 export function firestoreApply(db: Firestore, storage: FirebaseStorage): ApplyOp {
   return async (op, file) => {
@@ -102,10 +120,26 @@ export function firestoreApply(db: Firestore, storage: FirebaseStorage): ApplyOp
       await uploadBytes(ref(storage, op.path), file!, { contentType: op.contentType });
       return;
     }
-    // 결과: 이미 수행한 칸을 다시 실행하면 시도 횟수를 올린다 (아직 안 한 칸 N/T는 첫 시도)
+    // 결과 (F-CY-04): 이미 수행한 칸을 다시 실행하면 최신 시도가 최종이 되고, 이전 시도는 attempts에 그대로 보관한다
+    // (아직 안 한 칸 N/T는 첫 시도). 같은 시도를 다시 보낸 것이면(업로드 재시도) 보관하지 않는다
     const at = doc(db, op.path);
-    const prev = (await getDoc(at)).data() as (CaseResult & { _i?: number }) | undefined;
-    const attempts = prev && prev.verdict !== 'nt' ? prev.attempts + 1 : 1;
-    await setDoc(at, { ...op.data, attempts, _i: prev?._i ?? Date.now() });
+    const prev = (await getDoc(at)).data() as (CaseResult & { _i?: number; _decision?: string }) | undefined;
+    const next = op.data as CaseResult;
+    const resent = prev && prev.runId === next.runId && prev.executedAt === next.executedAt;
+    if (resent) {
+      const kept = prev.previousAttempts ? { previousAttempts: prev.previousAttempts } : {};
+      return setDoc(at, { ...op.data, ...kept, attempts: prev.attempts, _i: prev._i ?? Date.now() });
+    }
+    if (!prev || prev.verdict === 'nt') return setDoc(at, { ...op.data, attempts: 1, _i: prev?._i ?? Date.now() });
+    const { _i, _decision: _, ...old } = prev;
+    const batch = writeBatch(db);
+    batch.set(doc(db, `${op.path}__${old.attempts}`.replace('/results/', '/attempts/')), old);
+    batch.set(at, {
+      ...op.data,
+      attempts: old.attempts + 1,
+      previousAttempts: [...(old.previousAttempts ?? []), attemptSummary(old)],
+      _i,
+    });
+    await batch.commit();
   };
 }

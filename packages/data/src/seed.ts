@@ -30,7 +30,20 @@ export function seedDocs(opts: { deviceCycle?: boolean } = {}): [string, Record<
     put(base, c);
     const build = db.builds.find((b) => b.id === c.buildId);
     if (build) put(`projects/${c.projectId}/builds/${build.id}`, build);
-    (db.results[c.id] ?? []).forEach((r, i) => put(`${base}/results/${r.tcId}__${r.deviceId}`, { ...r, _i: i }));
+    (db.cycleCases[c.id] ?? []).forEach((x, i) => put(`${base}/cases/${x.tcId}`, { ...x, _i: i }));
+    (db.results[c.id] ?? []).forEach((r, i) => {
+      put(`${base}/results/${r.tcId}__${r.deviceId}`, { ...r, history: [], _i: i });
+      // 판정 변경 이력은 verdictLog에 한 건씩 (Firestore 구현이 읽을 때 결과에 붙인다)
+      r.history.forEach((h, k) =>
+        put(`${base}/verdictLog/seed-${r.tcId}__${r.deviceId}-${k}`, {
+          ...h,
+          tcId: r.tcId,
+          deviceId: r.deviceId,
+          byUid: GITHUB[h.by] ?? h.by,
+          _i: k,
+        }),
+      );
+    });
     (db.runs[c.id] ?? []).forEach((r, i) => put(`${base}/runs/${r.id}`, { ...r, _i: i }));
     (db.defects[c.id] ?? []).forEach((d, i) => put(`${base}/defects/${d.id}`, { ...d, _i: i }));
   }
@@ -43,7 +56,6 @@ export const DEVICE_CYCLE = { id: 'cycle-130-device', deviceId: 'sm-s711n-16' };
 
 function deviceCycle(db: ReturnType<typeof createFixtureDb>, put: (path: string, data: unknown) => void) {
   const base = db.cycles.find((c) => c.id === 'cycle-130-1')!;
-  const doc = db.qaDocs.find((d) => d.id === base.docId)!;
   const target = {
     id: DEVICE_CYCLE.deviceId,
     model: 'SM-S711N',
@@ -60,23 +72,22 @@ function deviceCycle(db: ReturnType<typeof createFixtureDb>, put: (path: string,
   };
   const path = `projects/${cycle.projectId}/cycles/${cycle.id}`;
   put(path, cycle);
-  const ids = new Set(cycle.snapshot.map((s) => s.tcId));
-  doc.cases
-    .filter((c) => ids.has(c.tcId))
-    .forEach((c, i) => {
-      const nt: CaseResult = {
-        tcId: c.tcId,
-        deviceId: target.id,
-        verdict: 'nt',
-        autoConfirmed: false,
-        unmetConditions: [],
-        attempts: 0,
-        steps: [],
-        points: [],
-        history: [],
-      };
-      put(`${path}/results/${c.tcId}__${target.id}`, { ...nt, _i: i });
-    });
+  const cases = db.cycleCases[base.id] ?? [];
+  cases.forEach((c, i) => put(`${path}/cases/${c.tcId}`, { ...c, _i: i }));
+  cases.forEach((c, i) => {
+    const nt: CaseResult = {
+      tcId: c.tcId,
+      deviceId: target.id,
+      verdict: 'nt',
+      autoConfirmed: false,
+      unmetConditions: [],
+      attempts: 0,
+      steps: [],
+      points: [],
+      history: [],
+    };
+    put(`${path}/results/${c.tcId}__${target.id}`, { ...nt, _i: i });
+  });
 }
 
 /** 에뮬레이터 로그인용 테스트 사용자 (uid = GitHub 사용자명) */

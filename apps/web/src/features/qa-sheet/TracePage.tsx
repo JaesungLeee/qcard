@@ -406,9 +406,10 @@ function ConditionsCard({ r }: { r: CaseResult }) {
 
 function HistoryCard({ r, manual }: { r: CaseResult; manual: boolean }) {
   const items = [...r.history].reverse();
+  const previous = [...(r.previousAttempts ?? [])].reverse();
   return (
     <Card title="판정 변경 이력">
-      {items.length === 0 && !(r.agentVerdict && r.executedAt) ? (
+      {items.length === 0 && !(r.agentVerdict && r.executedAt) && previous.length === 0 ? (
         <span className={`${textClass('label1')} qs-muted`}>변경 이력이 없습니다</span>
       ) : (
         <ol className="qs-history">
@@ -436,6 +437,21 @@ function HistoryCard({ r, manual }: { r: CaseResult; manual: boolean }) {
               </span>
             </li>
           )}
+          {/* 다시 실행해 밀려난 시도 (F-CY-04). 최신 시도가 최종 판정이다 */}
+          {previous.map((a) => (
+            <li key={`attempt-${a.attempt}`}>
+              <span className="qs-row" style={{ gap: token('space-4') }}>
+                <span className={textClass('label2', 'medium')}>이전 시도 {a.attempt}</span>
+                <VerdictBadge verdict={a.verdict} />
+              </span>
+              <span className={`${textClass('caption1')} qs-muted`}>
+                {a.executedAt ? fmtDateTime(a.executedAt) : '—'} · {a.executor ?? '—'} 실행
+              </span>
+              {(a.actualSummary ?? a.blockedReason) && (
+                <span className={textClass('label2')}>{a.actualSummary ?? a.blockedReason}</span>
+              )}
+            </li>
+          ))}
         </ol>
       )}
       <span className={`${textClass('caption1')} qs-faint`}>이력은 변경할 수 없는 로그로 보관됩니다.</span>

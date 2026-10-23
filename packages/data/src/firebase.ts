@@ -13,6 +13,7 @@ import type {
   Run,
   TestCase,
   TestCycle,
+  VerdictChange,
 } from '@qcard/shared';
 import { ApkError, inspectApk } from '@qcard/apk';
 import { FirebaseError } from 'firebase/app';
@@ -23,7 +24,11 @@ import {
   getCountFromServer,
   getDoc,
   getDocs,
+  onSnapshot,
   query,
+  serverTimestamp,
+  type Timestamp,
+  type QueryDocumentSnapshot,
   runTransaction,
   setDoc,
   where,
@@ -54,6 +59,7 @@ import {
   qaDocSummary,
   retriedJob,
   resolveQuestionIn,
+  verdictChange,
 } from './logic';
 
 /*
@@ -92,6 +98,43 @@ const ordered = <T>(docs: { data: () => DocumentData }[]): T[] =>
     .map((d) => strip<T>(d));
 
 const resultId = (tcId: string, deviceId: string) => `${tcId}__${deviceId}`;
+
+/**
+ * 판정 변경 이력 (F-RP-04)은 결과 문서가 아니라 `cycles/{c}/verdictLog`에 한 건씩 쌓는다.
+ * 배열 안에는 서버 시각을 넣을 수 없고, 보안 규칙이 판정자·시각을 확인하고 바꾸지 못하게 하려면 문서여야 한다.
+ * 결과 문서의 `_decision`은 그 판정을 남긴 로그 id (규칙이 같은 요청에 로그가 생겼는지 본다)
+ */
+type VerdictLog = Omit<VerdictChange, 'at'> & {
+  tcId: string;
+  deviceId: string;
+  byUid?: string;
+  at: string | Timestamp;
+  _i?: number;
+};
+const logTime = (at: VerdictLog['at']) => (typeof at === 'string' ? at : at.toDate().toISOString());
+function withHistory(results: DocumentData[], logs: { data: () => DocumentData }[]): CaseResult[] {
+  const byResult = new Map<string, VerdictLog[]>();
+  for (const d of logs) {
+    const l = d.data() as VerdictLog;
+    const k = resultId(l.tcId, l.deviceId);
+    byResult.set(k, [...(byResult.get(k) ?? []), l]);
+  }
+  const ms = (l: VerdictLog) => new Date(logTime(l.at)).getTime();
+  return results.map((r) => {
+    const { _decision: _, ...rest } = r as CaseResult & { _decision?: string };
+    const mine = (byResult.get(resultId(rest.tcId, rest.deviceId)) ?? []).sort(
+      (a, b) => ms(a) - ms(b) || (a._i ?? 0) - (b._i ?? 0),
+    );
+    const history = mine.map(({ at, by, from, to, note }) => ({
+      at: logTime(at),
+      by,
+      from,
+      to,
+      ...(note ? { note } : {}),
+    }));
+    return { ...rest, history: [...(rest.history ?? []), ...history] };
+  });
+}
 
 /** Firebase 오류 → 화면용 오류 (규칙 위반 메시지는 그대로 보인다) */
 export function fromFirebase(e: unknown): unknown {
@@ -139,10 +182,15 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
     const snap = await getDoc(doc(db, P(p), 'cycles', c));
     if (!snap.exists()) throw new NotFoundError(`사이클 없음: ${c}`);
     const sub = (name: string) => getDocs(collection(db, P(p), 'cycles', c, name));
-    const [results, runs, defects] = await Promise.all([sub('results'), sub('runs'), sub('defects')]);
+    const [results, runs, defects, logs] = await Promise.all([
+      sub('results'),
+      sub('runs'),
+      sub('defects'),
+      sub('verdictLog'),
+    ]);
     return {
       cycle: strip<TestCycle>(snap.data()),
-      results: ordered<CaseResult>(results.docs),
+      results: withHistory(ordered<DocumentData>(results.docs), logs.docs),
       runs: ordered<Run>(runs.docs),
       defects: ordered<Defect>(defects.docs),
     };
@@ -322,15 +370,28 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       }),
     createCycle: (projectId, input) =>
       guard(async () => {
-        const [qaDoc, build] = await Promise.all([loadQaDoc(projectId, input.docId), loadBuild(projectId, input.buildId)]);
+        const [qaDoc, build] = await Promise.all([
+          loadQaDoc(projectId, input.docId),
+          loadBuild(projectId, input.buildId),
+        ]);
         const id = doc(collection(db, P(projectId), 'cycles')).id;
-        const { cycle, results } = newCycle(projectId, input, qaDoc, build, me(), now(), `cycle-${id.slice(0, 8)}`);
-        const base = `${P(projectId)}/cycles/${cycle.id}`;
-        // 결과 칸을 먼저 쓰고 사이클 문서는 마지막에 (목록에 보이는 순간 칸이 다 있다)
-        await writeAll(
-          db,
-          results.map((r, i) => [`${base}/results/${resultId(r.tcId, r.deviceId)}`, { ...r, _i: i }] as [string, DocumentData]),
+        const { cycle, cases, results } = newCycle(
+          projectId,
+          input,
+          qaDoc,
+          build,
+          me(),
+          now(),
+          `cycle-${id.slice(0, 8)}`,
         );
+        const base = `${P(projectId)}/cycles/${cycle.id}`;
+        // 케이스 사본·결과 칸을 먼저 쓰고 사이클 문서는 마지막에 (목록에 보이는 순간 다 있다)
+        await writeAll(db, [
+          ...cases.map((c, i) => [`${base}/cases/${c.tcId}`, { ...c, _i: i }] as [string, DocumentData]),
+          ...results.map(
+            (r, i) => [`${base}/results/${resultId(r.tcId, r.deviceId)}`, { ...r, _i: i }] as [string, DocumentData],
+          ),
+        ]);
         await setDoc(doc(db, base), clean(cycle));
         return cycle;
       }),
@@ -353,19 +414,75 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
     getCycle: ({ projectId, cycleId }) =>
       guard(async () => {
         const c = await loadCycle(projectId, cycleId);
-        const [build, d] = await Promise.all([
+        const [build, d, cases] = await Promise.all([
           loadBuild(projectId, c.cycle.buildId),
           loadQaDoc(projectId, c.cycle.docId),
+          // 사이클을 만들 때 복사한 내용 (QA 문서의 현재 케이스가 아니라)
+          getDocs(collection(db, P(projectId), 'cycles', cycleId, 'cases')),
         ]);
-        const byId = new Map(d.cases.map((x) => [x.tcId, x]));
-        const detail: CycleDetail = {
-          ...c,
-          build,
-          doc: d,
-          cases: c.cycle.snapshot.map((s) => byId.get(s.tcId)!).filter(Boolean),
-        };
+        const detail: CycleDetail = { ...c, build, doc: d, cases: ordered<TestCase>(cases.docs) };
         return detail;
       }),
+    watchCycle: ({ projectId, cycleId }, onChange, onError) => {
+      let stopped = false;
+      const fail = (e: unknown) => {
+        if (!stopped) onError?.(fromFirebase(e));
+      };
+      // 빌드·QA 문서·케이스 사본은 사이클을 만든 뒤 바뀌지 않아 처음 한 번만 읽는다
+      let fixed: Promise<Pick<CycleDetail, 'build' | 'doc' | 'cases'>> | undefined;
+      const live: Partial<Pick<CycleDetail, 'cycle' | 'runs' | 'defects'>> & {
+        results?: DocumentData[];
+        logs?: QueryDocumentSnapshot[];
+      } = {};
+      const emit = async () => {
+        const { cycle, results, runs, defects, logs } = live;
+        if (!cycle || !results || !runs || !defects || !logs) return;
+        fixed ??= Promise.all([
+          loadBuild(projectId, cycle.buildId),
+          loadQaDoc(projectId, cycle.docId),
+          getDocs(collection(db, P(projectId), 'cycles', cycleId, 'cases')),
+        ]).then(([build, d, cases]) => ({ build, doc: d, cases: ordered<TestCase>(cases.docs) }));
+        try {
+          const f = await fixed;
+          // 기다리는 동안 더 새 값이 왔으면 그 값으로 (live를 다시 읽는다)
+          if (!stopped) {
+            const results = withHistory(live.results!, live.logs!);
+            onChange({ cycle: live.cycle!, ...f, results, defects: live.defects!, runs: live.runs! });
+          }
+        } catch (e) {
+          fixed = undefined;
+          fail(e);
+        }
+      };
+      const sub = (name: 'results' | 'runs' | 'defects' | 'verdictLog', set: (docs: QueryDocumentSnapshot[]) => void) =>
+        onSnapshot(
+          collection(db, P(projectId), 'cycles', cycleId, name),
+          (snap) => {
+            set(snap.docs);
+            void emit();
+          },
+          fail,
+        );
+      const unsubs = [
+        onSnapshot(
+          doc(db, P(projectId), 'cycles', cycleId),
+          (snap) => {
+            if (!snap.exists()) return fail(new NotFoundError(`사이클 없음: ${cycleId}`));
+            live.cycle = strip<TestCycle>(snap.data());
+            void emit();
+          },
+          fail,
+        ),
+        sub('results', (d) => (live.results = ordered<DocumentData>(d))),
+        sub('verdictLog', (d) => (live.logs = d)),
+        sub('runs', (d) => (live.runs = ordered<Run>(d))),
+        sub('defects', (d) => (live.defects = ordered<Defect>(d))),
+      ];
+      return () => {
+        stopped = true;
+        for (const u of unsubs) u();
+      };
+    },
     confirmVerdict: (input) =>
       guard(() =>
         runTransaction(db, async (tx) => {
@@ -379,8 +496,27 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
           );
           const snap = await tx.get(ref);
           if (!snap.exists()) throw new NotFoundError(`결과 없음: ${input.tcId} × ${input.deviceId}`);
-          const next = confirmedResult(strip<CaseResult>(snap.data()), input, me().name, now());
-          tx.set(ref, clean({ ...next, _i: snap.data()._i }));
+          const user = me();
+          const { _decision: _, ...current } = strip<CaseResult & { _decision?: string }>(snap.data());
+          // 돌려줄 값은 지금까지의 이력을 붙여 계산한다. 저장은 로그 한 건 + 결과 문서(이력 배열은 그대로)
+          const logs = await getDocs(
+            query(
+              collection(db, P(input.projectId), 'cycles', input.cycleId, 'verdictLog'),
+              where('tcId', '==', input.tcId),
+              where('deviceId', '==', input.deviceId),
+            ),
+          );
+          const next = confirmedResult(withHistory([current], logs.docs)[0]!, input, user.name, now());
+          const log = doc(collection(db, P(input.projectId), 'cycles', input.cycleId, 'verdictLog'));
+          const { at: _at, ...change } = verdictChange(current, input, user.name, now());
+          tx.set(log, {
+            ...clean(change),
+            tcId: input.tcId,
+            deviceId: input.deviceId,
+            byUid: user.uid,
+            at: serverTimestamp(),
+          });
+          tx.set(ref, clean({ ...next, history: current.history, _i: snap.data()._i, _decision: log.id }));
           return next;
         }),
       ),
@@ -399,7 +535,9 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
         });
         // 스냅샷 파일을 먼저 올리고, 다 올라간 뒤에 묶음·작업을 만든다 (호스트가 덜 올라간 묶음을 집지 않게)
         for (const u of uploads) {
-          await uploadString(ref(deps.storage, u.path), u.content, 'raw', { contentType: 'text/markdown; charset=utf-8' });
+          await uploadString(ref(deps.storage, u.path), u.content, 'raw', {
+            contentType: 'text/markdown; charset=utf-8',
+          });
         }
         const batch = writeBatch(db);
         batch.set(bundleRef, clean(bundle));

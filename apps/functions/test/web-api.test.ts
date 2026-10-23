@@ -7,7 +7,7 @@ import { FirebaseError } from 'firebase/app';
 import { setLogLevel, type Firestore } from 'firebase/firestore';
 import { GITHUB, PEOPLE } from '@qcard/fixtures';
 import { MembershipError } from '@qcard/shared';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConflictError, PermissionError, RuleError } from '@qcard/data';
 import { createFirebaseApi, writeAll } from '@qcard/data/firebase';
 import { createMemoryApi } from '../../web/src/data/memory';
@@ -112,6 +112,62 @@ describe('QA 데이터 쓰기', () => {
     const err = await b.updateCase(ref, c.tcId, { ...c, title: '나중' }, c.rev).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ConflictError);
     expect((err as ConflictError).latest.title).toBe('먼저');
+  });
+
+  it('사이클은 만들 때 케이스 내용을 복사해 두고, QA 문서를 고쳐도 그 내용으로 읽힌다 (F-CY-02)', async () => {
+    const fb = apiAs(PEOPLE.lead);
+    const cycle = await fb.createCycle('haru', {
+      name: '고정 확인',
+      docId: ref.docId,
+      buildId: 'build-130',
+      targets: [{ model: 'Pixel 8', osMajor: 15 }],
+      serverEnv: 'stage',
+    });
+    const cref = { projectId: 'haru', cycleId: cycle.id };
+    const before = await fb.getCycle(cref);
+    expect(before.cases.map((c) => c.tcId)).toEqual(cycle.snapshot.map((s) => s.tcId));
+    const c = before.cases[0]!;
+    await fb.updateCase(ref, c.tcId, { ...c, title: '사이클 뒤에 고친 제목' }, c.rev);
+    expect((await fb.getCycle(cref)).cases).toEqual(before.cases);
+  });
+
+  it('구독하면 다른 사람이 확정한 판정이 바로 들어오고, 끊으면 더 받지 않는다 (F-CY-05·F-DB-07)', async () => {
+    const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
+    const watcher = apiAs(PEOPLE.lead);
+    const other = apiAs(PEOPLE.qa);
+    const first = await watcher.getCycle(cref);
+    const r = first.results.find((x) => x.verdict === 'check')!;
+    const verdictOf = (d: typeof first) =>
+      d.results.find((x) => x.tcId === r.tcId && x.deviceId === r.deviceId)!.verdict;
+    const seen: (typeof first)[] = [];
+    const stop = watcher.watchCycle(cref, (d) => seen.push(d));
+    await vi.waitFor(() => expect(seen.length).toBeGreaterThan(0));
+    expect(seen[0]).toEqual(first);
+
+    await other.confirmVerdict({ ...cref, tcId: r.tcId, deviceId: r.deviceId, verdict: 'fail', actualSummary: '재현' });
+    await vi.waitFor(() => expect(verdictOf(seen.at(-1)!)).toBe('fail'));
+    expect(seen.at(-1)!.cases).toEqual(first.cases);
+
+    stop();
+    const count = seen.length;
+    await other.confirmVerdict({ ...cref, tcId: r.tcId, deviceId: r.deviceId, verdict: 'pass' });
+    await new Promise((res) => setTimeout(res, 300));
+    expect(seen.length).toBe(count);
+  });
+
+  it('판정을 확정하면 판정자·서버 시각이 변경 불가 로그로 남고, 결과에 이력으로 붙는다 (F-RP-04)', async () => {
+    const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
+    const qa = apiAs(PEOPLE.qa);
+    const r = (await qa.getCycle(cref)).results.find((x) => x.verdict === 'check')!;
+    const before = Date.now();
+    await qa.confirmVerdict({ ...cref, tcId: r.tcId, deviceId: r.deviceId, verdict: 'fail', actualSummary: '재현' });
+    const after = (await qa.getCycle(cref)).results.find((x) => x.tcId === r.tcId && x.deviceId === r.deviceId)!;
+    expect(after).toMatchObject({ verdict: 'fail', decidedBy: { kind: 'human', name: PEOPLE.qa } });
+    expect(after.history.slice(0, -1)).toEqual(r.history);
+    const last = after.history.at(-1)!;
+    expect(last).toMatchObject({ by: PEOPLE.qa, from: 'check', to: 'fail' });
+    // 서버 시각 (에뮬레이터 시계와 몇 초 이내)
+    expect(Math.abs(new Date(last.at).getTime() - before)).toBeLessThan(10_000);
   });
 
   it('승인·질문 처리·판정 확정이 메모리 구현과 같게 저장된다', async () => {

@@ -393,7 +393,20 @@ export const VerdictChange = z.object({
 });
 export type VerdictChange = z.infer<typeof VerdictChange>;
 
-/** 케이스 × 대상 디바이스 결과 (RunCase). verdict가 nt면 아직 수행 전. */
+/** 다시 실행해 밀려난 이전 시도 (F-CY-04). 전체 내용은 `cycles/{c}/attempts/{tc}__{device}__{n}`에 보관한다 */
+export const AttemptSummary = z.object({
+  attempt: z.number(),
+  verdict: Verdict,
+  decidedBy: DecidedBy.optional(),
+  executor: z.string().optional(),
+  executedAt: z.string().optional(),
+  runId: z.string().optional(),
+  actualSummary: z.string().optional(),
+  blockedReason: z.string().optional(),
+});
+export type AttemptSummary = z.infer<typeof AttemptSummary>;
+
+/** 케이스 × 대상 디바이스 결과 (RunCase). verdict가 nt면 아직 수행 전. 다시 실행하면 최신 시도가 최종이다 */
 export const CaseResult = z.object({
   tcId: z.string(),
   deviceId: z.string(),
@@ -415,6 +428,8 @@ export const CaseResult = z.object({
   steps: z.array(ExecStep),
   points: z.array(PointResult),
   history: z.array(VerdictChange),
+  /** 이전 시도 (오래된 것부터) */
+  previousAttempts: z.array(AttemptSummary).optional(),
   tokens: z.number().optional(),
   costUsd: z.number().optional(),
 });
@@ -444,7 +459,15 @@ export const Defect = z.object({
 export type Defect = z.infer<typeof Defect>;
 
 /** Run 일시정지 이유 (F-EX-13·17). 플랜 한도·로그인은 실행자의 Claude Code 상태 */
-export const PauseReason = z.enum(['executor', 'network', 'plan_limit', 'not_logged_in', 'claude_outdated', 'device_locked', 'device_disconnected']);
+export const PauseReason = z.enum([
+  'executor',
+  'network',
+  'plan_limit',
+  'not_logged_in',
+  'claude_outdated',
+  'device_locked',
+  'device_disconnected',
+]);
 export type PauseReason = z.infer<typeof PauseReason>;
 export const PAUSE_REASON_LABEL: Record<PauseReason, string> = {
   executor: '실행자',

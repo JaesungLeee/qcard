@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { GITHUB, PEOPLE } from '@qcard/fixtures';
 import { ConflictError, PermissionError, RuleError } from './api';
 import type { LocalRun } from './localRuns';
@@ -72,6 +72,39 @@ describe('사이클 판정', () => {
 
   it('통과율은 N/T를 분모에서 뺀다', () => {
     expect(passRate({ pass: 8, fail: 1, blocked: 1, check: 0, nt: 90, na: 0 })).toBeCloseTo(0.8);
+  });
+
+  it('사이클을 만든 뒤 QA 문서 케이스를 고쳐도 사이클은 만들 때 내용으로 보인다 (F-CY-02)', async () => {
+    const api = createMemoryApi();
+    const cycle = await api.createCycle('haru', {
+      name: '고정 확인',
+      docId: DOC.docId,
+      buildId: 'build-130',
+      targets: [{ model: 'Pixel 8', osMajor: 15 }],
+      serverEnv: 'stage',
+    });
+    const ref = { projectId: 'haru', cycleId: cycle.id };
+    const before = (await api.getCycle(ref)).cases[0]!;
+    await api.updateCase(DOC, before.tcId, { ...before, title: '사이클 뒤에 고친 제목' }, before.rev);
+    const after = (await api.getCycle(ref)).cases[0]!;
+    expect(after).toEqual(before);
+    expect(after.contentHash).toBe(cycle.snapshot[0]!.contentHash);
+  });
+
+  it('구독하면 처음 내용과 판정 확정 뒤 내용을 받고, 끊으면 더 받지 않는다 (F-CY-05)', async () => {
+    const api = createMemoryApi();
+    const seen: string[] = [];
+    const r = (await api.getCycle(CYCLE)).results.find((x) => x.verdict === 'check')!;
+    const verdictOf = (d: { results: { tcId: string; deviceId: string; verdict: string }[] }) =>
+      d.results.find((x) => x.tcId === r.tcId && x.deviceId === r.deviceId)!.verdict;
+    const stop = api.watchCycle(CYCLE, (d) => seen.push(verdictOf(d)));
+    await vi.waitFor(() => expect(seen).toEqual(['check']));
+    await api.confirmVerdict({ ...CYCLE, tcId: r.tcId, deviceId: r.deviceId, verdict: 'fail', actualSummary: '재현' });
+    await vi.waitFor(() => expect(seen).toEqual(['check', 'fail']));
+    stop();
+    await api.confirmVerdict({ ...CYCLE, tcId: r.tcId, deviceId: r.deviceId, verdict: 'pass' });
+    await new Promise((res) => setTimeout(res, 20));
+    expect(seen).toEqual(['check', 'fail']);
   });
 
   it('사이클 요약의 칸 수는 스냅샷 × 대상 디바이스', async () => {

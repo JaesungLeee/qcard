@@ -3,11 +3,14 @@
 import { VERDICT_LABEL, type CaseResult, type Verdict } from '@qcard/shared';
 import { Button, SectionMessage, SegmentedControl, SegmentedControlItem, TextArea, textClass, token } from '@qcard/ui';
 import { useId, useState } from 'react';
-import { useParams } from 'react-router';
+import { useParams, useSearchParams } from 'react-router';
 import { useApi, useConfirmVerdict } from '../../data/hooks';
 import { Card } from './parts';
 
 const CHOICES: Verdict[] = ['pass', 'fail', 'blocked', 'na'];
+
+/** 칸이 바뀌었는지 알아보는 값: 판정·이력·시도 횟수 (실시간 구독으로 다른 사람의 변경이 들어온다) */
+const stamp = (r: CaseResult) => `${r.verdict}|${r.history.length}|${r.attempts}`;
 
 export function ConfirmPanel({ cycleId, result, manual }: { cycleId: string; result: CaseResult; manual: boolean }) {
   const api = useApi();
@@ -21,6 +24,17 @@ export function ConfirmPanel({ cycleId, result, manual }: { cycleId: string; res
   const [actual, setActual] = useState(result.actualSummary ?? '');
   const [note, setNote] = useState('');
   const [done, setDone] = useState<Verdict | null>(null);
+  // 패널을 연 뒤(또는 내가 확정한 뒤) 다른 사람이 이 칸을 바꿨으면 알린다
+  // ?demo=changed: 다른 사람이 바꾼 상태를 고정해 본다 (ui:snap)
+  const [params] = useSearchParams();
+  const [seen, setSeen] = useState(() => (params.get('demo') === 'changed' ? '' : stamp(result)));
+  const changedByOther = open && stamp(result) !== seen && !confirm.isPending;
+  const takeLatest = () => {
+    setSeen(stamp(result));
+    setVerdict(CHOICES.includes(result.verdict) ? result.verdict : '');
+    setActual(result.actualSummary ?? '');
+    setDone(null);
+  };
 
   if (result.verdict === 'nt' && !manual) return null;
 
@@ -41,7 +55,8 @@ export function ConfirmPanel({ cycleId, result, manual }: { cycleId: string; res
         actualSummary: actual.trim() || undefined,
       },
       {
-        onSuccess: () => {
+        onSuccess: (saved) => {
+          setSeen(stamp(saved));
           setDone(verdict);
           setNote('');
           if (!needsHuman) setOpen(false);
@@ -55,6 +70,19 @@ export function ConfirmPanel({ cycleId, result, manual }: { cycleId: string; res
       {done && (
         <SectionMessage variant="positive" description={`${api.currentUser} 이름으로 기록했습니다.`}>
           {VERDICT_LABEL[done]}(으)로 확정했습니다
+        </SectionMessage>
+      )}
+      {changedByOther && (
+        <SectionMessage
+          variant="cautionary"
+          description={`지금 판정: ${VERDICT_LABEL[result.verdict]}. 이대로 확정하면 그 판정을 덮어씁니다.`}
+          bottomButton={
+            <Button size="small" variant="outlined" color="assistive" onClick={takeLatest}>
+              최신 내용으로
+            </Button>
+          }
+        >
+          다른 사람이 방금 이 칸을 바꿨습니다
         </SectionMessage>
       )}
       {confirm.isError && (

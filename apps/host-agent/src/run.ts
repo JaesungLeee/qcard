@@ -185,7 +185,8 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
       deviceId: target!.id,
       runId,
       tcIds,
-      skipDone: Boolean(req.resumeRunId),
+      // 고른 칸은 결과가 있어도 다시 돌린다. 고르지 않았으면(남은 전체) 결과가 있는 칸은 건너뛴다
+      skipDone: Boolean(req.resumeRunId) || !tcIds,
       meter,
       onCase: (tc, r) => {
         log(`■ ${tc.tcId} ${tc.title}: ${r.verdict}${r.blockedReason ? ` — ${r.blockedReason}` : ''}`);

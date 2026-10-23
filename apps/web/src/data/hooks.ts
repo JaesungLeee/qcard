@@ -117,14 +117,33 @@ export function usePrepFlows(projectId: string) {
   return useQuery({ queryKey: keys.prepFlows(projectId), queryFn: () => api.listPrepFlows(projectId) });
 }
 
+/** 사이클 목록: 진행률만 보면 돼서 사이클마다 구독하지 않고 15초마다 다시 읽는다 */
 export function useCycles(projectId: string) {
   const api = useApi();
-  return useQuery({ queryKey: keys.cycles(projectId), queryFn: () => api.listCycles(projectId) });
+  return useQuery({
+    queryKey: keys.cycles(projectId),
+    queryFn: () => api.listCycles(projectId),
+    refetchInterval: 15_000,
+  });
 }
 
+/** 사이클 상세: 화면에 떠 있는 동안 구독해 다른 실행자의 진행·판정을 바로 반영한다 (F-CY-05·F-DB-07) */
 export function useCycle(projectId: string, cycleId: string) {
   const api = useApi();
-  return useQuery({ queryKey: keys.cycle(projectId, cycleId), queryFn: () => api.getCycle({ projectId, cycleId }) });
+  const qc = useQueryClient();
+  const key = keys.cycle(projectId, cycleId);
+  const q = useQuery({ queryKey: key, queryFn: () => api.getCycle({ projectId, cycleId }) });
+  useEffect(
+    () =>
+      api.watchCycle(
+        { projectId, cycleId },
+        (d) => qc.setQueryData(keys.cycle(projectId, cycleId), d),
+        // 구독이 끊기면 처음 읽은 값을 그대로 두고 다시 읽기에 맡긴다
+        () => void qc.invalidateQueries({ queryKey: keys.cycle(projectId, cycleId) }),
+      ),
+    [api, qc, projectId, cycleId],
+  );
+  return q;
 }
 
 export function useConsoleSession() {
@@ -193,11 +212,13 @@ export function useJobs(projectId: string) {
   const q = useQuery({
     queryKey: keys.jobs(projectId),
     queryFn: () => api.listJobs(projectId),
-    refetchInterval: (q) =>
-      q.state.data?.some((j) => j.status === 'queued' || j.status === 'running') ? 3000 : false,
+    refetchInterval: (q) => (q.state.data?.some((j) => j.status === 'queued' || j.status === 'running') ? 3000 : false),
   });
   // 작업이 끝나 새 문서·준비 플로우가 생기면 목록을 다시 읽는다
-  const done = (q.data ?? []).filter((j) => j.status === 'done').map((j) => j.id).join(',');
+  const done = (q.data ?? [])
+    .filter((j) => j.status === 'done')
+    .map((j) => j.id)
+    .join(',');
   const seen = useRef(done);
   useEffect(() => {
     if (seen.current === done) return;

@@ -845,6 +845,7 @@ type Special = {
   finalState?: Record<string, string>;
   points?: Parameters<typeof pointResults>[2];
   history?: CaseResult['history'];
+  previousAttempts?: CaseResult['previousAttempts'];
   note?: string;
 };
 
@@ -881,6 +882,16 @@ const SPECIAL_130: Record<string, Partial<Record<string, Special>>> = {
         },
       },
       attempts: 2,
+      previousAttempts: [
+        {
+          attempt: 1,
+          verdict: 'blocked',
+          decidedBy: { kind: 'agent' },
+          executor: 'agent',
+          executedAt: T(16, 11, 5),
+          blockedReason: '준비 플로우 실패: 튜토리얼 스텝 3에 도달하지 못했다',
+        },
+      ],
     },
   },
   [src('TS-023')]: {
@@ -1005,6 +1016,7 @@ function result(
     steps,
     points,
     history: sp?.history ?? [],
+    ...(sp?.previousAttempts ? { previousAttempts: sp.previousAttempts } : {}),
     tokens: tc.mode === 'manual' ? 0 : steps.length * 3800 + points.length * 1200,
     costUsd:
       tc.mode === 'manual' ? 0 : Math.round((steps.length * 3800 + points.length * 1200) * 0.0000042 * 1000) / 1000,
@@ -1169,8 +1181,6 @@ export const defects121: Defect[] = [
 
 export type { ClaudeCodeState, ConsoleDevice, ConsoleQueueItem } from '@qcard/shared';
 
-
-
 export type ConsoleSession = {
   projectId: string;
   cycleId: string;
@@ -1193,7 +1203,6 @@ export type ConsoleSession = {
   /** 이 PC의 Claude Code 상태 (F-DB-09). 호스트 에이전트가 `claude --version`·`claude auth status`로 채운다 */
   claudeCode: ClaudeCodeState;
 };
-
 
 function thoughtsFor(steps: ExecStep[]): (ThoughtEntry & { stepIndex: number })[] {
   const out: (ThoughtEntry & { stepIndex: number })[] = [];
@@ -1375,6 +1384,8 @@ export type FixtureDb = {
   qaDocs: QADocument[];
   builds: Build[];
   cycles: TestCycle[];
+  /** 사이클을 만들 때 복사한 케이스 내용 (F-CY-02). QA 문서를 나중에 고쳐도 사이클은 이 내용으로 실행·표시한다 */
+  cycleCases: Record<string, TestCase[]>;
   results: Record<string, CaseResult[]>;
   defects: Record<string, Defect[]>;
   runs: Record<string, Run[]>;
@@ -1392,6 +1403,8 @@ export function createFixtureDb(): FixtureDb {
     qaDocs: [qaDocV130, qaDocV120],
     builds,
     cycles: [cycle130, cycle121],
+    // QA 문서 케이스와 따로 복사한다 (한 번에 복사하면 같은 객체를 가리켜 문서를 고치면 사본도 바뀐다)
+    cycleCases: structuredClone({ [cycle130.id]: snapshotCases, [cycle121.id]: snapshot120 }),
     results: { [cycle130.id]: results130, [cycle121.id]: results121 },
     defects: { [cycle130.id]: defects130, [cycle121.id]: defects121 },
     runs: { [cycle130.id]: runs130, [cycle121.id]: [] },

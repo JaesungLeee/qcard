@@ -50,11 +50,23 @@ const elementName = (e: UiElement) => e.resourceId ?? (e.text ? `"${e.text}"` : 
 /** 기대값 문장에서 따옴표·백틱으로 감싼 텍스트 */
 const quoted = (s: string) => s.match(/[`"“'‘]([^`"”'’]+)[`"”'’]/)?.[1];
 
-/** 찾은 요소로 포인트를 판정한다 (코드 비교) */
+/**
+ * 찾은 요소와 같은 종류의 요소들: resource-id가 있으면 같은 id, 없으면 같은 부모 아래 같은 클래스·크기.
+ * 목록 항목·인디케이터 dot처럼 같은 모양이 반복되는 요소를 센다
+ */
+function sameKind(tree: UiElement[], el: UiElement) {
+  if (el.resourceId) return tree.filter((e) => e.resourceId === el.resourceId);
+  return tree.filter(
+    (e) => e.parent === el.parent && e.cls === el.cls && e.bounds.w === el.bounds.w && e.bounds.h === el.bounds.h,
+  );
+}
+
+/** 찾은 요소로 포인트를 판정한다 (코드 비교). tree: 요소를 찾은 관찰의 트리 (count에 쓴다) */
 export function compareTree(
   p: VerificationPoint,
   el: UiElement | undefined,
   density: number,
+  tree: UiElement[] = el ? [el] : [],
 ): Pick<PointResult, 'result' | 'observed' | 'reason'> {
   const found = el ? `찾은 요소: ${describe(el)}` : '대상 요소 없음';
   switch (p.compare) {
@@ -71,10 +83,21 @@ export function compareTree(
         observed: found,
         reason: el ? '보이면 안 되는 요소가 있다' : '요소가 없다',
       };
-    case 'state':
-      return el
-        ? { result: 'match', observed: found, reason: '상태를 보여 주는 요소가 있다' }
-        : { result: 'unknown', observed: found, reason: '화면으로 앱 상태를 확인할 수 없다' };
+    case 'state': {
+      // 요소가 있다는 것만으로는 상태가 기대와 같은지 알 수 없다 — 기대 텍스트가 적혀 있을 때만 비교한다
+      const want = el && quoted(p.expected);
+      if (!el || !want) {
+        return {
+          result: 'unknown',
+          observed: found,
+          reason: el
+            ? '상태를 보여 주는 요소는 있으나 기대 상태와 비교할 값이 없다'
+            : '화면으로 앱 상태를 확인할 수 없다',
+        };
+      }
+      const has = `${el.text ?? ''} ${el.desc ?? ''}`.includes(want);
+      return { result: has ? 'match' : 'mismatch', observed: found, reason: has ? `"${want}" 포함` : `"${want}" 없음` };
+    }
     case 'text_exists': {
       if (!el) return { result: 'mismatch', observed: found, reason: '요소를 찾지 못했다' };
       const want = quoted(p.expected);
@@ -92,8 +115,21 @@ export function compareTree(
       const okSize = Math.min(w, h) >= want;
       return { result: okSize ? 'match' : 'mismatch', observed, reason: `최소 ${want}dp ${okSize ? '이상' : '미만'}` };
     }
-    case 'count':
-      return { result: 'unknown', observed: found, reason: '트리 개수 비교는 아직 지원하지 않는다' };
+    case 'count': {
+      const want = Number(p.expected.match(/\d+/)?.[0]);
+      const n = el ? sameKind(tree, el).length : 0;
+      const observed = `${found} · ${n}개`;
+      if (Number.isNaN(want)) return { result: 'unknown', observed, reason: '기대 개수를 읽지 못했다' };
+      // 그림으로만 그린 요소(선택된 인디케이터 dot 등)는 트리에 노드가 없다 — 적게 센 것은 불일치의 근거가 못 된다
+      if (n < want) {
+        return {
+          result: 'unknown',
+          observed,
+          reason: `기대 ${want}개, 트리에서 ${n}개 (트리에 없는 요소가 있을 수 있다)`,
+        };
+      }
+      return { result: n === want ? 'match' : 'mismatch', observed, reason: `기대 ${want}개, 화면 ${n}개` };
+    }
   }
 }
 
@@ -208,7 +244,7 @@ export async function verifyPoints(
         });
         continue;
       }
-      const c = compareTree(p, el, density);
+      const c = compareTree(p, el, density, shown.tree);
       out.set(p.id, {
         ...base(p),
         ...c,
