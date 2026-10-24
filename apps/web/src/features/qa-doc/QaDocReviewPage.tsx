@@ -20,7 +20,7 @@ export function QaDocReviewPage() {
   const { projectId = '', docId = '' } = useParams();
   const doc = useQaDoc(projectId, docId);
   return (
-    <div className="qc-page">
+    <div className="qc-page qc-page-wide">
       <QueryState query={doc}>{(d) => <Review doc={d} projectId={projectId} />}</QueryState>
     </div>
   );

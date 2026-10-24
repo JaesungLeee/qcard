@@ -122,30 +122,107 @@ export type GroupRow = {
   subFeature: string;
   total: number;
   approved: number;
+  /** 이 묶음이 이전 페이지에서 이어진다 */
+  continued: boolean;
 };
 export type CaseRow = { kind: 'case'; case: TestCase };
 export type GridRow = GroupRow | CaseRow;
 
-/** 기능 › 세부 기능(유저 플로우) 단위로 묶는다. 처음 나온 순서를 유지한다. */
-export function groupRows(cases: TestCase[]): GridRow[] {
-  const groups = new Map<string, { head: GroupRow; items: TestCase[] }>();
+const groupKey = (c: TestCase) => `${c.feature}\u0000${c.subFeature}`;
+
+/** 기능 › 세부 기능(유저 플로우) 단위로 모아 편다. 묶음은 처음 나온 순서, 묶음 안은 원래 순서. */
+export function orderByGroup(cases: TestCase[]): TestCase[] {
+  const groups = new Map<string, TestCase[]>();
   for (const c of cases) {
-    const key = `${c.feature}\u0000${c.subFeature}`;
-    let g = groups.get(key);
-    if (!g) {
-      g = {
-        head: { kind: 'group', key, feature: c.feature, subFeature: c.subFeature, total: 0, approved: 0 },
-        items: [],
-      };
-      groups.set(key, g);
-    }
-    g.items.push(c);
-    if (isActive(c)) {
-      g.head.total++;
-      if (c.approval.status === 'approved') g.head.approved++;
-    }
+    const list = groups.get(groupKey(c));
+    if (list) list.push(c);
+    else groups.set(groupKey(c), [c]);
   }
-  return [...groups.values()].flatMap((g) => [g.head, ...g.items.map((c): CaseRow => ({ kind: 'case', case: c }))]);
+  return [...groups.values()].flat();
+}
+
+/**
+ * 묶음 머리 행을 넣는다. `items`는 `orderByGroup`으로 편 `context`의 연속 구간(한 페이지)이다.
+ * 승인 수는 `context` 전체에서 세고(삭제 케이스 제외), 첫 묶음이 앞 페이지에서 이어지면 `continued`.
+ */
+export function groupRows(items: TestCase[], context: TestCase[] = items): GridRow[] {
+  const counts = new Map<string, { total: number; approved: number }>();
+  for (const c of context) {
+    const n = counts.get(groupKey(c)) ?? { total: 0, approved: 0 };
+    if (isActive(c)) {
+      n.total++;
+      if (c.approval.status === 'approved') n.approved++;
+    }
+    counts.set(groupKey(c), n);
+  }
+  const start = items.length > 0 ? context.indexOf(items[0]!) : -1;
+  const rows: GridRow[] = [];
+  let last: string | null = null;
+  for (const c of items) {
+    const key = groupKey(c);
+    if (key !== last) {
+      const before = rows.length === 0 && start > 0 ? context[start - 1] : undefined;
+      rows.push({
+        kind: 'group',
+        key,
+        feature: c.feature,
+        subFeature: c.subFeature,
+        ...counts.get(key)!,
+        continued: !!before && groupKey(before) === key,
+      });
+      last = key;
+    }
+    rows.push({ kind: 'case', case: c });
+  }
+  return rows;
+}
+
+/** 분류 범위: 기능만, 또는 기능 › 세부 기능. 비면 전체 */
+export type CaseScope = { feature: string | null; subFeature: string | null };
+
+export const inScope = (c: TestCase, s: CaseScope) =>
+  (s.feature === null || c.feature === s.feature) && (s.subFeature === null || c.subFeature === s.subFeature);
+
+type Tally = { count: number; total: number; approved: number };
+export type FlowNode = Tally & { subFeature: string };
+export type FeatureNode = Tally & { feature: string; hasNew: boolean; flows: FlowNode[] };
+
+/** 분류 목록: 기능 › 세부 기능별 케이스 수와 승인 수(삭제 케이스 제외). 처음 나온 순서 */
+export function caseTree(cases: TestCase[]): FeatureNode[] {
+  const features = new Map<string, FeatureNode>();
+  const add = (n: Tally, c: TestCase) => {
+    n.count++;
+    if (isActive(c)) {
+      n.total++;
+      if (c.approval.status === 'approved') n.approved++;
+    }
+  };
+  for (const c of cases) {
+    let f = features.get(c.feature);
+    if (!f) {
+      f = { feature: c.feature, count: 0, total: 0, approved: 0, hasNew: false, flows: [] };
+      features.set(c.feature, f);
+    }
+    let flow = f.flows.find((x) => x.subFeature === c.subFeature);
+    if (!flow) {
+      flow = { subFeature: c.subFeature, count: 0, total: 0, approved: 0 };
+      f.flows.push(flow);
+    }
+    add(f, c);
+    add(flow, c);
+    if (c.change === 'new') f.hasNew = true;
+  }
+  return [...features.values()];
+}
+
+export const PAGE_SIZES = [10, 20, 50] as const;
+
+/** `page`(1부터)를 범위 안으로 맞춰 자른다. */
+export function paginate<T>(items: T[], page: number, size: number) {
+  const pageCount = Math.max(1, Math.ceil(items.length / size));
+  const current = Math.min(Math.max(1, Math.floor(page) || 1), pageCount);
+  const start = (current - 1) * size;
+  return { page: current, pageCount, start, items: items.slice(start, start + size) };
 }
 
 /** `onboarding-flow/TS-008` → `TS-008` */
