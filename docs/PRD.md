@@ -488,7 +488,7 @@ Host(user, machine, credential_hash, connected_at, last_seen_at, revoked_at?, cl
 - LLM으로 전송한 데이터 감사 로그
 - 라이브 화면은 실시간으로 실행자 PC 밖으로 전송하지 않음. 클라우드에는 증거용 스크린샷·녹화만 저장(GCP 서울 리전)
 - **호스트 자격**: 비밀값은 실행자 PC의 macOS 키체인에만 두고 서버에는 해시만 저장. 호스트 토큰은 짧은 수명이며, 보안 규칙이 호스트 쓰기마다 연결 상태를 확인해 해제된 PC의 쓰기를 즉시 막음(F-TM-14)
-- Agent 결과(RunCase·Step·검증 포인트)는 호스트 토큰으로만 쓸 수 있고, 그 Run의 실행자 호스트로 좁힘. 그래도 실행자가 자기 호스트를 통해 Agent 결과를 조작할 여지는 있음 — 프로젝트 멤버 간 신뢰를 전제로 감수하고(다른 프로젝트에는 영향 없음), 사람 판정만 보안 규칙(판정자 = 로그인 사용자, 서버 시각)과 변경 불가 이력으로 강제(F-RP-04)
+- Agent 기록(Run, Agent 판정 결과, 이전 시도, 스크린샷)은 그 Run을 실행한 사용자의 호스트(호스트 토큰)만 쓸 수 있음. Run에 실행자 uid를 남기고 보안 규칙이 확인하며, 같은 사용자가 다시 연결한 PC는 이어서 쓸 수 있음. Run 상태(실행 중)는 보지 않음 — 업로드 큐로 늦게 도착한 결과를 받아야 하므로(F-EX-13). 사람은 결과 칸에서 판정·메모만 바꾸고 Agent 증거(단계·검증 포인트·Run)는 못 바꿈. 그래도 실행자가 자기 호스트를 통해 Agent 결과를 조작할 여지는 있음 — 프로젝트 멤버 간 신뢰를 전제로 감수하고(다른 프로젝트에는 영향 없음), 사람 판정만 보안 규칙(판정자 = 로그인 사용자, 서버 시각)과 변경 불가 이력으로 강제(F-RP-04)
 - 모든 통신 TLS, Firestore·Storage 접근은 보안 규칙으로 프로젝트 멤버·역할에 따라 제한. 여러 팀이 쓰므로 **프로젝트 간 격리**를 보안 규칙 테스트(에뮬레이터)로 검증
 - 프로젝트 삭제 시 유예 기간 후 관련 데이터·비밀값을 영구 삭제(F-TM-12). 탈퇴한 멤버는 즉시 접근 불가
 - **로컬 콘솔 보호**: `127.0.0.1`에만 바인딩. 호스트 에이전트가 일회용 토큰 URL로 브라우저를 열고 세션 쿠키(HttpOnly, SameSite=Strict)로 교환. 모든 HTTP·WebSocket 요청에서 Host·Origin 헤더를 검사해 다른 웹페이지의 요청과 DNS 리바인딩을 차단
@@ -618,4 +618,9 @@ Host(user, machine, credential_hash, connected_at, last_seen_at, revoked_at?, cl
 3. **첫 사용 팀(하루콩) 합의: 스펙 작성 규칙** — TS·EC ID를 삭제 후 재사용하지 않기(출처 ID 기반 매칭의 전제, F-QD-08)
 4. **첫 사용 팀(하루콩) 합의: 테스트 식별자** — `testTagsAsResourceId` 활성화와 주요 요소 testTag 추가 요청(F-RP-18)
 5. **Anthropic 확인: 옵션 D 허용 범위** — 외부 프로그램(호스트 에이전트)이 사용자 본인 로그인의 `claude -p`를 호출하는 형태가 구독 사용 정책에 맞는지. 서비스 외부 공개 전까지 확정
+   - **조사 결과(2026-10-24): 조건부 허용으로 판단.** Claude Code [Legal and compliance](https://code.claude.com/docs/en/legal-and-compliance)는 제3자가 Claude.ai 로그인을 제공하거나 사용자 대신 플랜 자격 증명으로 요청을 보내는 것을 금지하지만, "최종 사용자가 수정하지 않은 Claude Code 바이너리에 본인 구독으로 로그인하는 것"은 막지 않는다고 명시한다. [도움말 센터](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)(2026-10-07)도 `claude -p`·제3자 앱을 구독 한도로 쓸 수 있다고 한다. [소비자 약관](https://www.anthropic.com/legal/consumer-terms)의 자동화 접근 금지는 "명시적으로 허용한 경우" 예외에 해당한다
+   - **지킬 조건** ("Can customers offer Claude Code in their products?"): 운영자는 Commercial Terms에 동의(할 일) / 바이너리를 수정하지 않고 내장 인증 방식을 제거·비활성화하지 않음 / 사용 비용을 대신 내거나 중개하지 않음(각자 본인 플랜) / Claude.ai 로그인을 qcard에 넣거나 자격 증명·세션 토큰을 수집하지 않음 / Claude Code 이름·로고를 제품명·로고에 쓰지 않음
+   - **API 키 환경변수**: 호스트는 `claude`를 실행할 때 `ANTHROPIC_API_KEY`·`ANTHROPIC_AUTH_TOKEN`을 넘기지 않는다. 옵션 D는 플랜으로만 실행하므로 qcard에는 필요 없고, 사용자 PC에 다른 용도의 키가 있어도 API로 과금되지 않게 하는 장치다. 바이너리와 `/login`(Claude 계정·Console 계정)은 그대로이므로 "내장 인증 방식 제거"에 해당하지 않는다고 본다
+   - **유지할 불변 조건**: 작업은 요청자 본인의 호스트만 처리한다(다른 사용자의 행동이 내 플랜을 쓰지 않는다). 정책이 바뀌면 옮길 수 있게 API 키 구현(`LLM_PROVIDER=api`)을 `LlmClient` 뒤에 남긴다
+   - **남은 일**: 공개 전 Commercial Terms 동의, 영업팀에 이 사용 형태(환경변수 처리 포함) 서면 확인
 6. ~~프로젝트 삭제 유예 기간·초대 만료 기한 기본값~~ → 초대 7일, 삭제 유예 30일 (F-TM-10·12) (v0.7)
