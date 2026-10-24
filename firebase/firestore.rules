@@ -35,6 +35,38 @@ service cloud.firestore {
     function canEdit(p) {
       return isMember(p) && role(p) in ['admin', 'qa'];
     }
+    // 호스트 에이전트(호스트 토큰)인가, 웹의 사람인가
+    function isHost() {
+      return hostClaim() != null;
+    }
+    // Agent 기록(Run·Agent 판정·이전 시도·스크린샷)은 그 Run을 실행한 사용자의 호스트만 쓴다 (PRD §8)
+    function runOf(p, c, run) {
+      return /databases/$(database)/documents/projects/$(p)/cycles/$(c)/runs/$(run);
+    }
+    function ownsRun(p, c, run) {
+      return isHost() && exists(runOf(p, c, run))
+        && get(runOf(p, c, run)).data.get('executorUid', '') == request.auth.uid;
+    }
+
+    function agentResult(p, c) {
+      let next = request.resource.data;
+      return next.get('decidedBy', {}).get('kind', '') == 'agent' && ownsRun(p, c, next.get('runId', '-'));
+    }
+    // 사람이 결과 칸에서 바꿀 수 있는 필드 (Agent의 단계·검증 포인트·Run 같은 증거는 못 바꾼다).
+    // 판정을 바꾸면 사람 판정이어야 한다 — Agent 판정인 채로 판정만 바꾸지 못한다
+    function personResult(p, c) {
+      let next = request.resource.data;
+      return !isHost() && decisionLogged(p, c) && (
+        resource == null
+          ? next.verdict == 'nt' && !('decidedBy' in next)
+          : personEdit(next, next.diff(resource.data).affectedKeys()));
+    }
+    function personEdit(next, changed) {
+      return changed.hasOnly(['verdict', 'decidedBy', 'autoConfirmed', 'actualSummary', 'note', 'executor',
+                              'executedAt', 'defectId', 'history', '_decision'])
+        && (!changed.hasAny(['verdict', 'decidedBy', 'autoConfirmed'])
+          || next.get('decidedBy', {}).get('kind', '') == 'human');
+    }
 
     // 사람 판정(decidedBy.kind == 'human')이 새로 생기거나 바뀌면, 이 요청에서 만든 로그(_decision)가 그 판정을 기록해야 한다
     function decisionLogged(p, c) {
@@ -101,28 +133,42 @@ service cloud.firestore {
       // 판정 변경 이력 (F-RP-04): 판정자 = 로그인 사용자(프로필 이름), 시각 = 서버 시각. 남긴 뒤에는 바꾸지 못한다
       match /cycles/{c}/verdictLog/{id} {
         allow read: if isMember(p);
-        allow create: if canEdit(p)
+        allow create: if canEdit(p) && !isHost()
           && request.resource.data.byUid == request.auth.uid
           && request.resource.data.by == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
           && request.resource.data.at == request.time;
         allow update, delete: if false;
       }
-      // 결과 칸: 사람 판정으로 바꾸는 쓰기는 같은 요청에서 새 판정 로그를 남겨야 한다 (판정자·판정이 로그와 같다)
+      // Run: 실행한 사용자의 호스트만 만들고 고친다. 다른 PC(같은 사용자의 다시 연결한 PC 포함)에서 이어서 실행할 수 있다
+      match /cycles/{c}/runs/{run} {
+        allow read: if isMember(p);
+        allow create: if canEdit(p) && isHost()
+          && request.resource.data.executorUid == request.auth.uid
+          && request.resource.data.hostId == hostClaim();
+        allow update: if canEdit(p) && isHost()
+          && resource.data.get('executorUid', '') == request.auth.uid
+          && request.resource.data.executorUid == request.auth.uid;
+        allow delete: if false;
+      }
+      // 결과 칸
+      // - Agent 판정: 그 Run(runId)을 실행한 사용자의 호스트만
+      // - 사람: 사이클을 만들 때 N/T 칸, 그 뒤에는 판정·메모만 바꾼다(Agent 증거는 그대로). 사람 판정으로 바꾸면
+      //   같은 요청에서 새 판정 로그를 남겨야 한다 (판정자·판정이 로그와 같다)
       match /cycles/{c}/results/{r} {
         allow read: if isMember(p);
-        allow create, update: if canEdit(p) && decisionLogged(p, c);
-        allow delete: if canEdit(p);
+        allow create, update: if canEdit(p) && (agentResult(p, c) || personResult(p, c));
+        allow delete: if canEdit(p) && !isHost();
       }
-      // 다시 실행해 밀려난 이전 시도 (F-CY-04): 보관만 하고 바꾸지 않는다
+      // 다시 실행해 밀려난 이전 시도 (F-CY-04): 호스트가 새 결과와 함께 보관만 하고 바꾸지 않는다
       match /cycles/{c}/attempts/{id} {
         allow read: if isMember(p);
-        allow create: if canEdit(p);
+        allow create: if canEdit(p) && isHost();
         allow update, delete: if false;
       }
-      // Run·결함 등 (cases·verdictLog·results·attempts는 위 규칙만 — 여기서 쓰기를 열지 않는다)
+      // 결함 등 (cases·verdictLog·results·attempts·runs는 위 규칙만 — 여기서 쓰기를 열지 않는다)
       match /cycles/{c}/{sub}/{rest=**} {
         allow read: if isMember(p);
-        allow write: if canEdit(p) && !(sub in ['cases', 'verdictLog', 'results', 'attempts']);
+        allow write: if canEdit(p) && !(sub in ['cases', 'verdictLog', 'results', 'attempts', 'runs']);
       }
       match /defects/{rest=**} {
         allow read: if isMember(p);

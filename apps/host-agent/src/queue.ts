@@ -7,7 +7,10 @@ import { join } from 'node:path';
  *
  *   <dir>/000042.json   작업 (보내면 지운다)
  *   <dir>/000042.png    업로드할 파일
- *   <dir>/dropped/       대상 문서가 사라져 보낼 수 없는 작업 (예: 에뮬레이터 초기화로 Run 문서가 없어짐). 다음 작업으로 넘어간다
+ *   <dir>/dropped/       보낼 수 없는 작업. 다음 작업으로 넘어간다 — 대상 문서가 사라졌거나(에뮬레이터 초기화로 Run 문서가 없어짐),
+ *                        보안 규칙이 거절함(이 PC의 연결 해제, 예전 Run, 권한 없는 역할). 하나가 막혀 뒤의 업로드가 모두 멈추지 않게 한다.
+ *                        이번 실행에서 넣은 작업이 거절됐으면 큐를 멈춰 지금 Run에 알린다(더 돌려 봐야 올라가지 않는다).
+ *                        다음 Run을 시작하면(retry) 남은 작업부터 다시 보낸다
  */
 
 export type QueueOp =
@@ -41,12 +44,24 @@ export function isGone(op: QueueOp, e: unknown): boolean {
   );
 }
 
+/** 보안 규칙이 거절했다 — 다시 해도 안 된다 (연결 해제된 PC, 다른 사람의 Run, 예전 Run) */
+export function isRejected(e: unknown): boolean {
+  const code = (e as { code?: string }).code ?? '';
+  return (
+    code === 'permission-denied' ||
+    code === 'storage/unauthorized' ||
+    /PERMISSION_DENIED|Missing or insufficient permissions/.test(String((e as Error).message ?? e))
+  );
+}
+
 export class QueueFailedError extends Error {
   override name = 'QueueFailedError';
 }
 
 export class UploadQueue {
   private seq = 0;
+  /** 열 때 남아 있던 작업의 마지막 번호 (지난 실행의 작업은 거절돼도 지금 Run을 멈추지 않는다) */
+  private leftoverUpTo = 0;
   private running: Promise<void> | undefined;
   private failure: Error | undefined;
   private waiters: (() => void)[] = [];
@@ -67,6 +82,8 @@ export class UploadQueue {
   retry() {
     if (!this.failure) return;
     this.failure = undefined;
+    // 멈추기 전에 넣은 작업은 지난 Run의 것 — 거절돼도 새 Run을 멈추지 않는다
+    this.leftoverUpTo = this.seq;
     this.kick();
   }
 
@@ -75,6 +92,7 @@ export class UploadQueue {
     await mkdir(this.dir, { recursive: true });
     const ids = await this.ids();
     this.seq = ids.length ? Number(ids.at(-1)) : 0;
+    this.leftoverUpTo = this.seq;
     if (ids.length) this.kick();
     return this;
   }
@@ -130,7 +148,7 @@ export class UploadQueue {
 
   private async loop() {
     const transient = this.opts.transient ?? isTransient;
-    for (const id of await this.ids()) {
+    outer: for (const id of await this.ids()) {
       const op = JSON.parse(await readFile(join(this.dir, `${id}.json`), 'utf8')) as QueueOp;
       const file = op.type === 'upload' ? new Uint8Array(await readFile(join(this.dir, `${id}.png`))) : undefined;
       let wait = this.opts.retryMs ?? 1000;
@@ -139,14 +157,22 @@ export class UploadQueue {
           await this.apply(op, file);
           break;
         } catch (e) {
-          if (isGone(op, e)) {
-            await mkdir(join(this.dir, 'dropped'), { recursive: true });
-            await rename(join(this.dir, `${id}.json`), join(this.dir, 'dropped', `${id}.json`));
+          if (isGone(op, e) || isRejected(e)) {
+            const dropped = join(this.dir, 'dropped');
+            await mkdir(dropped, { recursive: true });
+            await rename(join(this.dir, `${id}.json`), join(dropped, `${id}.json`));
+            if (file) await rename(join(this.dir, `${id}.png`), join(dropped, `${id}.png`));
             this.opts.onDrop?.(op, (e as Error).message);
-            break;
+            if (isRejected(e) && Number(id) > this.leftoverUpTo) {
+              this.failure ??= new QueueFailedError(
+                `업로드 실패 — 보안 규칙이 거절했습니다 (${op.type} ${op.path}): ${(e as Error).message}`,
+              );
+            }
+            // 옮겼으니 아래에서 지울 것이 없다. 뒤의 작업은 계속 보낸다
+            continue outer;
           }
           if (!transient(e)) {
-            // 다시 해도 안 되는 오류(권한 등): 멈추고 알린다. 작업은 디스크에 남는다
+            // 그 밖의 다시 해도 안 되는 오류: 멈추고 알린다. 작업은 디스크에 남는다
             this.failure = new QueueFailedError(`업로드 실패 (${op.type} ${op.path}): ${(e as Error).message}`);
             return;
           }

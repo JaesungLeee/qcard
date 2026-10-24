@@ -25,10 +25,10 @@ describe('UploadQueue (F-EX-13)', () => {
     expect(sent).toEqual(['docs/1', 'docs/2', 'docs/3']);
   });
 
-  it('다시 해도 안 되는 오류(권한)면 멈추고 알린다. 작업은 디스크에 남는다', async () => {
+  it('다시 해도 안 되는 그 밖의 오류면 멈추고 알린다. 작업은 디스크에 남는다', async () => {
     const d = dir();
-    const denied = Object.assign(new Error('Missing or insufficient permissions'), { code: 'permission-denied' });
-    const q = await new UploadQueue(d, () => Promise.reject(denied), { retryMs: 5 }).open();
+    const invalid = Object.assign(new Error('bad data'), { code: 'invalid-argument' });
+    const q = await new UploadQueue(d, () => Promise.reject(invalid), { retryMs: 5 }).open();
     await q.enqueue(set(1));
     await expect(q.drain()).rejects.toBeInstanceOf(QueueFailedError);
     await expect(q.enqueue(set(2))).rejects.toBeInstanceOf(QueueFailedError);
@@ -55,13 +55,61 @@ describe('UploadQueue (F-EX-13)', () => {
     expect(readdirSync(join(d, 'dropped'))).toEqual(['000001.json']);
   });
 
-  it('멈춘 큐는 retry()로 다시 보낸다 (권한을 고친 뒤 새 Run)', async () => {
+  it('보안 규칙이 거절한 작업(연결 해제된 PC·권한 없는 역할)은 파일과 함께 dropped로 빼고, 지금 Run에 알린다', async () => {
+    const d = dir();
     const denied = Object.assign(new Error('Missing or insufficient permissions'), { code: 'permission-denied' });
+    const unauthorized = Object.assign(new Error('User does not have permission'), { code: 'storage/unauthorized' });
+    const sent: string[] = [];
+    const dropped: string[] = [];
+    const q = await new UploadQueue(
+      d,
+      async (op) => {
+        if (op.path === 'runs/old') throw denied;
+        if (op.type === 'upload') throw unauthorized;
+        sent.push(op.path);
+      },
+      { retryMs: 5, onDrop: (op) => dropped.push(op.path) },
+    ).open();
+    await q.enqueue({ type: 'update', path: 'runs/old', data: { status: 'done' } });
+    await expect(q.drain()).rejects.toThrow('보안 규칙이 거절');
+    // 다음 Run(retry): 그 전에 넣은 작업이 거절돼도 멈추지 않고 빼고 넘어간다 — 뒤의 업로드가 막히지 않는다
+    q.retry();
+    await q.enqueue({ type: 'upload', path: 'shots/a.png', contentType: 'image/png' }, new Uint8Array([1]));
+    await q.enqueue(set(3));
+    await expect(q.drain()).rejects.toThrow('보안 규칙이 거절');
+    q.retry();
+    expect(await q.drain()).toBe(0);
+    expect([sent, dropped]).toEqual([['docs/3'], ['runs/old', 'shots/a.png']]);
+    expect(readdirSync(join(d, 'dropped')).sort()).toEqual(['000001.json', '000002.json', '000002.png']);
+  });
+
+  it('지난 실행에서 남은 작업이 거절되면 조용히 빼고 큐를 멈추지 않는다 (다른 계정·연결 해제 뒤 다시 켬)', async () => {
+    const d = dir();
+    const denied = Object.assign(new Error('Missing or insufficient permissions'), { code: 'permission-denied' });
+    const first = await new UploadQueue(d, () => Promise.reject(offline), { retryMs: 5 }).open();
+    await first.enqueue(set(1));
+    await first.drain(30);
+    const sent: string[] = [];
+    const next = await new UploadQueue(
+      d,
+      async (op) => {
+        if (op.path === 'docs/1') throw denied;
+        sent.push(op.path);
+      },
+      { retryMs: 5 },
+    ).open();
+    await next.enqueue(set(2));
+    expect(await next.drain()).toBe(0);
+    expect(sent).toEqual(['docs/2']);
+  });
+
+  it('멈춘 큐는 retry()로 다시 보낸다', async () => {
+    const invalid = Object.assign(new Error('bad data'), { code: 'invalid-argument' });
     let allowed = false;
     const q = await new UploadQueue(
       dir(),
       async () => {
-        if (!allowed) throw denied;
+        if (!allowed) throw invalid;
       },
       { retryMs: 5 },
     ).open();

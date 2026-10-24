@@ -71,6 +71,12 @@ function PcRow({ pc }: { pc: ConnectedPc }) {
           {fmtDate(pc.connectedAt)} 연결
           {pc.lastSeen ? ` · 마지막 신호 ${fmtDateTime(pc.lastSeen)}` : ''}
         </span>
+        {confirm && (
+          <span className={`${textClass('label2')} qp-muted`}>
+            해제하면 이 PC는 바로 qcard에 접근할 수 없고, 아직 올리지 못한 결과는 올라가지 않습니다. 다시 쓰려면 그 PC에서 다시
+            연결하세요.
+          </span>
+        )}
         <ErrorMessage error={disconnect.error} title="연결을 해제하지 못했습니다" />
       </div>
       <div className="qh-actions">

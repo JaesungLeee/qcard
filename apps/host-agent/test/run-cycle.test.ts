@@ -7,8 +7,8 @@ import { seedDocs } from '@qcard/data/seed';
 import { DeviceDisconnectedError, FakeDevice } from '@qcard/device';
 import { APP_PACKAGE, GITHUB, onboardingScenario, PEOPLE } from '@qcard/fixtures';
 import { createLlm, PlanLimitError, UsageMeter, type LlmClient } from '@qcard/llm';
-import { deleteDoc, doc, getDoc, setLogLevel, updateDoc, type Firestore } from 'firebase/firestore';
-import { getBytes, ref, type FirebaseStorage } from 'firebase/storage';
+import { deleteDoc, doc, getDoc, setDoc, setLogLevel, updateDoc, type Firestore } from 'firebase/firestore';
+import { getBytes, ref, uploadBytes, type FirebaseStorage } from 'firebase/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -36,14 +36,25 @@ afterAll(() => env.cleanup());
 beforeEach(async () => {
   await env.clearFirestore();
   await env.clearStorage();
-  await env.withSecurityRulesDisabled((c) => writeAll(c.firestore() as unknown as Firestore, seedDocs()));
+  await env.withSecurityRulesDisabled(async (c) => {
+    const db = c.firestore() as unknown as Firestore;
+    await writeAll(db, seedDocs());
+    // 사람마다 연결된 PC 하나 (호스트는 호스트 토큰으로 쓴다, F-TM-14)
+    await writeAll(
+      db,
+      Object.values(GITHUB).map((uid) => [`hostConnections/${hostOf(uid)}`, { id: hostOf(uid), uid }]),
+    );
+  });
 });
 
+const hostOf = (uid: string) => `pc-${uid}`;
 const REF = { projectId: 'haru', cycleId: 'cycle-130-1' };
 const DEVICE = 'galaxy-s24-15';
 
+/** 그 사람의 PC에서 도는 호스트 에이전트 (호스트 토큰) */
 async function host(name: string, runId = 'run-host-1') {
-  const ctx = env.authenticatedContext(GITHUB[name]!);
+  const uid = GITHUB[name]!;
+  const ctx = env.authenticatedContext(uid, { host: hostOf(uid) });
   const db = ctx.firestore() as unknown as Firestore;
   const storage = ctx.storage() as unknown as FirebaseStorage;
   const api = createFirebaseApi({
@@ -52,11 +63,19 @@ async function host(name: string, runId = 'run-host-1') {
     user: () => ({ uid: GITHUB[name]!, name }),
     call: () => Promise.reject(new Error('호스트 에이전트는 callable을 쓰지 않는다')),
   });
-  const target: RunTarget = { ...REF, deviceId: DEVICE, runId, executor: name, screen: { w: 1080, h: 2340 } };
+  const target: RunTarget = {
+    ...REF,
+    deviceId: DEVICE,
+    runId,
+    executor: name,
+    executorUid: uid,
+    hostId: hostOf(uid),
+    screen: { w: 1080, h: 2340 },
+  };
   const queue = await new UploadQueue(mkdtempSync(join(tmpdir(), 'qcard-queue-')), firestoreApply(db, storage), {
     retryMs: 50,
   }).open();
-  return { db, storage, api, sink: runSink(queue, target), queue };
+  return { db, storage, api, sink: runSink(queue, target), queue, target };
 }
 
 /** 케이스마다 녹화 폴더가 다르다 (packages/agent e2e와 같은 녹화를 재생) */
@@ -114,9 +133,21 @@ describe('runCycle → Firestore·Storage', () => {
     expect(await api.screenshotUrl(path)).toMatch(/^blob:/);
     const outsider = env.authenticatedContext('outsider').storage() as unknown as FirebaseStorage;
     await expect(getBytes(ref(outsider, path))).rejects.toThrow();
+    // 스크린샷은 그 Run을 실행한 사용자의 호스트만 올린다 — 같은 사람의 웹 세션도, 다른 사람의 호스트도 못 한다 (PRD §8)
+    const png = new Uint8Array([137, 80, 78, 71]);
+    const web = env.authenticatedContext(GITHUB[PEOPLE.lead]!).storage() as unknown as FirebaseStorage;
+    await expect(uploadBytes(ref(web, path.replace('obs-', 'fake-')), png)).rejects.toThrow();
+    const qaHost = (await host(PEOPLE.qa)).storage;
+    await expect(uploadBytes(ref(qaHost, path.replace('obs-', 'fake-')), png)).rejects.toThrow();
 
     const run = (await getDoc(doc(db, 'projects/haru/cycles/cycle-130-1/runs/run-host-1'))).data();
-    expect(run).toMatchObject({ status: 'done', executor: PEOPLE.lead, deviceId: DEVICE });
+    expect(run).toMatchObject({
+      status: 'done',
+      executor: PEOPLE.lead,
+      executorUid: GITHUB[PEOPLE.lead],
+      hostId: hostOf(GITHUB[PEOPLE.lead]!),
+      deviceId: DEVICE,
+    });
     expect(run?.currentTcId).toBeUndefined();
   });
 
@@ -124,7 +155,19 @@ describe('runCycle → Firestore·Storage', () => {
     const { db, storage, api } = await host(PEOPLE.lead);
     const before = (await api.getCycle(REF)).results.find((r) => r.verdict !== 'nt' && r.deviceId === DEVICE)!;
     const path = `projects/haru/cycles/cycle-130-1/results/${before.tcId}__${DEVICE}`;
-    const rerun = { ...before, verdict: 'fail', runId: 'run-x', executedAt: '2026-10-23T10:00:00.000Z', history: [] };
+    const rerun = {
+      ...before,
+      verdict: 'fail',
+      decidedBy: { kind: 'agent' },
+      runId: 'run-x',
+      executedAt: '2026-10-23T10:00:00.000Z',
+      history: [],
+    };
+    await setDoc(doc(db, 'projects/haru/cycles/cycle-130-1/runs/run-x'), {
+      id: 'run-x',
+      executorUid: GITHUB[PEOPLE.lead],
+      hostId: hostOf(GITHUB[PEOPLE.lead]!),
+    });
     const apply = firestoreApply(db, storage);
     await apply({ type: 'result', path, data: rerun });
     await apply({ type: 'result', path, data: rerun });
@@ -244,12 +287,14 @@ describe('runCycle → Firestore·Storage', () => {
     ).toMatchObject({ status: 'paused', reason: 'device_disconnected' });
   });
 
-  it('Viewer는 실행 결과를 올릴 수 없다 (보안 규칙 — 큐가 멈추고 알린다)', async () => {
+  it('Viewer는 실행 결과를 올릴 수 없다 (보안 규칙 — 거절된 작업은 빼고 Run을 멈춘다)', async () => {
     const { api, sink, queue } = await host(PEOPLE.planner, 'run-host-3');
     await expect(
       runCycle({ api, sink, env: agentEnv(replay), ...REF, deviceId: DEVICE, runId: 'run-host-3' }),
     ).rejects.toThrow('업로드 실패');
-    expect(await queue.pending()).toBeGreaterThan(0); // 보내지 못한 작업은 로컬에 남는다
+    // 남은 작업은 다음 Run이 보내 보고, 거절되면 그 Run을 멈추지 않고 dropped로 뺀다 (뒤의 업로드를 막지 않는다)
+    queue.retry();
+    expect(await queue.drain()).toBe(0);
   });
 
   it('사이클의 대상 디바이스가 아니면 시작하지 않는다', async () => {
@@ -269,13 +314,14 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     return new FakeDevice({ ...s, info: { ...s.info, model: 'Galaxy S24' } });
   };
   const serviceFor = async (device: FakeDevice) => {
-    const { api, storage, queue } = await host(PEOPLE.lead, 'unused');
+    const { api, storage, queue, target } = await host(PEOPLE.lead, 'unused');
     const msgs: ConsoleServerMessage[] = [];
     const service = new ConsoleService({
       api,
       storage,
       queue,
       executor: PEOPLE.lead,
+      account: { uid: target.executorUid, hostId: target.hostId },
       claudeCode: () => ({ installed: true, loggedIn: true }),
       log: () => {},
       fallbackPackage: APP_PACKAGE,
@@ -321,6 +367,8 @@ describe('로컬 콘솔 서비스 (serve)', () => {
       deviceId: DEVICE,
       runId: 'run-paused',
       executor: PEOPLE.lead,
+      executorUid: GITHUB[PEOPLE.lead]!,
+      hostId: hostOf(GITHUB[PEOPLE.lead]!),
       screen: { w: 1080, h: 2340 },
     });
     await paused.start(['TC-ONBOARDING-004']);
@@ -374,6 +422,8 @@ describe('로컬 콘솔 서비스 (serve)', () => {
       deviceId: DEVICE,
       runId: 'run-dead',
       executor: PEOPLE.lead,
+      executorUid: GITHUB[PEOPLE.lead]!,
+      hostId: hostOf(GITHUB[PEOPLE.lead]!),
       screen: { w: 1080, h: 2340 },
     });
     await dead.start(['TC-ONBOARDING-004']);

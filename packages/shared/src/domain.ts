@@ -485,6 +485,13 @@ export const Run = z.object({
   id: z.string(),
   cycleId: z.string(),
   executor: z.string(),
+  /**
+   * 실행한 사용자. 보안 규칙은 이 사용자의 호스트(호스트 토큰)만 이 Run과 그 결과·스크린샷을 쓰게 한다 (PRD §8).
+   * 없으면 예전 Run — 더는 이어 쓸 수 없다
+   */
+  executorUid: z.string().optional(),
+  /** 실행한 PC의 호스트 연결 (어느 PC에서 돌렸는지 보여 주는 용도. 권한은 executorUid로 본다) */
+  hostId: z.string().optional(),
   deviceId: z.string(),
   status: z.enum(['running', 'paused', 'done', 'aborted']),
   /** status가 paused일 때 */

@@ -12,7 +12,7 @@ import type {
 import { isRunStale } from '@qcard/shared';
 import type { FirebaseStorage } from 'firebase/storage';
 import type { UploadQueue } from '../queue';
-import { consoleDevice, CycleRunError, prepareCycleRun, type CycleRunDeps } from '../run';
+import { consoleDevice, CycleRunError, prepareCycleRun, type CycleRunDeps, type RunAccount } from '../run';
 import type { ConsoleHub } from './hub';
 import type { ConsoleBackend } from './server';
 
@@ -26,6 +26,7 @@ export type ConsoleServiceDeps = {
   storage: FirebaseStorage;
   queue: UploadQueue;
   executor: string;
+  account: RunAccount;
   claudeCode: () => ClaudeCodeState;
   log: (line: string) => void;
   /** 빌드 파일이 없는 사이클(시드)에서 실행할 앱 */
@@ -141,7 +142,9 @@ export class ConsoleService implements ConsoleBackend {
   }
 
   private async cyclesFor(info: DeviceInfo): Promise<ConsoleCycleOption[]> {
-    const { api, executor } = this.deps;
+    const { api, executor, account } = this.deps;
+    // 내 Run: 예전 Run(executorUid 없음)은 이름으로 본다
+    const mine = (r: Run) => (r.executorUid ? r.executorUid === account.uid : r.executor === executor);
     const out: ConsoleCycleOption[] = [];
     for (const { project } of await api.listMyProjects()) {
       for (const s of await api.listCycles(project.id)) {
@@ -154,7 +157,7 @@ export class ConsoleService implements ConsoleBackend {
         );
         // 이 디바이스로 돌리던 내 Run이 호스트 신호 없이 "실행 중"으로 남아 있으면(호스트가 죽음) 일시정지로 정리한다 (F-DV-04)
         const runs = d.runs.map((r) => {
-          if (r.executor !== executor || r.deviceId !== target.id || r.id === this.run?.runId) return r;
+          if (!mine(r) || r.deviceId !== target.id || r.id === this.run?.runId) return r;
           if (!isRunStale(r, Date.now())) return r;
           void this.deps.queue.enqueue({
             type: 'update',
@@ -164,7 +167,7 @@ export class ConsoleService implements ConsoleBackend {
           return { ...r, status: 'paused' as const, pauseReason: 'host_lost' as const };
         });
         const paused = runs
-          .filter((r) => r.status === 'paused' && r.executor === executor && r.deviceId === target.id)
+          .filter((r) => r.status === 'paused' && mine(r) && r.deviceId === target.id)
           .sort((a, b) => a.startedAt.localeCompare(b.startedAt))
           .at(-1);
         out.push({
@@ -234,6 +237,7 @@ export class ConsoleService implements ConsoleBackend {
           device: dev.driver,
           info: dev.info,
           executor: this.deps.executor,
+          account: this.deps.account,
           claudeCode: this.deps.claudeCode(),
           log: this.deps.log,
           llm: this.deps.llm,

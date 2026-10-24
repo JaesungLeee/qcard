@@ -27,9 +27,25 @@ service firebase.storage {
         && request.resource.size < 300 * 1024 * 1024;
     }
 
-    match /projects/{p}/{rest=**} {
+    // 스크린샷: 그 Run을 실행한 사용자의 호스트만 올린다 (firestore.rules의 Run 규칙과 같다)
+    match /projects/{p}/cycles/{c}/runs/{run}/{rest=**} {
+      allow read: if signedIn() && firestore.exists(member(p));
+      // 업로드 재시도로 같은 경로에 다시 쓸 수 있다
+      allow write: if signedIn()
+        && request.auth.token.get('host', null) != null
+        && firestore.exists(member(p))
+        && firestore.get(member(p)).data.role in ['admin', 'qa']
+        && firestore.exists(/databases/(default)/documents/projects/$(p)/cycles/$(c)/runs/$(run))
+        && firestore.get(/databases/(default)/documents/projects/$(p)/cycles/$(c)/runs/$(run)).data.get('executorUid', '') == request.auth.uid
+        && request.resource.size < 20 * 1024 * 1024;
+    }
+
+    // 그 밖의 프로젝트 파일(스펙 묶음 등). 빌드·사이클(Run 스크린샷) 경로는 위 규칙만 — 여기서 쓰기를 열지 않는다
+    // (Storage는 맞는 규칙 중 하나만 허용해도 통과하므로, 여기서 빼지 않으면 빌드 덮어쓰기가 열린다)
+    match /projects/{p}/{top}/{rest=**} {
       allow read: if signedIn() && firestore.exists(member(p));
       allow write: if signedIn()
+        && !(top in ['builds', 'cycles'])
         && firestore.exists(member(p))
         && firestore.get(member(p)).data.role in ['admin', 'qa']
         && request.resource.size < 20 * 1024 * 1024;

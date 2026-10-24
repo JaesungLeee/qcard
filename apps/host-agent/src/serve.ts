@@ -48,7 +48,7 @@ const session = await openHostSession({ seedUser: values.user }).catch((e: unkno
   console.error(e.message);
   process.exit(1);
 });
-const { db, storage, api, user, host } = session;
+const { db, storage, api, user, host, account, queueDir } = session;
 
 // ---------------------------------------------------------------- 연결 신호
 /** 연결된 디바이스 (시리얼별 정보는 한 번만 읽는다) — 웹이 사이클 대상을 고를 때 쓴다. 읽기 전용(getprop·wm) */
@@ -91,14 +91,15 @@ async function beat() {
 }
 // ---------------------------------------------------------------- 로컬 콘솔 (F-DB-01·05, PRD §4 ⑤)
 const log = (l: string) => console.log(l);
-const queue = await new UploadQueue(join(homedir(), '.qcard', 'upload-queue'), firestoreApply(db, storage), {
-  onDrop: (op) => log(`대상 문서가 없어 보내지 못한 업로드를 뺐습니다 (~/.qcard/upload-queue/dropped): ${op.path}`),
+const queue = await new UploadQueue(queueDir, firestoreApply(db, storage), {
+  onDrop: (op, reason) => log(`보내지 못한 업로드를 뺐습니다 (${queueDir}/dropped): ${op.path} — ${reason}`),
 }).open();
 const service = new ConsoleService({
   api,
   storage,
   queue,
   executor: user.name,
+  account,
   claudeCode: () => ({
     installed: claude?.installed ?? true,
     loggedIn: claude?.loggedIn ?? false,

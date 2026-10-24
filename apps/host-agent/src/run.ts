@@ -31,6 +31,8 @@ export type CycleRunDeps = {
   info: DeviceInfo;
   /** 실행자 표시 이름 */
   executor: string;
+  /** 실행한 사용자·이 PC의 호스트 연결 (Run 문서에 남겨 보안 규칙이 소유를 확인한다) */
+  account: RunAccount;
   claudeCode: ClaudeCodeState;
   log: (line: string) => void;
   /** 기본: 이 PC의 Claude Code (사용량 미터로 감싼다) */
@@ -40,6 +42,8 @@ export type CycleRunDeps = {
   /** Agent 환경 덮어쓰기 (테스트: 시계·비전) */
   env?: Partial<Pick<AgentEnv, 'clock' | 'vision' | 'settleMs'>>;
 };
+
+export type RunAccount = { uid: string; hostId: string };
 
 export type CycleRunRequest = {
   projectId: string;
@@ -113,6 +117,8 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
     deviceId: target.id,
     runId,
     executor: deps.executor,
+    executorUid: deps.account.uid,
+    hostId: deps.account.hostId,
     screen: info.size,
   });
   // 방금 찍은 스크린샷은 콘솔이 메모리에서 바로 보여 준다 (스텝 썸네일)

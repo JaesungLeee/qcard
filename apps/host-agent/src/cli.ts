@@ -16,7 +16,7 @@
  * 일시정지·Take over·건너뛰기·중단, 수동 스텝 [완료]. `pnpm dev`(Vite, /console-api를 넘긴다)가 떠 있으면 그 주소를,
  * 아니면 웹 빌드(apps/web/dist)를 이 서버가 직접 준다.
  *
- * 결과·증거는 업로드 큐(~/.qcard/upload-queue)를 거친다. 네트워크가 끊겨도 로컬에 남았다가 다음 실행 때 이어서 보낸다.
+ * 결과·증거는 업로드 큐(~/.qcard/upload-queue/<프로젝트>/<사용자>)를 거친다. 네트워크가 끊겨도 로컬에 남았다가 다음 실행 때 이어서 보낸다.
  *
  * 먼저 `connect`로 이 PC를 계정에 연결해 둔다(F-TM-14).
  */
@@ -24,8 +24,6 @@ import { parseArgs } from 'node:util';
 import { AdbDriver, listDevices } from '@qcard/device/node';
 import { assertClaudeCodeReady, llmProviderFromEnv } from '@qcard/llm';
 import type { ClaudeCodeState } from '@qcard/shared';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { HostDisconnectedError, openHostSession } from './connect';
 import { attachScreen, hubBackend, launchConsole } from './console';
 import { UploadQueue } from './queue';
@@ -57,6 +55,8 @@ const {
   storage,
   api,
   user: seed,
+  account,
+  queueDir,
 } = await openHostSession({ seedUser: values.user }).catch((e: unknown) => {
   if (!(e instanceof HostDisconnectedError)) throw e;
   console.error(e.message);
@@ -78,8 +78,8 @@ const device = new AdbDriver(serial, { allowDestructive: true });
 const info = await device.info();
 
 // 업로드 큐: 지난 실행에서 못 보낸 작업이 있으면 먼저 보내기 시작한다 (F-EX-13)
-const queue = await new UploadQueue(join(homedir(), '.qcard', 'upload-queue'), firestoreApply(db, storage), {
-  onDrop: (op) => log(`대상 문서가 없어 보내지 못한 업로드를 뺐습니다 (~/.qcard/upload-queue/dropped): ${op.path}`),
+const queue = await new UploadQueue(queueDir, firestoreApply(db, storage), {
+  onDrop: (op, reason) => log(`보내지 못한 업로드를 뺐습니다 (${queueDir}/dropped): ${op.path} — ${reason}`),
 }).open();
 const leftover = await queue.pending();
 if (leftover) log(`지난 실행에서 남은 업로드 ${leftover}건을 보냅니다`);
@@ -88,7 +88,7 @@ if (leftover) log(`지난 실행에서 남은 업로드 ${leftover}건을 보냅
 let prepared: Awaited<ReturnType<typeof prepareCycleRun>>;
 try {
   prepared = await prepareCycleRun(
-    { api, storage, queue, device, info, executor: seed.name, claudeCode, log },
+    { api, storage, queue, device, info, executor: seed.name, account, claudeCode, log },
     {
       projectId: values.project,
       cycleId: values.cycle,

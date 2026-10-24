@@ -89,7 +89,7 @@ describe('쓰기', () => {
 
   it('QA 데이터는 Admin·QA가 쓰고 Viewer·비멤버는 못 쓴다', async () => {
     await assertSucceeds(setDoc(doc(as('u-qa'), 'projects/haru/qaDocs/doc-130'), { appVersion: '1.3.1' }));
-    await assertSucceeds(setDoc(doc(as('u-admin'), 'projects/haru/cycles/c1/results/r1'), { verdict: 'pass' }));
+    await assertSucceeds(setDoc(doc(as('u-admin'), 'projects/haru/cycles/c1/results/r1'), { verdict: 'nt' }));
     await assertFails(setDoc(doc(as('u-viewer'), 'projects/haru/qaDocs/doc-130'), { appVersion: 'x' }));
     await assertFails(setDoc(doc(as('u-outsider'), 'projects/haru/cycles/c1'), { name: 'x' }));
   });
@@ -105,9 +105,9 @@ describe('쓰기', () => {
     await assertFails(deleteDoc(copy));
     await assertFails(updateDoc(cycle, { snapshot: [{ tcId: 'TC-1', contentHash: 'h2' }] }));
     await assertFails(updateDoc(cycle, { docId: 'doc-120' }));
-    // 이름·기간 같은 다른 필드와 결과 칸은 계속 쓴다
+    // 이름·기간 같은 다른 필드와 결과 칸(N/T)은 계속 쓴다
     await assertSucceeds(updateDoc(cycle, { name: 'c2 (수정)' }));
-    await assertSucceeds(setDoc(doc(qa, 'projects/haru/cycles/c2/results/TC-1__d'), { verdict: 'pass' }));
+    await assertSucceeds(setDoc(doc(qa, 'projects/haru/cycles/c2/results/TC-1__d'), { verdict: 'nt' }));
     await assertFails(setDoc(doc(as('u-viewer'), 'projects/haru/cycles/c3/cases/TC-1'), { title: 'x' }));
   });
 
@@ -179,23 +179,40 @@ describe('쓰기', () => {
       await assertFails(deleteDoc(doc(as('u-qa'), LOG, first)));
     });
 
-    it('Agent 결과와, 판정을 건드리지 않는 쓰기는 지금처럼 된다', async () => {
-      await assertSucceeds(
+    it('판정을 건드리지 않는 메모·요약은 사람이 고치지만, Agent 증거는 못 고친다', async () => {
+      await assertSucceeds(updateDoc(doc(as('u-qa'), RESULT), { actualSummary: '요약만 고침', note: '메모' }));
+      await assertFails(updateDoc(doc(as('u-qa'), RESULT), { steps: [] }));
+      await assertFails(updateDoc(doc(as('u-qa'), RESULT), { runId: 'other' }));
+      await assertFails(updateDoc(doc(as('u-viewer'), RESULT), { note: 'x' }));
+    });
+
+    it('사람은 Agent 판정을 쓰지 못하고, 호스트는 사람 판정·판정 로그를 쓰지 못한다 (PRD §8)', async () => {
+      await assertFails(
         setDoc(doc(as('u-qa'), RESULT), { tcId: 'TC-1', deviceId: 'd', verdict: 'pass', decidedBy: { kind: 'agent' } }),
       );
-      // 사람 판정이 있는 칸도 판정을 바꾸지 않는 필드는 고칠 수 있다
-      await assertSucceeds(confirm(log({ from: 'pass' }), (id) => human(id)));
-      await assertSucceeds(updateDoc(doc(as('u-qa'), RESULT), { actualSummary: '요약만 고침' }));
-      await assertFails(setDoc(doc(as('u-viewer'), RESULT), { verdict: 'pass', decidedBy: { kind: 'agent' } }));
+      await assertFails(setDoc(doc(as('u-qa'), 'projects/haru/cycles/c1/results/new'), { verdict: 'pass' }));
+      await env.withSecurityRulesDisabled((c) =>
+        setDoc(doc(c.firestore(), 'hostConnections/h-qa'), { id: 'h-qa', uid: 'u-qa' }),
+      );
+      const host = env.authenticatedContext('u-qa', { host: 'h-qa' }).firestore();
+      const b = writeBatch(host);
+      const ref = doc(host, LOG, 'l-host');
+      b.set(ref, log());
+      b.set(doc(host, RESULT), human(ref.id));
+      await assertFails(b.commit());
     });
   });
 
-  it('이전 시도 보관본은 만들기만 하고 바꾸지 못한다 (F-CY-04)', async () => {
-    const kept = doc(as('u-qa'), 'projects/haru/cycles/c1/attempts/TC-1__d__1');
+  it('이전 시도 보관본은 호스트가 만들기만 하고 바꾸지 못한다 (F-CY-04)', async () => {
+    await env.withSecurityRulesDisabled((c) =>
+      setDoc(doc(c.firestore(), 'hostConnections/h-qa'), { id: 'h-qa', uid: 'u-qa' }),
+    );
+    const host = env.authenticatedContext('u-qa', { host: 'h-qa' }).firestore();
+    const kept = doc(host, 'projects/haru/cycles/c1/attempts/TC-1__d__1');
     await assertSucceeds(setDoc(kept, { verdict: 'fail' }));
     await assertFails(setDoc(kept, { verdict: 'pass' }));
     await assertFails(deleteDoc(kept));
-    await assertFails(setDoc(doc(as('u-viewer'), 'projects/haru/cycles/c1/attempts/TC-1__d__2'), { verdict: 'fail' }));
+    await assertFails(setDoc(doc(as('u-qa'), 'projects/haru/cycles/c1/attempts/TC-1__d__2'), { verdict: 'fail' }));
   });
 
   it('작업(Job)은 본인 이름으로만 요청한다', async () => {
@@ -222,11 +239,23 @@ describe('호스트 토큰 (F-TM-14)', () => {
 
   it('연결이 살아 있는 동안만 사용자 권한으로 읽고 쓴다', async () => {
     await assertSucceeds(getDoc(doc(asHost('u-qa', 'h-qa'), 'projects/haru/qaDocs/doc-130')));
-    await assertSucceeds(setDoc(doc(asHost('u-qa', 'h-qa'), 'projects/haru/cycles/c1/runs/r1'), { status: 'running' }));
+    await assertSucceeds(
+      setDoc(doc(asHost('u-qa', 'h-qa'), 'projects/haru/cycles/c1/runs/r1'), {
+        status: 'running',
+        executorUid: 'u-qa',
+        hostId: 'h-qa',
+      }),
+    );
     // 연결 해제(문서 삭제) 뒤에는 이미 받은 토큰도 막힌다
     await env.withSecurityRulesDisabled((c) => deleteDoc(doc(c.firestore(), 'hostConnections/h-qa')));
     await assertFails(getDoc(doc(asHost('u-qa', 'h-qa'), 'projects/haru/qaDocs/doc-130')));
-    await assertFails(setDoc(doc(asHost('u-qa', 'h-qa'), 'projects/haru/cycles/c1/runs/r2'), { status: 'running' }));
+    await assertFails(
+      setDoc(doc(asHost('u-qa', 'h-qa'), 'projects/haru/cycles/c1/runs/r2'), {
+        status: 'running',
+        executorUid: 'u-qa',
+        hostId: 'h-qa',
+      }),
+    );
   });
 
   it('다른 사람의 연결 id로는 통과하지 못한다', async () => {
@@ -247,5 +276,51 @@ describe('호스트 토큰 (F-TM-14)', () => {
     await assertFails(setDoc(doc(as('u-qa'), 'users/u-qa/hosts/h-qa'), beat));
     await assertFails(setDoc(doc(asHost('u-qa', 'h-qa'), 'users/u-qa/hosts/other'), beat));
     await assertFails(deleteDoc(doc(asHost('u-qa', 'h-qa'), 'users/u-qa/hosts/h-qa')));
+  });
+});
+
+describe('Agent 기록은 그 Run을 실행한 사용자의 호스트만 (PRD §8)', () => {
+  const C = 'projects/haru/cycles/c1';
+  const asHost = (uid: string, host: string) => env.authenticatedContext(uid, { host }).firestore();
+  const run = { status: 'running', executorUid: 'u-qa', hostId: 'h-qa' };
+  const agent = { tcId: 'TC-1', deviceId: 'd', verdict: 'pass', decidedBy: { kind: 'agent' }, runId: 'r1' };
+  beforeEach(() =>
+    env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore();
+      await setDoc(doc(db, 'hostConnections/h-qa'), { id: 'h-qa', uid: 'u-qa' });
+      await setDoc(doc(db, 'hostConnections/h-qa2'), { id: 'h-qa2', uid: 'u-qa' });
+      await setDoc(doc(db, 'hostConnections/h-admin'), { id: 'h-admin', uid: 'u-admin' });
+    }),
+  );
+
+  it('Run은 호스트가 자기 이름·연결로만 만들고, 사람(웹) 세션은 만들지도 고치지도 못한다', async () => {
+    await assertFails(setDoc(doc(as('u-qa'), `${C}/runs/r1`), run));
+    await assertFails(setDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), { ...run, executorUid: 'u-admin' }));
+    await assertFails(setDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), { ...run, hostId: 'h-qa2' }));
+    await assertSucceeds(setDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), run));
+    await assertFails(updateDoc(doc(as('u-qa'), `${C}/runs/r1`), { status: 'done' }));
+    await assertFails(deleteDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`)));
+  });
+
+  it('같은 사용자의 다른(다시 연결한) PC는 이어서 쓰고, 다른 사람의 호스트는 못 쓴다', async () => {
+    await assertSucceeds(setDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), run));
+    await assertSucceeds(updateDoc(doc(asHost('u-qa', 'h-qa2'), `${C}/runs/r1`), { status: 'paused' }));
+    await assertFails(updateDoc(doc(asHost('u-admin', 'h-admin'), `${C}/runs/r1`), { status: 'done' }));
+    await assertFails(updateDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), { executorUid: 'u-admin' }));
+  });
+
+  it('예전 Run(실행자 uid 없음)은 더 이어 쓰지 못한다', async () => {
+    await env.withSecurityRulesDisabled((c) => setDoc(doc(c.firestore(), `${C}/runs/old`), { status: 'paused' }));
+    await assertFails(updateDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/old`), { status: 'running' }));
+  });
+
+  it('Agent 판정은 그 Run의 실행자 호스트만 쓴다', async () => {
+    await assertSucceeds(setDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), run));
+    await assertSucceeds(setDoc(doc(asHost('u-qa', 'h-qa'), `${C}/results/TC-1__d`), agent));
+    await assertFails(setDoc(doc(asHost('u-admin', 'h-admin'), `${C}/results/TC-1__d`), agent));
+    await assertFails(setDoc(doc(asHost('u-qa', 'h-qa'), `${C}/results/TC-1__d`), { ...agent, runId: 'nope' }));
+    // 사람(웹)은 Agent 판정인 채로 판정을 바꾸지 못하고, Agent 증거도 못 바꾼다
+    await assertFails(setDoc(doc(as('u-qa'), `${C}/results/TC-1__d`), { ...agent, verdict: 'fail' }));
+    await assertFails(setDoc(doc(as('u-qa'), `${C}/results/TC-1__d`), { ...agent, steps: [] }));
   });
 });

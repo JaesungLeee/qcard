@@ -258,6 +258,10 @@ export async function signInHost(target: FirebaseTarget, cred: HostCredential) {
     api,
     user,
     host: { id: cred.hostId, name: conn?.name ?? cred.hostId },
+    /** Run 소유 (Run 문서에 남긴다) */
+    account: { uid: user.uid, hostId: cred.hostId },
+    /** 업로드 큐 폴더: 프로젝트·계정마다 따로 (다른 계정으로 다시 연결해도 남의 작업을 보내지 않는다) */
+    queueDir: join(homedir(), '.qcard', 'upload-queue', target.config.projectId ?? 'default', user.uid),
     /** 이 PC의 연결을 해제한다 (호스트 토큰으로 자기 연결만) */
     disconnect: () => call<void>('revokeHost', { hostId: cred.hostId }),
   };

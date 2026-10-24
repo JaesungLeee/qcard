@@ -41,6 +41,9 @@ export type RunTarget = {
   runId: string;
   /** 실행자 표시 이름 */
   executor: string;
+  /** 실행한 사용자·이 PC의 호스트 연결 (보안 규칙이 Run 소유를 이것으로 본다) */
+  executorUid: string;
+  hostId: string;
   /** 디바이스 화면 크기 (스크린샷 비율) */
   screen: { w: number; h: number };
 };
@@ -58,6 +61,8 @@ export function runSink(queue: UploadQueue, t: RunTarget): RunSink {
         id: t.runId,
         cycleId: t.cycleId,
         executor: t.executor,
+        executorUid: t.executorUid,
+        hostId: t.hostId,
         deviceId: t.deviceId,
         status: 'running',
         tcIds,
