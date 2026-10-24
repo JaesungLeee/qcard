@@ -36,7 +36,12 @@ function toUi(el: MockElement, i: number): UiElement | null {
     text: c.asDesc ? undefined : el.label,
     desc: c.asDesc ? el.label : undefined,
     cls: c.cls,
-    pkg: el.kind === 'app-icon' && el.id.startsWith('launcher_') ? 'com.android.launcher3' : APP_PACKAGE,
+    pkg:
+      el.kind === 'app-icon' && el.id.startsWith('launcher_')
+        ? 'com.android.launcher3'
+        : el.id.startsWith('share_')
+          ? SHARE_SHEET_PKG
+          : APP_PACKAGE,
     bounds: el.bounds,
     clickable: c.clickable ?? false,
     enabled: true,
@@ -47,10 +52,14 @@ function toUi(el: MockElement, i: number): UiElement | null {
   };
 }
 
+/** OS 공유 시트는 대상 앱이 아니라 시스템(`android`)이 띄운다 — 그 안의 탭은 앱 밖 액션이다 (F-EX-10) */
+export const SHARE_SHEET_PKG = 'android';
+
 export function syntheticScreen(key: string): FakeScreen {
   const def = SCREENS[key];
   if (!def) throw new Error(`목업 화면 없음: ${key}`);
-  return { tree: def.elements.map(toUi).filter((e): e is UiElement => e !== null) };
+  const tree = def.elements.map(toUi).filter((e): e is UiElement => e !== null);
+  return key === 'share-sheet' ? { tree, foreground: SHARE_SHEET_PKG } : { tree };
 }
 
 /** 닉네임 규칙: 2~10자, 한글·영문·숫자 */

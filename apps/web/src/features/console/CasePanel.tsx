@@ -1,5 +1,11 @@
 import type { ExecStep, TestCase } from '@qcard/shared';
-import { POINT_COMPARE_LABEL, POINT_METHOD_LABEL, STEP_ACTION_LABEL } from '@qcard/shared';
+import {
+  POINT_COMPARE_LABEL,
+  POINT_METHOD_LABEL,
+  riskDecisionLabel,
+  riskKindLabel,
+  STEP_ACTION_LABEL,
+} from '@qcard/shared';
 import { ContentBadge, Icons, textClass, token } from '@qcard/ui';
 import { fmtNumber, fmtTs } from '../../components/format';
 import { MockScreen } from '../../mock/MockScreen';
@@ -64,7 +70,14 @@ export function CasePanel({
                     )}
                   </span>
                   <span>{s.text}</span>
-                  {s.manual && <span className={`qcc-tag is-manual ${textClass('caption1', 'medium')}`}>수동</span>}
+                  {s.manual && s.risk !== 'human' && (
+                    <span className={`qcc-tag is-manual ${textClass('caption1', 'medium')}`}>수동</span>
+                  )}
+                  {'risk' in s && s.risk && (
+                    <span className={`qcc-tag is-risk ${textClass('caption1', 'bold')}`}>
+                      {s.risk === 'human' ? '사람 전용' : '위험 · 승인'}
+                    </span>
+                  )}
                 </li>
               );
             })}
@@ -185,9 +198,12 @@ export function StepTimeline({ steps, current, ended }: { steps: ExecStep[]; cur
             <>
               <dt>위험 액션</dt>
               <dd>
-                <span className={`qcc-tag is-risk ${textClass('caption1', 'bold')}`}>{step.risk.kind}</span>{' '}
+                <span className={`qcc-tag is-risk ${textClass('caption1', 'bold')}`}>
+                  {riskKindLabel(step.risk.kind)}
+                </span>{' '}
                 <span className={`${textClass('label2')} qcc-muted`}>
-                  {step.risk.planned ? '케이스에 계획됨 · 사전 승인' : '계획에 없음 · 실행자 승인 필요'}
+                  {riskDecisionLabel(step.risk)}
+                  {step.risk.reason ? ` — ${step.risk.reason}` : ''}
                 </span>
               </dd>
             </>

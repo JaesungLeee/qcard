@@ -3,3 +3,4 @@ export * from './executor';
 export * from './verify';
 export * from './judge';
 export * from './runCase';
+export * from './risk';

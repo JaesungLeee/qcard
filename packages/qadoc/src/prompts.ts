@@ -26,7 +26,9 @@ export const SpecPlanOutput = z.object({
       row_id: z.string(),
       prep_flow_ids: z
         .array(z.string())
-        .describe('순서대로 수행할 준비 플로우 ID. 기존·새 플로우 모두 가능. 앱 데이터 초기화가 필요하면 맨 앞에 pf-clean'),
+        .describe(
+          '순서대로 수행할 준비 플로우 ID. 기존·새 플로우 모두 가능. 앱 데이터 초기화가 필요하면 맨 앞에 pf-clean',
+        ),
     }),
   ),
   suggestions: z.array(
@@ -83,7 +85,14 @@ export const GenCase = z.object({
   preconditions: z.array(z.string()).describe('사람이 읽는 사전조건. 준비 플로우가 만든 상태 + 그 밖의 조건'),
   data: z.string().nullable().describe('입력에 쓰는 테스트 데이터. 없으면 null'),
   account_role: z.string().nullable().describe('로그인이 있는 앱에서 필요한 계정 역할. 없으면 null'),
-  steps: z.array(z.object({ text: z.string(), manual: z.boolean() })),
+  steps: z.array(
+    z.object({
+      text: z.string(),
+      manual: z.boolean(),
+      // 응답에 빠져 있으면(예전 녹화) 위험 아님. strict 출력에는 required로 나간다
+      risk: z.enum(['approval', 'human']).nullable().default(null).describe('위험 단계 표시 (F-EX-10). 없으면 null'),
+    }),
+  ),
   points: z.array(GenPoint),
   priority: Priority,
   type: TestType,
@@ -115,6 +124,10 @@ export const CASE_SYSTEM = `너는 Android 앱 QA 문서 작성자다. 스펙의
   - 기다리기만 하는 단계("2~3초 기다린다")는 쓰지 않는다. 화면이 자리 잡을 때까지는 Agent가 기다린다. 토스트·스낵바처럼 잠깐 뜨는 반응을 확인하는 행은 그 반응을 일으키는 행동이 마지막 단계다. 시간이 지난 뒤의 결과(자동 이동, 토스트가 사라짐)가 Then일 때만 기다리는 단계를 쓴다.
   - EC처럼 When이 없으면 "상황"을 만드는 단계를 쓴다(예: 네트워크를 끈 뒤 [저장]을 누른다).
   - Agent가 할 수 없는 단계(SMS 인증번호 입력, 다른 앱에서 외부 발송, 물리 조작, 시간 경과 대기 수 분 이상)는 manual: true.
+  - risk (위험 단계): 단계의 행동이 테스트 밖에 영향을 주거나 되돌릴 수 없으면 표시한다. 실행할 때 Agent가 멈추고 실행자에게 묻는 기준이 된다.
+    - human: 본인인증(PASS·통신사·카드·간편인증), SMS·이메일 인증번호, 공동인증서, 생체인증, 캡차, 소셜 로그인, 실제 개인정보 입력. Agent가 하지 않으므로 manual: true와 함께 쓴다.
+    - approval: 실제 사람에게 닿음(메시지·초대 발송, 공개 게시, 친구 추가), 결제·구독·송금, 탈퇴·삭제·나가기·차단, 대상 앱 밖 조작(공유 시트에서 대상 고르기, 민감한 권한 허용), 계정·보안 변경(비밀번호 변경, 로그아웃), 주문·예약. 케이스를 승인하면 이 단계는 사전 승인이 되지만, 사람·돈에 닿는 행동은 실행 때 다시 묻는다.
+    - 그 밖은 null. 테스트 계정 아이디·비밀번호 로그인, 앱 안에서 만들고 지우는 테스트 데이터, 공유 시트를 여는 것까지는 null이다.
 - points (검증 포인트): Then(EC는 처리)을 나눈다.
   1. 한 포인트에는 확인 하나만 담는다. "A로 이동한다. B는 띄우지 않는다"는 두 포인트다.
   2. target은 화면에서 찾을 대상의 이름(명사구)이다. 문장 조각을 쓰지 않는다.

@@ -171,6 +171,7 @@ const MANUAL_STEP_CASES: Record<string, CaseBody['steps']> = {
     {
       text: '공유 시트에서 메신저로 링크를 보내거나 시트를 취소한다 (외부 발송이므로 실행자가 직접)',
       manual: true,
+      risk: 'approval',
     },
   ],
 };
@@ -1164,7 +1165,11 @@ const results121: CaseResult[] = snapshot120.flatMap((tc, i) =>
       T(3 + k, 10 + Math.floor(i / 10), (i * 7) % 60),
       k === 0 ? PEOPLE.qa : PEOPLE.lead,
       tc.sourceId === src('EC-004') && k === 1
-        ? { verdict: 'fail', actual: '첫 습관 만들기 스텝에서 뒤로가기 시 닉네임 설정 스텝으로 되돌아감', defectId: 'D-0' }
+        ? {
+            verdict: 'fail',
+            actual: '첫 습관 만들기 스텝에서 뒤로가기 시 닉네임 설정 스텝으로 되돌아감',
+            defectId: 'D-0',
+          }
         : undefined,
       `run-121-${k}`,
     ),
@@ -1278,7 +1283,13 @@ function consoleSession(): ConsoleSession {
     screenshot: shot('share-sheet'),
     videoTs: (base.steps[shareIdx]?.videoTs ?? 0) + (base.steps[shareIdx]?.durationMs ?? 0),
     durationMs: 0,
-    risk: { kind: '외부 발송', planned: true },
+    risk: {
+      kind: 'people',
+      level: 'approval',
+      reason: '메신저로 실제 초대 링크가 간다',
+      planned: true,
+      decision: 'pre_approved',
+    },
     caseStepIndex: 1,
   };
   const steps = [...base.steps.slice(0, shareIdx + 1), manual].map((s, i) => ({ ...s, index: i + 1 }));
@@ -1353,7 +1364,8 @@ function jobProgress(opts: {
   running: boolean;
   stop?: string;
 }): { progress: NonNullable<QaDocJob['progress']>; plan: NonNullable<QaDocJob['plan']>; parts: JobParts } {
-  const at = (min: number) => T(opts.day, opts.start[0] + Math.floor((opts.start[1] + min) / 60), (opts.start[1] + min) % 60);
+  const at = (min: number) =>
+    T(opts.day, opts.start[0] + Math.floor((opts.start[1] + min) / 60), (opts.start[1] + min) % 60);
   const prevOf = (row: Row) => CaseBodySchema.parse(qaDocV130.cases.find((c) => c.sourceId === `${SPEC}/${row.id}`)!);
   const planRows: JobPlanRow[] = rows.map((row, i) => {
     const target = i >= opts.from && i < opts.from + opts.targets;
@@ -1404,14 +1416,12 @@ function jobProgress(opts: {
     }),
     ...drafts
       .filter((d) => d.questions.length)
-      .map(
-        (d): QaDocJobEvent => ({
-          id: `q-${SPEC}-${d.rowId}`,
-          at: d.at,
-          kind: 'question',
-          text: `${SPEC}/${d.rowId}: ${d.questions.join(' / ')}`,
-        }),
-      ),
+      .map((d): QaDocJobEvent => ({
+        id: `q-${SPEC}-${d.rowId}`,
+        at: d.at,
+        kind: 'question',
+        text: `${SPEC}/${d.rowId}: ${d.questions.join(' / ')}`,
+      })),
     ...(opts.stop ? [{ id: 'stop-1', at: at(3 + batches), kind: 'stop' as const, text: opts.stop }] : []),
   ];
   const active = opts.running ? targets.slice(opts.drafted, opts.drafted + 24).map((r) => `${SPEC}/${r.id}`) : [];

@@ -1,7 +1,8 @@
 import type { DeviceDriver, KeyboardState, UiElement } from '@qcard/device';
 import { formatTree } from '@qcard/device';
 import type { LlmClient, SecretVault } from '@qcard/llm';
-import type { ExecStep, Screenshot, ThoughtEntry } from '@qcard/shared';
+import type { Bounds, ExecStep, Screenshot, ThoughtEntry } from '@qcard/shared';
+import type { RiskFinding, RiskLevel } from './risk';
 
 /** 시간. 테스트에서는 기다리지 않는 가짜 시계를 쓴다. */
 export interface Clock {
@@ -52,11 +53,26 @@ export type AgentEnv = {
   allowNetworkToggle?: boolean;
   /** 수동 스텝: 실행자에게 알리고 "완료"를 기다린다. 없으면 타임아웃으로 본다 (F-EX-11) */
   onManual?: (instruction: string) => Promise<'done' | 'timeout'>;
+  /**
+   * 위험 액션 (F-EX-10): 실행자에게 묻고 답을 기다린다. approved = Agent가 그 액션을 실행 · took_over = 실행자가
+   * 직접 하고 Agent에 돌려줌 · timeout = 응답 없음(케이스 Blocked). 없으면 타임아웃으로 본다 (실행자가 없는 실행)
+   */
+  onRisk?: (req: RiskRequest) => Promise<RiskAnswer>;
   /** 스텝 타임라인에 한 줄이 생길 때 (로컬 콘솔) */
   onStep?: (step: ExecStep) => void;
   /** 실행자 제어: 일시정지·건너뛰기·Take over·중단 (F-DB-05). 없으면 Agent가 혼자 끝까지 간다 */
   control?: RunControl;
 };
+
+/** 위험 액션 승인 요청 */
+export type RiskRequest = RiskFinding & {
+  level: RiskLevel;
+  /** 하려던 액션 (예: "탭 · 보내기") */
+  action: string;
+  target?: { label: string; bounds?: Bounds };
+};
+/** by: 승인·직접 실행한 사람 */
+export type RiskAnswer = { decision: 'approved' | 'took_over' | 'timeout'; by?: string };
 
 /** 턴 사이에 실행자 제어를 확인한 결과 */
 export type ControlSignal = 'continue' | 'skip' | 'took_over' | 'abort';

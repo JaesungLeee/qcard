@@ -112,7 +112,15 @@ export const PLATFORM_LABEL: Record<Platform, string> = { common: '공통', andr
 export const ExecMode = z.enum(['auto', 'manual']);
 export type ExecMode = z.infer<typeof ExecMode>;
 
-export const CaseStep = z.object({ text: z.string(), manual: z.boolean().default(false) });
+/**
+ * 케이스 단계. risk: 위험 표시 (F-QD-07·F-EX-10) — approval = 승인 필요 액션이 계획된 단계(케이스 승인이 사전 승인),
+ * human = 본인인증처럼 사람만 하는 단계(manual도 true)
+ */
+export const CaseStep = z.object({
+  text: z.string(),
+  manual: z.boolean().default(false),
+  risk: z.enum(['approval', 'human']).optional(),
+});
 export type CaseStep = z.infer<typeof CaseStep>;
 
 /** 검증 포인트 (F-EX-03): QA 문서 생성 시 정의·승인된다. */
@@ -344,10 +352,32 @@ export const ExecStep = z.object({
   screenshot: Screenshot,
   videoTs: z.number(),
   durationMs: z.number(),
-  risk: z.object({ kind: z.string(), planned: z.boolean(), approvedBy: z.string().optional() }).optional(),
+  /** 위험 액션 (F-EX-10): 판별(Agent·코드 안전장치)과 처리. kind는 RiskKind (예전 기록은 자유 문자열) */
+  risk: z
+    .object({
+      kind: z.string(),
+      level: z.enum(['approval', 'human']).optional(),
+      reason: z.string().optional(),
+      source: z.enum(['agent', 'guard']).optional(),
+      /** 케이스에 계획된 단계라 사전 승인으로 넘겼다 */
+      planned: z.boolean(),
+      /** approved = 실행자 승인 후 Agent가 실행 · took_over = 실행자가 직접 실행 · pre_approved = 사전 승인 */
+      decision: z.enum(['approved', 'took_over', 'pre_approved']).optional(),
+      approvedBy: z.string().optional(),
+    })
+    .optional(),
   caseStepIndex: z.number().optional(),
 });
 export type ExecStep = z.infer<typeof ExecStep>;
+
+/** 위험 액션을 어떻게 처리했는가 (타임라인·증거에 보인다) */
+export function riskDecisionLabel(r: NonNullable<ExecStep['risk']>): string {
+  const by = r.approvedBy ? ` · ${r.approvedBy}` : '';
+  if (r.decision === 'approved') return `실행자 승인${by}`;
+  if (r.decision === 'took_over') return `실행자가 직접 수행${by}`;
+  if (r.decision === 'pre_approved' || r.planned) return '케이스에 계획됨 · 사전 승인';
+  return '실행자 승인 필요';
+}
 
 export const PointResult = z.object({
   pointId: z.string(),
@@ -496,6 +526,8 @@ export const Run = z.object({
   status: z.enum(['running', 'paused', 'done', 'aborted']),
   /** status가 paused일 때 */
   pauseReason: PauseReason.optional(),
+  /** 위험 액션에서 실행자를 기다리는 중 (F-EX-10). 로컬 콘솔에서만 처리하고 웹은 보여 주기만 한다 */
+  waiting: z.object({ level: z.enum(['approval', 'human']), since: z.string() }).optional(),
   currentTcId: z.string().optional(),
   /** 이 Run의 실행 큐 — 이어서 실행할 때 같은 케이스를 돌린다 (없으면 예전 Run: 남은 자동 케이스 전체) */
   tcIds: z.array(z.string()).optional(),

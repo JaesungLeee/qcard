@@ -220,6 +220,7 @@ function Trace({ d }: { d: CycleDetail }) {
                       paused={running.status === 'paused'}
                       reason={running.pauseReason}
                       stale={isRunStale(running, now)}
+                      waiting={running.waiting?.level}
                     />
                     {running.executor}의 Run이 이 칸을 잡고 있습니다.
                   </span>

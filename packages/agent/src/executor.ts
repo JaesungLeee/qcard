@@ -20,7 +20,7 @@ import {
   parseToolUse,
   toolUses,
 } from '@qcard/llm';
-import { EXECUTOR_TOOL_INPUTS, type CaseStep, type ExecStep } from '@qcard/shared';
+import { EXECUTOR_TOOL_INPUTS, RISK_KIND_LABEL, type CaseStep, type ExecStep } from '@qcard/shared';
 import {
   clockOf,
   imageBlock,
@@ -32,6 +32,16 @@ import {
   type AgentEnv,
   type Observation,
 } from './env';
+import {
+  caseHasAuth,
+  guardRisk,
+  identityScreen,
+  pickRisk,
+  preApproved,
+  riskLevel,
+  targetOf,
+  type RiskFinding,
+} from './risk';
 
 /*
  * Executor: 관찰 → LLM 판단(도구 호출) → 디바이스 액션을 반복해 케이스 단계를 수행한다 (F-EX-01·06·08·11·12).
@@ -50,7 +60,9 @@ export const EXECUTOR_SYSTEM = `너는 Android 앱 QA Executor다. QA 케이스�
 - 기대 결과는 이 케이스가 무엇을 확인하는지 알려 주는 참고다. 단계가 "~상황을 만든다"처럼 막연하면 그 결과를 확인할 수 있는 상황과 조작을 만든다(예: 유지되는지 보려면 먼저 값을 입력해 두고, 실패 처리를 보려면 실패 조건을 만든 뒤 해당 버튼을 누른다). 결과가 좋게 보이도록 단계에 없는 우회를 하지 않는다.
 - 예상치 못한 팝업·권한 요청·키보드가 단계를 막으면 닫고 진행한다.
 - 앱이 꺼지거나 크래시 대화상자가 보이면 give_up(kind=crash). 진행할 방법이 없으면 give_up(kind=stuck).
-- 비밀값은 {{secret.이름}} 플레이스홀더 그대로 입력한다.`;
+- 비밀값은 {{secret.이름}} 플레이스홀더 그대로 입력한다.
+- tap·tap_point·input_text를 부를 때마다 결과를 따져 risk를 채운다: 실제 사람에게 닿는가, 돈이 움직이는가, 되돌릴 수 없는가, 대상 앱 밖인가, 계정·보안이 바뀌는가, 현실에서 일이 일어나는가, 본인인증·인증번호·실제 개인정보가 필요한가. 하나라도 그렇거나 결과를 모르겠으면 risk에 종류와 이유를 쓰고, 아니면 null. 위험 액션은 실행자가 승인해야 실행되거나 실행자가 직접 한다.
+- 본인인증·인증번호·소셜 로그인 화면에서는 아무것도 입력하지 않는다(risk=identity로 실행자에게 넘긴다).`;
 
 export type ExecOutcome = {
   status: 'done' | 'blocked' | 'fail';
@@ -86,6 +98,16 @@ export type RunStepsInput = {
 };
 
 type ToolResult = Anthropic.ToolResultBlockParam;
+type StepRisk = NonNullable<ExecStep['risk']>;
+const stepRisk = (f: RiskFinding, decision: StepRisk['decision'], by?: string): StepRisk => ({
+  kind: f.kind,
+  level: riskLevel(f.kind),
+  reason: f.reason,
+  source: f.source,
+  planned: decision === 'pre_approved',
+  decision,
+  ...(by ? { approvedBy: by } : {}),
+});
 const ok = (id: string, content: string): ToolResult => ({ type: 'tool_result', tool_use_id: id, content });
 const err = (id: string, content: string): ToolResult => ({
   type: 'tool_result',
@@ -118,6 +140,8 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
   };
   let last = await observe(env, caseId, obsIndex++);
   thought(env, start, 'observe', `화면 관찰 · 요소 ${last.tree.length}개 · ${last.foreground ?? '?'}`);
+  /** 인증 단계가 있는 케이스 — 인앱 웹뷰를 인증 화면으로 본다 (F-EX-10) */
+  const withAuth = caseHasAuth(steps);
 
   const outcome = (status: ExecOutcome['status'], reason?: string): ExecOutcome => {
     if (reason) thought(env, start, 'system', `${status === 'fail' ? 'Fail' : 'Blocked'}: ${reason}`);
@@ -154,11 +178,31 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
       const step = steps[pointer]!;
       thought(env, start, 'system', `수동 스텝 대기: ${step.text}`);
       const at = clock.now();
+      const before = last.screenshot;
       const answer = env.onManual ? await env.onManual(step.text) : 'timeout';
-      if (answer === 'timeout') return '수동 스텝 타임아웃';
-      record({ action: 'manual', intent: step.text, screenshot: last.screenshot, durationMs: clock.now() - at }, at);
-      notes.push(`단계 ${pointer}(수동)는 실행자가 직접 수행했다.`);
+      if (answer === 'timeout') return step.risk === 'human' ? '사람 전용 단계 미수행' : '수동 스텝 타임아웃';
       last = await look();
+      // 사람 전용 단계(본인인증 등): 인증 화면이 남아 있으면 LLM에 보내지 않고 다시 기다린다
+      while (step.risk === 'human' && identityScreen(last, withAuth)) {
+        const again = env.onManual ? await env.onManual(`인증 화면이 아직 보입니다 — ${step.text}`) : 'timeout';
+        if (again === 'timeout') return '사람 전용 단계 미수행';
+        last = await look();
+      }
+      record(
+        {
+          action: 'manual',
+          intent: step.text,
+          screenshot: before,
+          durationMs: clock.now() - at,
+          ...(step.risk === 'human'
+            ? {
+                risk: stepRisk({ kind: 'identity', reason: '사람 전용 단계', source: 'agent' }, 'took_over'),
+              }
+            : {}),
+        },
+        at,
+      );
+      notes.push(`단계 ${pointer}(수동)는 실행자가 직접 수행했다.`);
       pointer++;
     }
     return undefined;
@@ -177,12 +221,23 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
     if (signal === 'abort') throw new RunAbortedError('실행자가 Run을 중단했습니다');
     intervened = true;
     if (signal === 'took_over') {
-      record({ action: 'takeover', intent: '실행자가 직접 조작', screenshot: last.screenshot, durationMs: clock.now() - at }, at);
+      record(
+        { action: 'takeover', intent: '실행자가 직접 조작', screenshot: last.screenshot, durationMs: clock.now() - at },
+        at,
+      );
       thought(env, start, 'system', 'Take over: 실행자가 조작한 뒤 Agent에 반환');
       notes.push('실행자가 Take over로 디바이스를 직접 조작한 뒤 돌려줬다. 지금 화면에서 이어 간다.');
     } else {
       const skipped = steps[pointer]!;
-      record({ action: 'skip', intent: `단계 ${pointer} 건너뜀: ${skipped.text}`, screenshot: last.screenshot, durationMs: 0 }, at);
+      record(
+        {
+          action: 'skip',
+          intent: `단계 ${pointer} 건너뜀: ${skipped.text}`,
+          screenshot: last.screenshot,
+          durationMs: 0,
+        },
+        at,
+      );
       thought(env, start, 'system', `실행자가 단계 ${pointer}를 건너뜀`);
       notes.push(`실행자가 단계 ${pointer}("${skipped.text}")를 건너뛰었다. 끝난 것으로 보고 다음 단계로 간다.`);
       pointer++;
@@ -192,6 +247,66 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
     }
     last = await look();
     return undefined;
+  }
+
+  /**
+   * 위험 액션을 실행자에게 묻는다. 승인 필요: [승인]이면 Agent가 실행, [직접 실행]이면 실행자가 하고 돌려준다.
+   * 사람 전용: 실행자만 한다 — 돌려받은 화면에 인증이 남아 있으면 LLM에 보내지 않고 다시 기다린다
+   */
+  async function askRisk(
+    f: RiskFinding,
+    call: Parameters<typeof targetOf>[0],
+  ): Promise<{ blocked: string } | { tookOver: true } | { by?: string }> {
+    const level = riskLevel(f.kind);
+    const el = targetOf(call, last.tree);
+    const label = el ? (el.text ?? el.desc ?? el.resourceId ?? el.ref) : undefined;
+    const action =
+      call.name === 'input_text'
+        ? `입력 · ${label ?? call.input.element_ref}`
+        : call.name === 'tap_point'
+          ? `탭 · (${call.input.x}, ${call.input.y})`
+          : `탭 · ${label ?? call.input.element_ref}`;
+    const target = el ? { label: label ?? el.ref, bounds: el.bounds } : undefined;
+    thought(
+      env,
+      start,
+      'system',
+      `위험 액션(${RISK_KIND_LABEL[f.kind]}) ${action}: ${f.reason} — ${level === 'human' ? '실행자가 직접 해야 합니다' : '실행자 승인 대기'}`,
+    );
+    let reason = f.reason;
+    for (;;) {
+      const at = clock.now();
+      const answer = env.onRisk
+        ? await env.onRisk({ ...f, reason, level, action, ...(target ? { target } : {}) })
+        : { decision: 'timeout' as const };
+      if (answer.decision === 'timeout')
+        return { blocked: `${level === 'human' ? '사람 전용 단계 미수행' : '위험 액션 미승인'}: ${f.reason}` };
+      if (answer.decision === 'approved' && level === 'approval') {
+        thought(env, start, 'system', `실행자 승인${answer.by ? ` (${answer.by})` : ''}: ${action}`);
+        return { by: answer.by };
+      }
+      intervened = true;
+      operated.add(pointer);
+      record(
+        {
+          action: 'takeover',
+          intent: `실행자가 직접 수행: ${f.reason}`,
+          ...(target ? { target } : {}),
+          screenshot: last.screenshot,
+          durationMs: clock.now() - at,
+          risk: stepRisk(f, 'took_over', answer.by),
+        },
+        at,
+      );
+      last = await look();
+      if (level === 'human' && identityScreen(last, withAuth)) {
+        reason = `인증 화면이 아직 보입니다 — ${f.reason}`;
+        continue;
+      }
+      thought(env, start, 'system', `실행자가 직접 처리: ${action}`);
+      notes.push(`실행자가 위험 액션(${action}: ${f.reason})을 직접 처리하고 돌려줬다. 지금 화면에서 이어 간다.`);
+      return { tookOver: true };
+    }
   }
 
   const manualFail = await handleManual();
@@ -312,11 +427,30 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
       repeats.set(sig, seen);
       if (seen >= repeatLimit) return outcome('blocked', `실행 한도 초과: 같은 화면에서 같은 액션 ${seen}회 반복`);
 
+      // 위험 액션 (F-EX-10): Agent 표시 + 코드 안전장치. 사전 승인이 아니면 실행자에게 묻는다
+      let risk: StepRisk | undefined;
+      if (call.name === 'tap' || call.name === 'tap_point' || call.name === 'input_text') {
+        const marked = call.input.risk ? { ...call.input.risk, source: 'agent' as const } : undefined;
+        const found = pickRisk(marked, guardRisk(call, last, { appPackage: env.appPackage, withAuth }));
+        if (found && preApproved(found, steps[pointer])) {
+          risk = stepRisk(found, 'pre_approved');
+          thought(env, start, 'system', `위험 액션(${RISK_KIND_LABEL[found.kind]}) — 케이스에 계획돼 사전 승인`);
+        } else if (found) {
+          const asked = await askRisk(found, call);
+          if ('blocked' in asked) return outcome('blocked', asked.blocked);
+          if ('tookOver' in asked) {
+            results.push(ok(use.id, '실행자가 이 액션을 직접 처리했습니다. 지금 화면을 보고 이어 가세요.'));
+            continue;
+          }
+          risk = stepRisk(found, 'approved', asked.by);
+        }
+      }
+
       const at = clock.now();
       const before = last.screenshot;
       try {
         const step = await act(env, call, last, info.size);
-        record({ ...step, screenshot: before, durationMs: clock.now() - at }, at);
+        record({ ...step, ...(risk ? { risk } : {}), screenshot: before, durationMs: clock.now() - at }, at);
         if (call.name !== 'wait') operated.add(pointer);
         thought(env, start, 'act', `${call.name} · ${step.intent}`);
         await clock.sleep(env.settleMs ?? 500);

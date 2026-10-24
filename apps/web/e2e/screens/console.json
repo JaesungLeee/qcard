@@ -3,9 +3,27 @@
   { "name": "console-manual", "path": "/console?at=end", "waitFor": "수동 스텝 — 디바이스에서 직접 수행해 주세요" },
   { "name": "console-done", "path": "/console?at=done", "waitFor": "다음 케이스 준비 중" },
   { "name": "console-live-running", "path": "/console/live?demo=running", "waitFor": "Agent 사고 로그" },
-  { "name": "console-live-manual", "path": "/console/live?demo=manual", "waitFor": "수동 스텝 — 디바이스에서 직접 수행해 주세요" },
+  {
+    "name": "console-live-manual",
+    "path": "/console/live?demo=manual",
+    "waitFor": "수동 스텝 — 디바이스에서 직접 수행해 주세요"
+  },
   { "name": "console-live-takeover", "path": "/console/live?demo=takeover", "waitFor": "Take over 중" },
-  { "name": "console-live-start", "path": "/console/live?demo=start", "waitFor": "Agent가 첫 액션을 준비하고 있습니다." },
+  {
+    "name": "console-live-approval",
+    "path": "/console/live?demo=approval",
+    "waitFor": "위험 액션 — 승인이 필요합니다"
+  },
+  {
+    "name": "console-live-identity",
+    "path": "/console/live?demo=identity",
+    "waitFor": "사람 전용 — 디바이스에서 직접 해 주세요"
+  },
+  {
+    "name": "console-live-start",
+    "path": "/console/live?demo=start",
+    "waitFor": "Agent가 첫 액션을 준비하고 있습니다."
+  },
   { "name": "console-live-home", "path": "/console/live?demo=home", "waitFor": "일시정지된 Run이 있습니다" },
   { "name": "console-live-waiting", "path": "/console/live?demo=waiting", "waitFor": "Agent 응답을 기다리고 있습니다" },
   { "name": "console-open", "path": "/p/haru/console", "waitFor": "로컬 콘솔이 꺼져 있습니다" }

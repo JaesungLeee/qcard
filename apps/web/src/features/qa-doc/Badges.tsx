@@ -1,4 +1,11 @@
-import { APPROVAL_LABEL, CHANGE_LABEL, type ApprovalStatus, type CaseChange, type TestCase } from '@qcard/shared';
+import {
+  APPROVAL_LABEL,
+  CHANGE_LABEL,
+  type ApprovalStatus,
+  type CaseChange,
+  type CaseStep,
+  type TestCase,
+} from '@qcard/shared';
 import { textClass, token, type ColorToken } from '@qcard/ui';
 import type { CSSProperties, ReactNode } from 'react';
 
@@ -55,6 +62,7 @@ export function ApprovalBadge({ status }: { status: ApprovalStatus }) {
 
 export function ModeBadge({ c }: { c: Pick<TestCase, 'mode' | 'steps'> }) {
   const manualSteps = c.steps.filter((s) => s.manual).length;
+  const riskSteps = c.steps.filter((s) => s.risk).length;
   if (c.mode === 'manual') return <Tag tone="quiet">Manual</Tag>;
   return (
     <span style={{ display: 'inline-flex', gap: token('space-4') }}>
@@ -64,8 +72,36 @@ export function ModeBadge({ c }: { c: Pick<TestCase, 'mode' | 'steps'> }) {
           수동 {manualSteps}
         </Tag>
       )}
+      {riskSteps > 0 && (
+        <Tag
+          tone="fail"
+          title={`위험 단계 ${riskSteps}개 — 승인하면 이 단계의 액션은 사전 승인 (사람·돈에 닿는 액션은 실행 때 다시 묻는다)`}
+        >
+          위험 {riskSteps}
+        </Tag>
+      )}
     </span>
   );
+}
+
+/** 단계의 위험 표시 (F-QD-07·F-EX-10) */
+export function StepRiskTag({ risk }: { risk: CaseStep['risk'] }) {
+  if (risk === 'approval')
+    return (
+      <Tag
+        tone="fail"
+        title="위험 액션이 계획된 단계. 케이스 승인이 사전 승인이 되지만, 사람에게 닿거나 돈이 움직이는 액션은 실행 때 다시 묻는다"
+      >
+        위험 · 승인
+      </Tag>
+    );
+  if (risk === 'human')
+    return (
+      <Tag tone="violet" title="본인인증·인증번호처럼 Agent가 하지 않고 실행자가 직접 하는 단계">
+        사람 전용
+      </Tag>
+    );
+  return null;
 }
 
 /** 승인 진행 막대 + 숫자 */

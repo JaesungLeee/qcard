@@ -88,6 +88,9 @@ export function DeviceStage({
         {screen(width)}
         {phase === 'takeover' && <ScreenNote icon={<Icons.IconPerson />}>실행자 조작 중 — Agent 대기</ScreenNote>}
         {phase === 'manual' && <ScreenNote icon={<Icons.IconPerson />}>실행자 조작 대기</ScreenNote>}
+        {phase === 'approval' && (
+          <ScreenNote icon={<Icons.IconTriangleExclamation />}>위험 액션 — 실행자 응답 대기</ScreenNote>
+        )}
         {phase === 'done' && <ScreenNote icon={<Icons.IconHourglass />}>다음 케이스 준비 중</ScreenNote>}
       </div>
       <div className="qcc-controls" role="toolbar" aria-label="실행 제어">

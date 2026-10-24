@@ -10,16 +10,57 @@ import { z } from 'zod';
 const elementRef = z.string().describe('접근성 트리의 요소 번호(예: e12) 또는 resource-id');
 const intent = z.string().describe('이 액션을 하는 이유 (스텝 타임라인의 "의도"로 기록된다)');
 
-export const TapInput = z.object({ element_ref: elementRef, intent });
+/**
+ * 위험 액션의 종류 (F-EX-10). 버튼이 아니라 결과로 나눈다. identity만 사람 전용이고 나머지는 승인 필요 —
+ * 등급과 사전 승인 예외는 코드(`@qcard/agent` risk)가 정한다
+ */
+export const RiskKind = z.enum([
+  'people',
+  'money',
+  'irreversible',
+  'outside_app',
+  'account',
+  'real_world',
+  'identity',
+  'uncertain',
+]);
+export type RiskKind = z.infer<typeof RiskKind>;
+export const RISK_KIND_LABEL: Record<RiskKind, string> = {
+  people: '사람에게 닿음',
+  money: '결제·돈',
+  irreversible: '되돌릴 수 없음',
+  outside_app: '앱 밖',
+  account: '계정·보안 변경',
+  real_world: '현실의 일',
+  identity: '본인인증·개인정보',
+  uncertain: '결과 불확실',
+};
+/** 위험 종류 라벨 (예전 기록의 자유 문자열은 그대로) */
+export const riskKindLabel = (kind: string) => (RISK_KIND_LABEL as Record<string, string>)[kind] ?? kind;
+const risk = z
+  .object({ kind: RiskKind, reason: z.string().describe('무엇이 일어나는지 한 줄') })
+  .nullable()
+  // 응답에 빠져 있으면(예전 녹화·테스트) 위험 아님으로 본다. strict 도구에는 required로 나간다
+  .default(null)
+  .describe(
+    '이 액션이 위험 액션이면 종류와 이유, 아니면 null. people=실제 사람에게 닿음(메시지·초대 발송·공개 게시·친구 추가·전화), ' +
+      'money=결제·구독·송금·포인트 사용, irreversible=탈퇴·삭제·나가기·차단, outside_app=대상 앱 밖(공유 시트·다른 앱·시스템 설정·민감한 권한 허용), ' +
+      'account=비밀번호 변경·연동 해제·로그아웃, real_world=주문·예약, identity=본인인증·인증번호·소셜 로그인·실제 개인정보 입력, ' +
+      'uncertain=누르면 무엇이 일어날지 알 수 없음',
+  );
+
+export const TapInput = z.object({ element_ref: elementRef, intent, risk });
 export const TapPointInput = z.object({
   x: z.number().int().describe('디바이스 px'),
   y: z.number().int().describe('디바이스 px'),
   intent,
+  risk,
 });
 export const InputTextInput = z.object({
   element_ref: elementRef,
   text: z.string().describe('입력할 값. 비밀값은 {{secret.이름}} 플레이스홀더로 쓴다'),
   intent,
+  risk,
 });
 export const SwipeInput = z.object({ direction: z.enum(['up', 'down', 'left', 'right']), intent });
 export const PressKeyInput = z.object({ key: z.enum(['back', 'home', 'enter']), intent });

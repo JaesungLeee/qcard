@@ -1,4 +1,4 @@
-import { RunAbortedError, type ControlSignal, type RunControl } from '@qcard/agent';
+import { RunAbortedError, type ControlSignal, type RiskAnswer, type RiskRequest, type RunControl } from '@qcard/agent';
 import type { CaseResult, ConsoleControl, ExecStep, LiveConsole, TestCase, ThoughtEntry } from '@qcard/shared';
 
 /*
@@ -6,6 +6,8 @@ import type { CaseResult, ConsoleControl, ExecStep, LiveConsole, TestCase, Thoug
  *   - 일시정지·Take over: 다음 턴 사이에서 Agent가 멈춘다. 누른 사이 Agent가 고른 액션은 실행하지 않는다
  *   - 건너뛰기: 지금 단계를 끝난 것으로 넘긴다 · 중단: 지금 케이스는 판정하지 않고 Run을 끝낸다
  *   - 수동 스텝: 실행자가 [완료]를 누를 때까지 기다린다 (10분 지나면 Blocked, F-EX-11)
+ *   - 위험 액션: [승인](승인 필요만) 또는 [직접 실행] → [Agent에 반환]. 10분 안에 답이 없으면 Blocked (F-EX-10).
+ *     직접 실행하는 동안은 시간을 재지 않는다
  */
 
 /** 수동 스텝 대기 한도 (F-EX-12 임시 기본값) */
@@ -24,6 +26,8 @@ export class ConsoleHub implements RunControl {
   private shots = new Map<string, Uint8Array>();
   private wake: (() => void) | undefined;
   private manualDone: ((answer: 'done' | 'timeout') => void) | undefined;
+  private riskDone: ((answer: RiskAnswer) => void) | undefined;
+  private riskClock: (() => void) | undefined;
 
   constructor(
     init: Init,
@@ -78,6 +82,7 @@ export class ConsoleHub implements RunControl {
       verdict: undefined,
       reason: undefined,
       manual: undefined,
+      approval: undefined,
       queue: this.state.queue.map((q) => (q.tcId === tc.tcId ? { ...q, status: 'running' } : q)),
       current: { tcId: tc.tcId, case: tc, steps: [], thoughts: [], startedAt: this.now(), verified: 0 },
       usage: { ...this.state.usage, caseTokens: 0 },
@@ -192,6 +197,29 @@ export class ConsoleHub implements RunControl {
     });
   };
 
+  /** 위험 액션: 실행자의 [승인]·[직접 실행 → Agent에 반환]이나 한도가 지날 때까지 기다린다. 중단하면 던진다 */
+  onRisk = (req: RiskRequest): Promise<RiskAnswer> => {
+    const ms = this.opts.manualTimeoutMs ?? MANUAL_TIMEOUT_MS;
+    const { kind, level, reason, source, action, target } = req;
+    this.set({
+      phase: 'approval',
+      approval: { kind, level, reason, source, action, ...(target ? { target } : {}), deadline: this.now() + ms },
+    });
+    return new Promise<RiskAnswer>((resolve, reject) => {
+      const timer = setTimeout(() => finish({ decision: 'timeout' }), ms);
+      const finish = (answer: RiskAnswer) => {
+        clearTimeout(timer);
+        this.riskDone = undefined;
+        this.riskClock = undefined;
+        this.set({ phase: 'running', approval: undefined });
+        if (this.pending === 'abort') reject(new RunAbortedError('실행자가 Run을 중단했습니다'));
+        else resolve(answer);
+      };
+      this.riskDone = finish;
+      this.riskClock = () => clearTimeout(timer);
+    });
+  };
+
   // ------------------------------------------------------------ RunControl (Agent 루프)
 
   interrupted(): boolean {
@@ -234,13 +262,27 @@ export class ConsoleHub implements RunControl {
           this.release();
         }
         return;
+      case 'approve':
+        if (phase === 'approval' && this.state.approval?.level === 'approval')
+          this.riskDone?.({ decision: 'approved', by: this.state.executor });
+        return;
       case 'takeOver':
+        // 위험 액션을 실행자가 직접 한다: 다 하고 [Agent에 반환]할 때까지 기다린다 (시간 제한 없음)
+        if (phase === 'approval') {
+          this.riskClock?.();
+          this.set({ phase: 'takeover' });
+          return;
+        }
         if (phase === 'running' || phase === 'paused') {
           this.tookOver = true;
           this.set({ phase: 'takeover' });
         }
         return;
       case 'returnToAgent':
+        if (phase === 'takeover' && this.riskDone) {
+          this.riskDone({ decision: 'took_over', by: this.state.executor });
+          return;
+        }
         if (phase === 'takeover') {
           this.set({ phase: 'running' });
           this.release();
@@ -260,6 +302,7 @@ export class ConsoleHub implements RunControl {
         if (this.state.run.status !== 'running') return;
         this.pending = 'abort';
         this.manualDone?.('timeout');
+        this.riskDone?.({ decision: 'timeout' });
         this.release();
         return;
     }

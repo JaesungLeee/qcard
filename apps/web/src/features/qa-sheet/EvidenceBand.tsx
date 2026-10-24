@@ -7,6 +7,8 @@ import {
   type CaseResult,
   type ExecStep,
   type PointResult,
+  riskDecisionLabel,
+  riskKindLabel,
 } from '@qcard/shared';
 import {
   ContentBadge,
@@ -496,8 +498,7 @@ function StepTarget({ s }: { s: ExecStep }) {
       <Mono className={`${textClass('caption1')} qs-faint`}>{fmtNumber(s.durationMs)}ms</Mono>
       {s.risk && (
         <span className={textClass('caption1')} style={{ color: token('qcard-verdict-blocked-fg') }}>
-          위험 액션 {s.risk.kind}
-          {s.risk.approvedBy ? ` · 승인 ${s.risk.approvedBy}` : ''}
+          위험 액션 {riskKindLabel(s.risk.kind)} · {riskDecisionLabel(s.risk)}
         </span>
       )}
     </div>

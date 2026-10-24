@@ -1,8 +1,8 @@
 // 실시간 로컬 콘솔 (PRD §5.7): 호스트 에이전트(serve·run-cycle)가 띄운 127.0.0.1 서버에서 연다.
 // 개발 중에는 Vite 개발 서버가 /console-api를 호스트로 넘긴다. Run이 없으면 홈(사이클 골라 Run 시작),
 // Run 중이면 실행 화면. 상태는 호스트가 밀어 주고 화면은 제어·Run 시작만 보낸다.
-import { DEVICE_SIZE, type ConsoleSession } from '@qcard/fixtures';
-import type { ConsoleHome, ConsolePhase, LiveConsole } from '@qcard/shared';
+import { DEVICE_SIZE, SCREENS, type ConsoleSession } from '@qcard/fixtures';
+import type { ConsoleApproval, ConsoleHome, ConsolePhase, ExecStep, LiveConsole } from '@qcard/shared';
 import { Icons, SectionMessage, textClass, token } from '@qcard/ui';
 import { fmtTs } from '../../../components/format';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -58,6 +58,7 @@ function Connected() {
  * `?demo=running|manual|takeover`: 호스트 없이 fixture 세션으로 채운 화면 (UI 스냅샷용).
  * `?demo=start`: 케이스가 막 시작해 스텝이 아직 없는 상태 · `?demo=home`: Run이 없을 때 (사이클 고르기)
  * `?demo=waiting`: Agent가 모델 응답을 오래 기다리는 중
+ * `?demo=approval`: 위험 액션 승인 대기 · `?demo=identity`: 사람 전용(본인인증) 대기 (F-EX-10)
  */
 function Demo({ demo }: { demo: string }) {
   const query = useConsoleSession();
@@ -86,9 +87,14 @@ function Demo({ demo }: { demo: string }) {
         const now = Date.now();
         const base = demoState(
           session,
-          demo === 'start' || demo === 'waiting' ? 'running' : (demo as ConsolePhase),
+          demo === 'start' || demo === 'waiting'
+            ? 'running'
+            : demo === 'identity'
+              ? 'approval'
+              : (demo as ConsolePhase),
           now,
           demo === 'start' ? 0 : 3,
+          demo === 'identity',
         );
         // 모델 응답을 75초째 기다리는 중
         const state = {
@@ -104,7 +110,11 @@ function Demo({ demo }: { demo: string }) {
               }
             : {}),
         };
-        const shot = (state.current!.steps.at(-1) ?? session.current.steps[0]!).screenshot;
+        // 승인 대기 데모는 공유 시트에서 [메신저]를 누르려던 순간
+        const shot =
+          demo === 'approval'
+            ? ({ kind: 'mock', screen: 'share-sheet' } as const)
+            : (state.current!.steps.at(-1) ?? session.current.steps[0]!).screenshot;
         return (
           <Live
             state={state}
@@ -155,7 +165,13 @@ export function demoHome(session: ConsoleSession): ConsoleHome {
   };
 }
 
-export function demoState(session: ConsoleSession, phase: ConsolePhase, now = Date.now(), stepCount = 3): LiveConsole {
+export function demoState(
+  session: ConsoleSession,
+  phase: ConsolePhase,
+  now = Date.now(),
+  stepCount = 3,
+  human = false,
+): LiveConsole {
   const { current } = session;
   const steps = current.steps.slice(0, stepCount);
   const manualStep = current.case.steps.find((s) => s.manual);
@@ -181,6 +197,7 @@ export function demoState(session: ConsoleSession, phase: ConsolePhase, now = Da
     ...(phase === 'manual' && manualStep
       ? { manual: { instruction: manualStep.text, deadline: now + 8 * 60_000 } }
       : {}),
+    ...(phase === 'approval' ? { approval: demoApproval(human, now) } : {}),
     run: { status: 'running' },
     usage: {
       tokens: session.usage.tokens,
@@ -243,6 +260,8 @@ function Live({
             verdict: state.verdict,
             reason: state.reason,
             manualLeftMs: state.manual ? Math.max(0, state.manual.deadline - now) : undefined,
+            approval: state.approval,
+            approvalLeftMs: state.approval ? Math.max(0, state.approval.deadline - now) : undefined,
           }}
           onControl={control}
           step={step}
@@ -273,14 +292,16 @@ function Live({
                   <LiveScreen
                     width={width}
                     screen={state.screen}
-                    // 액션 오버레이는 Agent가 방금 한 액션을 1.5초 동안 보인다
+                    // 액션 오버레이는 Agent가 방금 한 액션을 1.5초 동안 보인다. 위험 액션 대기 중에는 누르려던 요소를 보인다
                     action={
-                      step &&
-                      phase === 'running' &&
-                      step.action !== 'manual' &&
-                      now - (current!.startedAt + step.videoTs) < 1500
-                        ? step
-                        : undefined
+                      phase === 'approval' && state.approval?.target
+                        ? approvalTarget(state.approval)
+                        : step &&
+                            phase === 'running' &&
+                            step.action !== 'manual' &&
+                            now - (current!.startedAt + step.videoTs) < 1500
+                          ? step
+                          : undefined
                     }
                   />
                 ))
@@ -383,4 +404,40 @@ function Waiting({ link }: { link: HostLink }) {
       </section>
     </div>
   );
+}
+
+/** 승인 대기 중인 액션을 오버레이로 (아직 실행하지 않은 탭) */
+function approvalTarget(a: ConsoleApproval): ExecStep {
+  return {
+    index: 0,
+    action: 'tap',
+    target: a.target,
+    intent: a.action,
+    screenshot: { kind: 'url', url: '' },
+    videoTs: 0,
+    durationMs: 0,
+  };
+}
+
+/** 데모 위험 액션: 공유 시트에서 메신저로 보내기(승인 필요) · 본인인증(사람 전용) */
+function demoApproval(human: boolean, now: number): ConsoleApproval {
+  const messenger = SCREENS['share-sheet']!.elements.find((e) => e.id === 'share_messenger')!;
+  return human
+    ? {
+        kind: 'identity',
+        level: 'human',
+        reason: '휴대폰 본인인증 화면',
+        source: 'guard',
+        action: '탭 · 인증번호 받기',
+        deadline: now + 8 * 60_000,
+      }
+    : {
+        kind: 'people',
+        level: 'approval',
+        reason: '메신저로 실제 초대 링크가 간다',
+        source: 'guard',
+        action: '탭 · 메신저',
+        target: { label: '메신저', bounds: messenger.bounds },
+        deadline: now + 8 * 60_000,
+      };
 }

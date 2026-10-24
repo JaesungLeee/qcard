@@ -14,7 +14,7 @@ import { useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { fmtDateTime } from '../../components/format';
 import { useSetApproval } from '../../data/hooks';
-import { ApprovalBadge, ChangeBadge, ModeBadge, Tag } from './Badges';
+import { ApprovalBadge, ChangeBadge, ModeBadge, StepRiskTag, Tag } from './Badges';
 import { CaseDiff } from './CaseDiff';
 import { CaseEditForm } from './CaseEditForm';
 import { diffCase, shortReq, shortSource, toBody } from './logic';
@@ -335,11 +335,12 @@ export function CaseBodyBlocks({
           {body.steps.map((s, i) => (
             <li key={i}>
               <RichText text={s.text} />{' '}
-              {s.manual && (
+              {s.manual && s.risk !== 'human' && (
                 <Tag tone="blocked" title="실행자가 직접 수행하는 스텝">
                   수동
                 </Tag>
-              )}
+              )}{' '}
+              <StepRiskTag risk={s.risk} />
             </li>
           ))}
         </ol>

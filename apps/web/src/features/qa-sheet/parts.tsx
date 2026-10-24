@@ -108,8 +108,24 @@ export function useNow(intervalMs = 15_000) {
   return now;
 }
 
-/** stale: 실행 중인데 호스트 신호가 끊긴 Run (F-DV-04, isRunStale) */
-export function RunState({ paused, reason, stale }: { paused: boolean; reason?: PauseReason; stale?: boolean }) {
+/** 실행자를 기다리는 Run의 표시 (F-EX-10). 응답은 실행자 PC의 로컬 콘솔에서만 한다 */
+export const WAITING_LABEL = { approval: '승인 대기', human: '실행자 직접 수행 대기' } as const;
+
+/**
+ * stale: 실행 중인데 호스트 신호가 끊긴 Run (F-DV-04, isRunStale) ·
+ * waiting: 위험 액션·사람 전용·수동 스텝에서 실행자를 기다리는 중 (F-EX-10)
+ */
+export function RunState({
+  paused,
+  reason,
+  stale,
+  waiting,
+}: {
+  paused: boolean;
+  reason?: PauseReason;
+  stale?: boolean;
+  waiting?: keyof typeof WAITING_LABEL;
+}) {
   if (stale && !paused)
     return (
       <span
@@ -118,6 +134,17 @@ export function RunState({ paused, reason, stale }: { paused: boolean; reason?: 
       >
         <Icons.IconTriangleExclamation aria-hidden />
         호스트 연결 끊김
+      </span>
+    );
+  if (waiting && !paused)
+    return (
+      <span
+        className={`qs-row ${textClass('caption1', 'medium')}`}
+        style={{ gap: token('space-2'), color: token('foreground-cautionary-primary') }}
+        title="실행자 PC의 로컬 콘솔에서 처리합니다. 10분 안에 응답이 없으면 그 케이스는 Blocked"
+      >
+        <Icons.IconTriangleExclamation aria-hidden />
+        {WAITING_LABEL[waiting]} · 로컬 콘솔
       </span>
     );
   return (

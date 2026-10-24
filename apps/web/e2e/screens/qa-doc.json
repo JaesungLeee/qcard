@@ -13,6 +13,7 @@
     "waitFor": "유저 플로우"
   },
   { "name": "qa-doc-case-changed", "path": "/p/haru/docs/doc-130?tab=cases&case=TC-ONBOARDING-008", "waitFor": "이전 버전 대비 변경" },
+  { "name": "qa-doc-case-risk", "path": "/p/haru/docs/doc-130?case=TC-ONBOARDING-028", "waitFor": "위험 · 승인" },
   { "name": "qa-doc-case-held", "path": "/p/haru/docs/doc-130?case=TC-ONBOARDING-030", "waitFor": "승인 보류" },
   { "name": "qa-doc-case-removed", "path": "/p/haru/docs/doc-130?case=TC-ONBOARDING-062", "waitFor": "삭제됨 — 다음 사이클에서 제외" },
   { "name": "qa-doc-case-edit", "path": "/p/haru/docs/doc-130?case=TC-ONBOARDING-021&edit=1", "waitFor": "검증 포인트 추가" },

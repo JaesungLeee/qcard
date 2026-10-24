@@ -123,7 +123,10 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
     const known = nameChecker(sources);
     return texts.map((t) => {
       const r = unmarkUnknownNames(t, known);
-      if (r.guessed.length) warnings.push(`${where}: 스펙에 없는 버튼 이름 ${r.guessed.map((n) => `[${n}]`).join(' ')}을 추정으로 표시했다`);
+      if (r.guessed.length)
+        warnings.push(
+          `${where}: 스펙에 없는 버튼 이름 ${r.guessed.map((n) => `[${n}]`).join(' ')}을 추정으로 표시했다`,
+        );
       return r.text;
     });
   };
@@ -360,7 +363,12 @@ function bodyOf(g: GenCase, tcId: string, start: { prepFlowIds: string[]; cleanS
     cleanState: start.cleanState,
     ...(g.account_role ? { accountRole: g.account_role } : {}),
     ...(g.data ? { data: g.data } : {}),
-    steps: g.steps,
+    // 사람 전용 단계는 실행자가 직접 하는 수동 스텝이다
+    steps: g.steps.map((s) => ({
+      text: s.text,
+      manual: s.manual || s.risk === 'human',
+      ...(s.risk ? { risk: s.risk } : {}),
+    })),
     verificationPoints: g.points.map((p, i) => ({
       id: `${tcId}-P${i + 1}`,
       target: p.target,
@@ -401,10 +409,7 @@ function missingRows(rows: RowPlan[], out: { row_id: string }[]): string[] {
 
 /** 스펙에 쓰인 글 (버튼 이름의 근거) */
 function specSources(spec: SpecDoc): string[] {
-  return [
-    ...spec.requirements.map((r) => r.text),
-    ...spec.rows.flatMap((r) => [r.title, r.given, r.when, r.then]),
-  ];
+  return [...spec.requirements.map((r) => r.text), ...spec.rows.flatMap((r) => [r.title, r.given, r.when, r.then])];
 }
 
 // ---------------------------------------------------------------- 프롬프트 본문

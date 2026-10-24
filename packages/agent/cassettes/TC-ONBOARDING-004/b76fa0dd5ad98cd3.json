@@ -1,6 +1,6 @@
 {
   "key": "b76fa0dd5ad98cd32ec10b991a9057227763d45e12de88ee8fea8838863e214a",
-  "recordedAt": "2026-10-24T04:02:05.340Z",
+  "recordedAt": "2026-10-24T16:15:47.418Z",
   "meta": {
     "role": "locator",
     "caseId": "TC-ONBOARDING-004"
@@ -93,14 +93,14 @@
     ]
   },
   "response": {
-    "id": "msg_cli_mvlvh95o",
+    "id": "msg_cli_mvmlost6",
     "type": "message",
     "role": "assistant",
     "model": "claude-sonnet-5-5",
     "content": [
       {
         "type": "text",
-        "text": "{\"points\":[{\"point_id\":\"TC-ONBOARDING-004-P1\",\"status\":\"found\",\"element_ref\":\"o7.e6\",\"reason\":\"관찰 7에 '초대 링크를 복사했어요' 토스트가 있음\"},{\"point_id\":\"TC-ONBOARDING-004-P2\",\"status\":\"found\",\"element_ref\":\"o8.e1\",\"reason\":\"마지막 관찰에서 메이트 초대 스텝 제목이 그대로 보임\"}]}",
+        "text": "{\"points\":[{\"point_id\":\"TC-ONBOARDING-004-P1\",\"status\":\"found\",\"element_ref\":\"o7.e6\",\"reason\":\"관찰 7에 '초대 링크를 복사했어요' 토스트가 있음\"},{\"point_id\":\"TC-ONBOARDING-004-P2\",\"status\":\"found\",\"element_ref\":\"o8.e1\",\"reason\":\"마지막 관찰에 메이트 초대 스텝 제목이 그대로 보임\"}]}",
         "citations": null
       }
     ],
@@ -110,8 +110,8 @@
     "container": null,
     "usage": {
       "input_tokens": 2,
-      "output_tokens": 204,
-      "cache_creation_input_tokens": 1727,
+      "output_tokens": 203,
+      "cache_creation_input_tokens": 1717,
       "cache_read_input_tokens": 1523
     }
   }

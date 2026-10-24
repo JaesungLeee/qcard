@@ -1,6 +1,6 @@
 {
   "key": "87ec390d5170c85fea66896f8529c5691ab1bf18b6321d6d6fc695faa02d8369",
-  "recordedAt": "2026-10-24T04:01:08.760Z",
+  "recordedAt": "2026-10-24T16:14:27.550Z",
   "meta": {
     "role": "locator",
     "caseId": "TC-ONBOARDING-001"
@@ -89,14 +89,14 @@
     ]
   },
   "response": {
-    "id": "msg_cli_mvlvg1i0",
+    "id": "msg_cli_mvmln36m",
     "type": "message",
     "role": "assistant",
     "model": "claude-sonnet-5-5",
     "content": [
       {
         "type": "text",
-        "text": "{\"points\":[{\"point_id\":\"TC-ONBOARDING-001-P1\",\"status\":\"found\",\"element_ref\":\"o1.e0\",\"reason\":\"'닉네임 설정' 제목이 닉네임 설정 스텝 화면임을 보여 준다.\"},{\"point_id\":\"TC-ONBOARDING-001-P2\",\"status\":\"found\",\"element_ref\":\"o1.e5\",\"reason\":\"보이면 안 되는 bottom_nav 요소가 마지막 관찰에 존재한다.\"}]}",
+        "text": "{\"points\":[{\"point_id\":\"TC-ONBOARDING-001-P1\",\"status\":\"found\",\"element_ref\":\"o1.e0\",\"reason\":\"'닉네임 설정' 제목이 닉네임 설정 스텝 화면임을 보여줌\"},{\"point_id\":\"TC-ONBOARDING-001-P2\",\"status\":\"found\",\"element_ref\":\"o1.e5\",\"reason\":\"보이면 안 되는 바텀 네비게이션(bottom_nav)이 마지막 관찰에 존재함\"}]}",
         "citations": null
       }
     ],
@@ -106,8 +106,8 @@
     "container": null,
     "usage": {
       "input_tokens": 2,
-      "output_tokens": 213,
-      "cache_creation_input_tokens": 1314,
+      "output_tokens": 219,
+      "cache_creation_input_tokens": 1316,
       "cache_read_input_tokens": 1523
     }
   }

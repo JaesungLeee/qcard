@@ -158,7 +158,12 @@ function CycleCard({ s, projectId }: { s: CycleSummary; projectId: string }) {
                 style={{ flexDirection: 'column', alignItems: 'flex-start' }}
               >
                 <span className="qs-row" style={{ gap: token('space-6') }}>
-                  <RunState paused={r.status === 'paused'} reason={r.pauseReason} stale={isRunStale(r, now)} />
+                  <RunState
+                    paused={r.status === 'paused'}
+                    reason={r.pauseReason}
+                    stale={isRunStale(r, now)}
+                    waiting={r.waiting?.level}
+                  />
                   <b>{r.executor}</b>
                   <span className="qs-muted">{deviceLabel(r.deviceId)}</span>
                 </span>

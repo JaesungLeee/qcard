@@ -39,6 +39,12 @@ export const PHASE_META: Record<Phase, { label: string; fg: ColorToken; bg: Colo
     bg: 'surface-cautionary-primary',
     dot: 'foreground-cautionary-primary',
   },
+  approval: {
+    label: '승인 대기',
+    fg: 'qcard-verdict-blocked-fg',
+    bg: 'surface-cautionary-primary',
+    dot: 'foreground-cautionary-primary',
+  },
   verifying: {
     label: '검증 중',
     fg: 'foreground-brand-primary',

@@ -137,6 +137,15 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
     },
   };
 
+  async function waitFor<T>(level: 'approval' | 'human', wait: () => Promise<T>): Promise<T> {
+    await sink.waiting(level).catch(() => {});
+    try {
+      return await wait();
+    } finally {
+      await sink.waiting(undefined).catch(() => {});
+    }
+  }
+
   async function start(): Promise<CycleRunOutcome> {
     const inner =
       deps.llm?.(meter) ??
@@ -190,7 +199,9 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
         },
         onStep: hub.step,
         control: hub,
-        onManual: hub.onManual,
+        // 실행자를 기다리는 동안 웹에 "승인 대기"·"실행자 대기"를 보인다 (승인은 로컬 콘솔에서만, F-EX-10)
+        onManual: (instruction) => waitFor('human', () => hub.onManual(instruction)),
+        onRisk: (req) => waitFor(req.level, () => hub.onRisk(req)),
       },
       projectId: req.projectId,
       cycleId: req.cycleId,

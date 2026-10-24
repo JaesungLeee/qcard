@@ -1,4 +1,5 @@
-import type { ExecStep, Run, TestCase, ThoughtEntry } from './domain';
+import type { RiskKind } from './agent';
+import type { Bounds, ExecStep, Run, TestCase, ThoughtEntry } from './domain';
 import type { Verdict } from './verdict';
 
 /*
@@ -37,7 +38,7 @@ export type ClaudeCodeState = {
 };
 
 /** 지금 케이스의 진행 단계 */
-export type ConsolePhase = 'running' | 'paused' | 'takeover' | 'manual' | 'verifying' | 'done' | 'aborted';
+export type ConsolePhase = 'running' | 'paused' | 'takeover' | 'manual' | 'approval' | 'verifying' | 'done' | 'aborted';
 
 /** 실행자 제어 (F-DB-05) */
 export const CONSOLE_CONTROLS = [
@@ -48,8 +49,23 @@ export const CONSOLE_CONTROLS = [
   'takeOver',
   'returnToAgent',
   'completeManual',
+  'approve',
 ] as const;
 export type ConsoleControl = (typeof CONSOLE_CONTROLS)[number];
+
+/** 위험 액션 승인 요청 (로컬 콘솔에 보인다) */
+export type ConsoleApproval = {
+  kind: RiskKind;
+  level: 'approval' | 'human';
+  reason: string;
+  /** 판별한 쪽: Agent 판단 · 코드 안전장치 */
+  source: 'agent' | 'guard';
+  /** 하려던 액션 (예: "탭 · 보내기") */
+  action: string;
+  target?: { label: string; bounds?: Bounds };
+  /** 타임아웃 시각 (epoch ms) */
+  deadline: number;
+};
 
 /** 사고 로그 한 줄. stepIndex = 곧 수행할 스텝 번호 (1부터, 스텝 타임라인과 묶어 보인다) */
 export type ConsoleThought = ThoughtEntry & { stepIndex: number };
@@ -88,6 +104,11 @@ export type LiveConsole = {
   llmWait?: { since: number; limitMs: number; retry?: { attempt: number; maxRetries: number; reason: string } };
   /** 수동 스텝 대기 (phase manual). deadline = 타임아웃 시각 (epoch ms) */
   manual?: { instruction: string; deadline: number };
+  /**
+   * 위험 액션 대기 (phase approval, F-EX-10). 승인 필요면 [승인]·[직접 실행], 사람 전용이면 [직접 실행]만.
+   * 직접 실행 중(phase takeover)에도 남아 있다가 [Agent에 반환]으로 끝난다
+   */
+  approval?: ConsoleApproval;
   /** Run 상태. paused·aborted·done이면 message에 이유 */
   run: { status: Run['status']; message?: string };
   usage: { tokens: number; costUsd: number; caseTokens: number; caseTokenLimit: number };

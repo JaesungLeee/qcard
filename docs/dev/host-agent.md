@@ -60,6 +60,7 @@ pnpm --filter @qcard/host run-cycle --project haru --cycle cycle-130-device --us
 
 - 127.0.0.1 서버. 일회용 토큰 → 쿠키, Host/Origin 검사.
 - 실행 상태 허브와 제어: 실시간 화면·사고 로그·일시정지·Take over·건너뛰기·중단·수동 스텝 [완료].
+- **위험 액션 (F-EX-10)**: Executor가 멈추면 승인 카드가 뜬다. 승인 필요 = [승인](Agent가 그 액션 한 번만 실행) 또는 [직접 실행] → [Agent에 반환], 사람 전용(본인인증 등) = [직접 실행]만. 10분 안에 답이 없으면 그 케이스 Blocked, 직접 실행 중에는 시간을 재지 않는다. 기다리는 동안 Run 문서에 `waiting`을 남겨 웹에 "승인 대기"가 보인다(승인은 콘솔에서만). 판별은 `packages/agent/src/risk.ts`(코드 안전장치·등급·사전 승인)와 Agent의 `risk` 표시.
 - 실시간 화면은 scrcpy 중계(`brew install scrcpy`). 서버 파일을 폰 `/data/local/tmp`에 올렸다가 지운다.
 - `pnpm dev`가 떠 있으면 그 주소(`/console/live`, Vite가 `/console-api`를 넘김)를 쓴다.
 - 웹의 `/console`은 fixture 재생, `/console/live?demo=<상태>`는 서버 없이 상태별 화면을 본다(ui:snap용).

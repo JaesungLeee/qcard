@@ -328,6 +328,33 @@ export function CaseEditForm({
                 >
                   수동
                 </CheckLabel>
+                <CheckLabel
+                  className={`${textClass('label2')} qd-check`}
+                  checked={s.risk === 'approval'}
+                  onCheckedChange={(v) =>
+                    patch({
+                      steps: draft.steps.map((x, j) =>
+                        j === i ? { text: x.text, manual: x.manual, ...(v ? { risk: 'approval' as const } : {}) } : x,
+                      ),
+                    })
+                  }
+                >
+                  위험
+                </CheckLabel>
+                <CheckLabel
+                  className={`${textClass('label2')} qd-check`}
+                  checked={s.risk === 'human'}
+                  onCheckedChange={(v) =>
+                    patch({
+                      steps: draft.steps.map((x, j) =>
+                        // 사람 전용은 실행자가 직접 하는 수동 스텝이다
+                        j === i ? { text: x.text, manual: v || x.manual, ...(v ? { risk: 'human' as const } : {}) } : x,
+                      ),
+                    })
+                  }
+                >
+                  사람 전용
+                </CheckLabel>
                 <IconButton
                   type="button"
                   aria-label={`단계 ${i + 1} 삭제`}

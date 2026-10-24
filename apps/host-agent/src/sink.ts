@@ -26,6 +26,8 @@ export interface RunSink {
   heartbeat(): Promise<void>;
   saveScreenshot: SaveScreenshot;
   result(r: CaseResult): Promise<void>;
+  /** 실행자를 기다리는 중 (위험 액션·사람 전용·수동 스텝, F-EX-10). 웹에 보인다. undefined면 끝남 */
+  waiting(level: 'approval' | 'human' | undefined): Promise<void>;
   /** 플랜 한도·로그인 등으로 멈춤 (F-EX-17). 진행 중 케이스 결과는 쓰지 않는다 */
   pause(reason: PauseReason): Promise<void>;
   /** 끝남. aborted = 실행자가 중단 (진행 중 케이스 결과는 쓰지 않는다) */
@@ -76,8 +78,14 @@ export function runSink(queue: UploadQueue, t: RunTarget): RunSink {
         type: 'update',
         path: runPath,
         data: { status: 'running', currentTcId: tcId, heartbeatAt: new Date().toISOString() },
-        remove: ['pauseReason'],
+        remove: ['pauseReason', 'waiting'],
       }),
+    waiting: (level) =>
+      queue.enqueue(
+        level
+          ? { type: 'update', path: runPath, data: { waiting: { level, since: new Date().toISOString() } } }
+          : { type: 'update', path: runPath, data: {}, remove: ['waiting'] },
+      ),
     heartbeat: () => queue.enqueue({ type: 'update', path: runPath, data: { heartbeatAt: new Date().toISOString() } }),
     async saveScreenshot(png, { caseId, index }) {
       const path = `${runPath}/${caseId}/obs-${String(index).padStart(2, '0')}.png`;
@@ -97,7 +105,7 @@ export function runSink(queue: UploadQueue, t: RunTarget): RunSink {
         type: 'update',
         path: runPath,
         data: { status },
-        remove: ['currentTcId', 'pauseReason'],
+        remove: ['currentTcId', 'pauseReason', 'waiting'],
       }),
     drain: (timeoutMs) => queue.drain(timeoutMs),
   };

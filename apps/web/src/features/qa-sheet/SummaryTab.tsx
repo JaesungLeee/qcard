@@ -29,6 +29,7 @@ import {
   periodLabel,
   traceUrl,
   useNow,
+  WAITING_LABEL,
 } from './parts';
 import type { SheetProps } from './QaSheetPage';
 
@@ -243,7 +244,12 @@ function MatrixLine({
         </span>
         {running && (
           <span className={`qs-row ${textClass('caption1')}`} style={{ gap: token('space-4') }}>
-            <RunState paused={Boolean(running.paused)} reason={running.pauseReason} stale={running.stale} />
+            <RunState
+              paused={Boolean(running.paused)}
+              reason={running.pauseReason}
+              stale={running.stale}
+              waiting={running.waiting}
+            />
             <span className="qs-muted">{running.executor}</span>
           </span>
         )}
@@ -266,7 +272,7 @@ function MatrixLine({
             const tc = caseOf(c.tcId);
             const label =
               c.state === 'running'
-                ? `${c.tcId} ${tc?.title ?? ''} — ${c.paused ? `일시정지${c.pauseReason ? `(${PAUSE_REASON_LABEL[c.pauseReason]})` : ''}` : '실행 중'} (${c.executor})`
+                ? `${c.tcId} ${tc?.title ?? ''} — ${c.paused ? `일시정지${c.pauseReason ? `(${PAUSE_REASON_LABEL[c.pauseReason]})` : ''}` : c.waiting ? WAITING_LABEL[c.waiting] : '실행 중'} (${c.executor})`
                 : `${c.tcId} ${tc?.title ?? ''} — ${c.state === 'remaining' ? '남은 칸' : VERDICT_LABEL[c.verdict]}`;
             return (
               <Link

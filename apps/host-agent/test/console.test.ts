@@ -136,6 +136,41 @@ describe('콘솔 허브', () => {
     await expect(aborted).rejects.toBeInstanceOf(RunAbortedError);
   });
 
+  it('위험 액션: [승인]이면 approved, [직접 실행 → 반환]이면 took_over, 답이 없으면 timeout (F-EX-10)', async () => {
+    const req = {
+      kind: 'people',
+      level: 'approval',
+      reason: '친구에게 초대가 간다',
+      source: 'agent',
+      action: '탭 · 보내기',
+    } as const;
+    const hub = newHub(30);
+    const approved = hub.onRisk(req);
+    expect(hub.snapshot()).toMatchObject({ phase: 'approval', approval: { action: '탭 · 보내기', level: 'approval' } });
+    hub.control('approve');
+    expect(await approved).toEqual({ decision: 'approved', by: '이재성' });
+    expect(hub.snapshot()).toMatchObject({ phase: 'running', approval: undefined });
+
+    // 직접 실행하는 동안은 시간 제한이 없다
+    const took = hub.onRisk(req);
+    hub.control('takeOver');
+    await new Promise((r) => setTimeout(r, 60));
+    expect(hub.snapshot()).toMatchObject({ phase: 'takeover', approval: { level: 'approval' } });
+    hub.control('returnToAgent');
+    expect(await took).toEqual({ decision: 'took_over', by: '이재성' });
+    // 반환이 위험 액션을 끝냈을 뿐, 다음 턴에 Take over로 또 보고하지 않는다
+    expect(await hub.checkpoint()).toBe('continue');
+
+    expect(await hub.onRisk(req)).toEqual({ decision: 'timeout' });
+
+    // 사람 전용은 [승인]으로 넘어가지 않는다
+    const human = hub.onRisk({ ...req, kind: 'identity', level: 'human' });
+    hub.control('approve');
+    expect(hub.snapshot().phase).toBe('approval');
+    hub.control('abort');
+    await expect(human).rejects.toBeInstanceOf(RunAbortedError);
+  });
+
   it('모델 응답을 기다리는 동안을 상태에 남긴다 (콘솔이 오래 걸리면 알린다)', () => {
     const hub = newHub();
     hub.llmStarted(180_000);

@@ -255,7 +255,8 @@ describe('응답 해석', () => {
     expect(parseToolUse(tap!, EXECUTOR_TOOL_INPUTS)).toEqual({
       id: 'tu_1',
       name: 'tap',
-      input: { element_ref: 'e5', intent: '저장' },
+      // 빠진 위험 표시는 null (위험 아님)
+      input: { element_ref: 'e5', intent: '저장', risk: null },
     });
     expect(() => parseToolUse(swipe!, EXECUTOR_TOOL_INPUTS)).toThrow(LlmOutputError);
   });

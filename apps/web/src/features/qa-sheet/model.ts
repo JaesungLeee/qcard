@@ -111,6 +111,8 @@ export type MatrixCell = {
   executor?: string;
   paused?: boolean;
   pauseReason?: PauseReason;
+  /** 실행자를 기다리는 중 (F-EX-10) */
+  waiting?: NonNullable<Run['waiting']>['level'];
   /** 실행 중인데 호스트 신호가 끊김 (F-DV-04) */
   stale?: boolean;
 };
@@ -139,6 +141,7 @@ export function progressMatrix(
           executor: run.executor,
           paused: run.status === 'paused',
           pauseReason: run.pauseReason,
+          ...(run.waiting ? { waiting: run.waiting.level } : {}),
           stale: isRunStale(run, now),
         };
       return { tcId: tc.tcId, state: verdict === 'nt' ? 'remaining' : 'done', verdict };

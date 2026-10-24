@@ -20,7 +20,7 @@
           "h": 130
         }
       },
-      "intent": "초대 링크 복사 버튼을 눌러 링크를 복사한다",
+      "intent": "초대 링크 복사 버튼을 눌러 링크를 클립보드에 복사한다",
       "screenshot": {
         "kind": "mock",
         "screen": "mate-invite"
@@ -32,7 +32,7 @@
     },
     {
       "action": "wait",
-      "intent": "복사 후 잠시 기다리며 화면 변화 여부를 확인한다",
+      "intent": "복사 후 잠시 기다려 화면이 그대로인지 보기 위함",
       "screenshot": {
         "kind": "mock",
         "screen": "mate-toast"
@@ -73,7 +73,7 @@
       },
       "result": "match",
       "observed": "찾은 요소: id=mate_title \"함께할 메이트를 불러볼까요?\"",
-      "reason": "요소가 화면에 있다 — 마지막 관찰에서 메이트 초대 스텝 제목이 그대로 보임",
+      "reason": "요소가 화면에 있다 — 마지막 관찰에 메이트 초대 스텝 제목이 그대로 보임",
       "targetElement": "mate_title",
       "targetBounds": {
         "x": 60,
@@ -87,8 +87,8 @@
   "decidedBy": {
     "kind": "agent"
   },
-  "tokens": 72384,
-  "costUsd": 0.052496100000000004,
+  "tokens": 89868,
+  "costUsd": 0.057425500000000004,
   "verdict": "pass",
   "agentVerdict": "pass"
 }

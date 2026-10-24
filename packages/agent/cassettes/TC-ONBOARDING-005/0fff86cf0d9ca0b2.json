@@ -1,6 +1,6 @@
 {
   "key": "0fff86cf0d9ca0b26024f2ac21df174bf4c76b6d2e777a7d8588900e86a6ad07",
-  "recordedAt": "2026-10-24T04:02:39.081Z",
+  "recordedAt": "2026-10-24T16:16:32.646Z",
   "meta": {
     "role": "locator",
     "caseId": "TC-ONBOARDING-005"
@@ -105,14 +105,14 @@
     ]
   },
   "response": {
-    "id": "msg_cli_mvlvhz6x",
+    "id": "msg_cli_mvmlprpi",
     "type": "message",
     "role": "assistant",
     "model": "claude-sonnet-5-5",
     "content": [
       {
         "type": "text",
-        "text": "{\"points\":[{\"point_id\":\"TC-ONBOARDING-005-P1\",\"status\":\"unclear\",\"element_ref\":null,\"reason\":\"온보딩 완료 기록은 내부 상태로 화면 요소로 확인할 수 없다.\"},{\"point_id\":\"TC-ONBOARDING-005-P2\",\"status\":\"found\",\"element_ref\":\"o10.e0\",\"reason\":\"마지막 관찰에 '오늘' 제목(today_title)이 있어 오늘 탭 화면임을 보여 준다.\"},{\"point_id\":\"TC-ONBOARDING-005-P3\",\"status\":\"found\",\"element_ref\":\"o10.e3\",\"reason\":\"오늘 탭 화면에 바텀 네비게이션(bottom_nav)이 보인다.\"}]}",
+        "text": "{\"points\":[{\"point_id\":\"TC-ONBOARDING-005-P1\",\"status\":\"unclear\",\"element_ref\":null,\"reason\":\"온보딩 완료 기록은 내부 상태로 화면 요소로 확인할 수 없다.\"},{\"point_id\":\"TC-ONBOARDING-005-P2\",\"status\":\"found\",\"element_ref\":\"o10.e0\",\"reason\":\"오늘 탭 제목 '오늘'이 마지막 관찰에 있다.\"},{\"point_id\":\"TC-ONBOARDING-005-P3\",\"status\":\"found\",\"element_ref\":\"o10.e3\",\"reason\":\"바텀 네비게이션이 오늘 탭 화면에 보인다.\"}]}",
         "citations": null
       }
     ],
@@ -121,10 +121,10 @@
     "stop_details": null,
     "container": null,
     "usage": {
-      "input_tokens": 2,
-      "output_tokens": 306,
-      "cache_creation_input_tokens": 2309,
-      "cache_read_input_tokens": 1523
+      "input_tokens": 4,
+      "output_tokens": 568,
+      "cache_creation_input_tokens": 2942,
+      "cache_read_input_tokens": 5357
     }
   }
 }

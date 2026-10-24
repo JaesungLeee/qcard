@@ -57,6 +57,8 @@ export type PlaybackAction =
   | { type: 'takeOver' }
   | { type: 'returnToAgent' }
   | { type: 'completeManual' }
+  /** 위험 액션 승인 — 재생(데모)에는 승인 대기가 없다 */
+  | { type: 'approve' }
   | { type: 'jump'; at: JumpTarget };
 
 /** `?at=<스텝 index>` · `end`(수동 스텝 대기) · `done`(케이스 완료) */
@@ -192,6 +194,8 @@ export function reduce(script: Script, s: PlaybackState, a: PlaybackAction): Pla
         live: true,
         events: ev(s, script, 'Agent에 반환 — 현재 화면을 다시 관찰하고 이어서 진행'),
       };
+    case 'approve':
+      return s;
     case 'completeManual':
       if (s.phase !== 'manual') return s;
       return {

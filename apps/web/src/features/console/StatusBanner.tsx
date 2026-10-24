@@ -1,4 +1,11 @@
-import type { ConsoleControl, ConsoleQueueItem, ExecStep, Verdict } from '@qcard/shared';
+import {
+  riskKindLabel,
+  type ConsoleApproval,
+  type ConsoleControl,
+  type ConsoleQueueItem,
+  type ExecStep,
+  type Verdict,
+} from '@qcard/shared';
 import { Button, Icons, VerdictBadge, textClass, token } from '@qcard/ui';
 import type { ReactNode } from 'react';
 import { fmtTs } from '../../components/format';
@@ -11,6 +18,10 @@ export type BannerView = {
   reason?: string;
   /** 수동 스텝 남은 시간 (ms) */
   manualLeftMs?: number;
+  /** 위험 액션 대기 (phase approval, F-EX-10) */
+  approval?: ConsoleApproval;
+  /** 위험 액션 남은 시간 (ms) */
+  approvalLeftMs?: number;
 };
 
 /**
@@ -53,7 +64,7 @@ export function StatusBanner({
             {step?.risk && (
               <span className={`qcc-tag is-risk ${textClass('caption1', 'bold')}`}>
                 <Icons.IconTriangleExclamation aria-hidden style={{ width: 12, height: 12 }} />
-                위험 액션 · {step.risk.kind}
+                위험 액션 · {riskKindLabel(step.risk.kind)}
               </span>
             )}
             {step?.risk?.planned && (
@@ -73,6 +84,62 @@ export function StatusBanner({
             </span>
             <span className={`${textClass('label2')} qcc-muted`}>
               10분 안에 [완료]하지 않으면 Blocked 후 다음 케이스로
+            </span>
+          </span>
+        </Banner>
+      );
+    }
+    case 'approval': {
+      const a = state.approval;
+      if (!a) return null;
+      const human = a.level === 'human';
+      return (
+        <Banner
+          tone="manual"
+          icon={<Icons.IconTriangleExclamation style={{ color: token('foreground-cautionary-primary') }} />}
+          title={human ? '사람 전용 — 디바이스에서 직접 해 주세요' : '위험 액션 — 승인이 필요합니다'}
+          action={
+            <>
+              {!human && (
+                <Button variant="solid" color="primary" onClick={() => onControl('approve')}>
+                  승인
+                </Button>
+              )}
+              <Button
+                variant={human ? 'solid' : 'outlined'}
+                color={human ? 'primary' : 'assistive'}
+                onClick={() => onControl('takeOver')}
+              >
+                직접 실행
+              </Button>
+            </>
+          }
+        >
+          <span className={textClass('body2-reading')}>
+            <span className="qcc-mono">{a.action}</span> — {a.reason}
+          </span>
+          <span className="qcc-manual-meta">
+            <span className={`qcc-tag is-risk ${textClass('caption1', 'bold')}`}>
+              <Icons.IconTriangleExclamation aria-hidden style={{ width: 12, height: 12 }} />
+              {riskKindLabel(a.kind)}
+            </span>
+            <span className={`${textClass('label2')} qcc-muted`}>
+              {a.source === 'guard' ? '안전장치가 멈춤' : 'Agent 판단'}
+            </span>
+            <span
+              className={`${textClass('label2', 'medium')} qcc-mono`}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+            >
+              <Icons.IconHourglass
+                aria-hidden
+                style={{ width: 14, height: 14, color: token('foreground-neutral-tertiary') }}
+              />
+              {fmtTs(state.approvalLeftMs ?? 0)} 남음
+            </span>
+            <span className={`${textClass('label2')} qcc-muted`}>
+              {human
+                ? '본인인증·인증번호처럼 Agent가 하지 않는 단계입니다. 이 화면은 Claude로 보내지 않고, 끝나면 [Agent에 반환]을 누르세요. 10분 안에 시작하지 않으면 Blocked 후 다음 케이스로'
+                : '[승인]하면 Agent가 이 액션 한 번만 실행합니다. [직접 실행]이면 폰에서 직접 한 뒤 [Agent에 반환]. 10분 안에 답하지 않으면 Blocked 후 다음 케이스로'}
             </span>
           </span>
         </Banner>

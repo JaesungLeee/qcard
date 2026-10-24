@@ -46,10 +46,10 @@ export function fakeGeneratorLlm(opts: { drop?: string; failOn?: { call: number;
           steps:
             row_id === 'TS-002'
               ? [
-                  { text: '[시작하기]를 누른다', manual: false },
-                  { text: '[다음]을 누른다', manual: false },
+                  { text: '[시작하기]를 누른다', manual: false, risk: null },
+                  { text: '[다음]을 누른다', manual: false, risk: null },
                 ]
-              : [{ text: '앱을 연다', manual: false }],
+              : [{ text: '앱을 연다', manual: false, risk: null }],
           points: [{ target: '버튼 개수', compare: 'count', expected: '2', method: 'tree' }],
           priority: 'medium',
           type: 'functional',

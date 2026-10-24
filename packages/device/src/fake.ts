@@ -19,6 +19,8 @@ export type FakeScreen = {
   tree: UiElement[];
   /** PNG. 없으면 1×1 자리표시 이미지 */
   screenshot?: Uint8Array;
+  /** 이 화면의 포그라운드 앱 (기본: 런처면 런처, 아니면 대상 앱). 예: OS 공유 시트는 `android` */
+  foreground?: string;
 };
 
 export type FakeState = {
@@ -148,7 +150,7 @@ export class FakeDevice implements DeviceDriver {
   }
 
   async foregroundPackage() {
-    return this.current === this.scenario.home ? LAUNCHER_PKG : this.scenario.appPackage;
+    return this.screen().foreground ?? (this.current === this.scenario.home ? LAUNCHER_PKG : this.scenario.appPackage);
   }
 
   async keyboard() {
@@ -250,7 +252,6 @@ export class FakeDevice implements DeviceDriver {
   async screenState() {
     return this.display;
   }
-
 
   async setNetwork(kind: NetworkKind, enabled: boolean) {
     this.log.push(`network ${kind} ${enabled ? 'on' : 'off'}`);

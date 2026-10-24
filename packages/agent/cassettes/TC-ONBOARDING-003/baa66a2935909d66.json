@@ -1,6 +1,6 @@
 {
   "key": "baa66a2935909d6659d5f5b83719656c9e8a1c9f651c7db96a9cde250d07f846",
-  "recordedAt": "2026-10-24T04:01:37.660Z",
+  "recordedAt": "2026-10-24T16:14:59.084Z",
   "meta": {
     "role": "locator",
     "caseId": "TC-ONBOARDING-003"
@@ -93,14 +93,14 @@
     ]
   },
   "response": {
-    "id": "msg_cli_mvlvgnss",
+    "id": "msg_cli_mvmlnrik",
     "type": "message",
     "role": "assistant",
     "model": "claude-sonnet-5-5",
     "content": [
       {
         "type": "text",
-        "text": "{\"points\":[{\"point_id\":\"TC-ONBOARDING-003-P1\",\"status\":\"found\",\"element_ref\":\"o6.e1\",\"reason\":\"마지막 관찰에 메이트 초대 스텝의 제목 '함께할 메이트를 불러볼까요?'가 있다.\"},{\"point_id\":\"TC-ONBOARDING-003-P2\",\"status\":\"unclear\",\"element_ref\":null,\"reason\":\"초대 링크 확보는 내부 상태다. 화면에는 초대·복사 버튼만 있고 링크가 확보됐는지 보여 주는 요소는 없다.\"}]}",
+        "text": "{\"points\":[{\"point_id\":\"TC-ONBOARDING-003-P1\",\"status\":\"found\",\"element_ref\":\"o6.e1\",\"reason\":\"마지막 관찰에 메이트 초대 스텝 제목 '함께할 메이트를 불러볼까요?'가 보임\"},{\"point_id\":\"TC-ONBOARDING-003-P2\",\"status\":\"unclear\",\"element_ref\":null,\"reason\":\"초대 링크 확보 여부는 내부 상태로, 화면만으로는 알 수 없음(복사 버튼만 있고 링크 자체는 보이지 않음)\"}]}",
         "citations": null
       }
     ],
@@ -110,8 +110,8 @@
     "container": null,
     "usage": {
       "input_tokens": 2,
-      "output_tokens": 248,
-      "cache_creation_input_tokens": 1600,
+      "output_tokens": 247,
+      "cache_creation_input_tokens": 1598,
       "cache_read_input_tokens": 1523
     }
   }
