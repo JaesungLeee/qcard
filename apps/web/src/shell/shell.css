@@ -66,6 +66,10 @@
   flex-direction: column;
   gap: var(--qc-space-24);
 }
+/* 넓은 표를 다루는 화면: 본문 폭을 묶지 않고 창 너비를 다 쓴다 */
+.qc-page.qc-page-wide {
+  max-width: none;
+}
 .qc-card {
   background: var(--qc-surface-neutral-primary);
   border: 1px solid var(--qc-line-neutral-secondary);

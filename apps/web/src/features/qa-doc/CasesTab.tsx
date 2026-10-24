@@ -1,5 +1,15 @@
 import { CHANGE_LABEL, type PrepFlow, PRIORITY_LABEL, type QADocument, type TestCase } from '@qcard/shared';
-import { Button, Chip, Icons, TextField, TextFieldContent, textClass, token } from '@qcard/ui';
+import {
+  Button,
+  Chip,
+  Icons,
+  Pagination,
+  PaginationSelect,
+  TextField,
+  TextFieldContent,
+  textClass,
+  token,
+} from '@qcard/ui';
 import { CheckLabel } from '../../components/CheckLabel';
 import type {
   CellClickedEvent,
@@ -14,13 +24,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { qcardGridTheme } from '../../components/agGrid';
 import { ApprovalBadge, ChangeBadge, ModeBadge } from './Badges';
 import { CaseDetail } from './CaseDetail';
+import { CaseNav } from './CaseNav';
 import {
+  caseTree,
   countBy,
   filterCases,
   groupRows,
+  inScope,
   isSelectable,
+  orderByGroup,
+  PAGE_SIZES,
+  paginate,
   shortSource,
   type CaseFilter,
+  type CaseScope,
   type ChangeFilter,
   type GridRow,
   type GroupRow,
@@ -29,12 +46,35 @@ import { useDocParams } from './params';
 
 const CHANGE_FILTERS: ChangeFilter[] = ['all', 'new', 'changed', 'removed', 'same'];
 
+/** 페이지당 케이스 수는 보는 사람의 편의 설정이라 브라우저에만 둔다. */
+const PAGE_SIZE_KEY = 'qcard.qaDoc.pageSize';
+const DEFAULT_PAGE_SIZE = 20;
+function loadPageSize(): number {
+  try {
+    const v = Number(localStorage.getItem(PAGE_SIZE_KEY));
+    return (PAGE_SIZES as readonly number[]).includes(v) ? v : DEFAULT_PAGE_SIZE;
+  } catch {
+    return DEFAULT_PAGE_SIZE;
+  }
+}
+function savePageSize(v: number) {
+  try {
+    localStorage.setItem(PAGE_SIZE_KEY, String(v));
+  } catch {
+    // 저장 못 해도 이번 화면에서는 적용된다
+  }
+}
+
+/** 걸러진 목록을 만든다: 분류 범위 → 변경·승인·검색 필터 → 묶음 순서 */
+const listFor = (cases: TestCase[], scope: CaseScope, filter: CaseFilter) =>
+  orderByGroup(filterCases(cases.filter((c) => inScope(c, scope)), filter));
+
 /**
  * 그리드 너비에 맞춰 열을 줄인다: 상세 패널이 열리거나 좁은 화면이면 상세에 다 나오는 열은 숨긴다.
  * TC ID 열은 가장 긴 ID에 맞춘다 (접두어가 스펙 이름이라 `TC-HOME-DECK-EXPLORATION-051`처럼 길 수 있다).
  */
 function columnsFor(width: number, longestId: number): ColDef<GridRow>[] {
-  const narrow = width > 0 && width < 560;
+  const narrow = width > 0 && width < 640;
   const compact = width > 0 && width < 820;
   // 13px 고정폭 글꼴 한 글자 ≈ 7.5px + 칸 여백
   const idWidth = Math.min(250, Math.max(BASE_COLUMNS[0]!.width!, Math.ceil(longestId * 7.5 + 32)));
@@ -61,20 +101,29 @@ function useWidth<T extends HTMLElement>() {
   return [ref, width] as const;
 }
 
-type Ctx = { caseId: string | null };
+type Ctx = { caseId: string | null; showFeature: boolean };
 
-function GroupRenderer({ data }: ICellRendererParams<GridRow>) {
+function GroupRenderer({ data, context }: ICellRendererParams<GridRow>) {
   const g = data as GroupRow;
   return (
     <div className="qd-group-row">
-      <span className={`${textClass('label2', 'medium')} qd-faint`} style={{ whiteSpace: 'nowrap' }}>
-        {g.feature}
-      </span>
-      <Icons.IconChevronRightSmall
-        aria-hidden
-        style={{ color: token('foreground-neutral-quaternary'), flex: 'none' }}
-      />
+      {(context as Ctx).showFeature && (
+        <>
+          <span className={`${textClass('label2', 'medium')} qd-faint`} style={{ whiteSpace: 'nowrap' }}>
+            {g.feature}
+          </span>
+          <Icons.IconChevronRightSmall
+            aria-hidden
+            style={{ color: token('foreground-neutral-quaternary'), flex: 'none' }}
+          />
+        </>
+      )}
       <span className={`${textClass('label1', 'bold')} qd-cell-title`}>{g.subFeature}</span>
+      {g.continued && (
+        <span className={`${textClass('caption1')} qd-faint`} style={{ whiteSpace: 'nowrap', flex: 'none' }}>
+          이전 페이지에서 이어짐
+        </span>
+      )}
       <span
         className={`${textClass('caption1', 'medium')} qd-faint qc-mono`}
         style={{ marginLeft: 'auto', flex: 'none' }}
@@ -188,30 +237,82 @@ export function CasesTab({
   bulkPending: boolean;
   notice: string | null;
 }) {
-  const { caseId, set } = useDocParams();
+  const { caseId, feature, flow, page: pageParam, set } = useDocParams();
   const [filter, setFilter] = useState<CaseFilter>({ change: 'all', unapprovedOnly: false, q: '' });
+  const [pageSize, setPageSize] = useState(loadPageSize);
   const apiRef = useRef<GridApi<GridRow> | null>(null);
   const [gridRef, gridWidth] = useWidth<HTMLDivElement>();
   const longestId = useMemo(() => Math.max(0, ...doc.cases.map((c) => c.tcId.length)), [doc.cases]);
   const columns = useMemo(() => columnsFor(gridWidth, longestId), [gridWidth, longestId]);
 
-  const changeCounts = useMemo(() => countBy(doc.cases, (c) => c.change), [doc.cases]);
-  const visible = useMemo(() => filterCases(doc.cases, filter), [doc.cases, filter]);
-  const rows = useMemo(() => groupRows(visible), [visible]);
+  const tree = useMemo(() => caseTree(doc.cases), [doc.cases]);
+  // 문서에 없는 분류가 주소에 남아 있으면 전체로 본다
+  const node = tree.find((f) => f.feature === feature);
+  const scope = useMemo<CaseScope>(
+    () => ({
+      feature: node ? node.feature : null,
+      subFeature: node?.flows.some((f) => f.subFeature === flow) ? flow : null,
+    }),
+    [node, flow],
+  );
+  const scoped = useMemo(() => doc.cases.filter((c) => inScope(c, scope)), [doc.cases, scope]);
+  const changeCounts = useMemo(() => countBy(scoped, (c) => c.change), [scoped]);
+  const visible = useMemo(() => orderByGroup(filterCases(scoped, filter)), [scoped, filter]);
+  const paged = paginate(visible, pageParam, pageSize);
+  const rows = useMemo(() => groupRows(paged.items, visible), [paged.items, visible]);
   const current = doc.cases.find((c) => c.tcId === caseId);
-  const context = useMemo<Ctx>(() => ({ caseId }), [caseId]);
+  const context = useMemo<Ctx>(() => ({ caseId, showFeature: scope.feature === null }), [caseId, scope.feature]);
 
   useEffect(() => {
     apiRef.current?.redrawRows();
-  }, [caseId]);
+  }, [caseId, scope.feature]);
+  // 일괄 선택은 보이는 페이지 안에서만 한다: 페이지·분류·필터가 바뀌면 선택을 푼다
   useEffect(() => {
     apiRef.current?.deselectAll();
-  }, [selectionKey]);
+  }, [selectionKey, paged.page, pageSize, scope, filter]);
+
+  // 주소로 케이스를 열면(?case=) 그 케이스가 보이는 분류·페이지로 옮긴다. 케이스가 바뀔 때 한 번만
+  const placed = useRef<string | null>(null);
+  useEffect(() => {
+    if (!current || placed.current === current.tcId) return;
+    placed.current = current.tcId;
+    const target = inScope(current, scope) ? scope : { feature: current.feature, subFeature: null };
+    const index = listFor(doc.cases, target, filter).indexOf(current);
+    if (index < 0) return; // 필터에 걸러진 케이스는 옮기지 않는다
+    const page = Math.floor(index / pageSize) + 1;
+    if (target === scope && page === paged.page) return;
+    set(
+      { feature: target.feature, flow: target.subFeature, page: page > 1 ? String(page) : null },
+      { replace: true },
+    );
+  });
 
   const open = (c: TestCase) => set({ case: c.tcId, edit: null });
+  const pick = (s: CaseScope) => set({ feature: s.feature, flow: s.subFeature, page: null });
+  const goTo = (p: number) => set({ page: p > 1 ? String(p) : null });
+  const changeFilter = (next: (f: CaseFilter) => CaseFilter) => {
+    setFilter(next);
+    if (paged.page > 1) set({ page: null }, { replace: true });
+  };
+  const changePageSize = (size: number) => {
+    setPageSize(size);
+    savePageSize(size);
+    goTo(1);
+  };
+  const flowLabel = scope.subFeature ?? '';
 
   return (
-    <div className="qd-stack">
+    <div className={`qd-cases${current ? ' has-panel' : ''}`}>
+      <CaseNav tree={tree} total={doc.cases.length} scope={scope} onPick={pick} />
+      <div className="qd-stack">
+      <div className="qd-stack" style={{ gap: token('space-2') }}>
+        <span className={`${textClass('label2', 'medium')} qd-faint`}>
+          {scope.feature === null ? '모든 기능' : scope.subFeature === null ? '기능' : `${scope.feature} › 유저 플로우`}
+        </span>
+        <h2 className={textClass('headline2', 'bold')} style={{ margin: 0 }}>
+          {scope.feature === null ? '전체 케이스' : scope.subFeature === null ? scope.feature : flowLabel || '(유저 플로우 없음)'}
+        </h2>
+      </div>
       <div className="qd-toolbar">
         <div className="qd-row" role="group" aria-label="변경 필터">
           {CHANGE_FILTERS.map((k) => (
@@ -220,17 +321,17 @@ export function CasesTab({
               size="small"
               variant="outlined"
               active={filter.change === k}
-              onClick={() => setFilter((f) => ({ ...f, change: k }))}
+              onClick={() => changeFilter((f) => ({ ...f, change: k }))}
             >
               {k === 'all' ? '전체' : CHANGE_LABEL[k]}{' '}
-              <span className="qc-mono">{k === 'all' ? doc.cases.length : (changeCounts[k] ?? 0)}</span>
+              <span className="qc-mono">{k === 'all' ? scoped.length : (changeCounts[k] ?? 0)}</span>
             </Chip>
           ))}
           <CheckLabel
             className={`${textClass('label1')} qd-check`}
             style={{ marginLeft: token('space-8') }}
             checked={filter.unapprovedOnly}
-            onCheckedChange={(v) => setFilter((f) => ({ ...f, unapprovedOnly: v }))}
+            onCheckedChange={(v) => changeFilter((f) => ({ ...f, unapprovedOnly: v }))}
           >
             미승인만
           </CheckLabel>
@@ -241,7 +342,7 @@ export function CasesTab({
             aria-label="케이스 검색"
             placeholder="TC ID, 제목, 출처, 요구사항 검색"
             value={filter.q}
-            onChange={(e) => setFilter((f) => ({ ...f, q: e.target.value }))}
+            onChange={(e) => changeFilter((f) => ({ ...f, q: e.target.value }))}
             leadingContent={
               <TextFieldContent variant="icon">
                 <Icons.IconSearch />
@@ -276,9 +377,9 @@ export function CasesTab({
           <span className="qd-muted">
             {notice ?? (
               <>
-                케이스 <span className="qc-mono">{visible.length}</span>개 표시
-                {visible.length !== doc.cases.length && <> · 전체 {doc.cases.length}개</>}. 행을 선택하면 일괄
-                승인·반려할 수 있습니다 (보류·삭제 케이스 제외).
+                케이스 <span className="qc-mono">{visible.length}</span>개
+                {visible.length !== scoped.length && <> · 이 분류 {scoped.length}개</>}. 이 페이지에서 행을
+                선택하면 일괄 승인·반려할 수 있습니다 (보류·삭제 케이스 제외).
               </>
             )}
           </span>
@@ -286,9 +387,11 @@ export function CasesTab({
       </div>
 
       <div className={`qd-split${current ? ' has-panel' : ''}`}>
+        <div className="qd-stack" style={{ gap: token('space-12') }}>
         <div className="qd-grid" ref={gridRef}>
           <AgGridReact<GridRow>
             theme={qcardGridTheme}
+            domLayout="autoHeight"
             rowData={rows}
             columnDefs={columns}
             defaultColDef={{ sortable: false, resizable: true, suppressMovable: true }}
@@ -335,6 +438,28 @@ export function CasesTab({
             }}
           />
         </div>
+        {visible.length > 0 && (
+          <div className="qd-pager">
+            <span className={`${textClass('label2')} qd-muted qc-mono`}>
+              {paged.start + 1}–{paged.start + paged.items.length} / {visible.length}
+            </span>
+            <Pagination
+              variant="extended"
+              page={paged.page}
+              totalPages={paged.pageCount}
+              onChange={(p) => p && goTo(p)}
+              trailingContent={
+                <PaginationSelect
+                  label="페이지당"
+                  pageSize={pageSize}
+                  pageSizeOptions={[...PAGE_SIZES]}
+                  onChange={(s) => s && changePageSize(s)}
+                />
+              }
+            />
+          </div>
+        )}
+        </div>
         {current && (
           <CaseDetail
             key={current.tcId}
@@ -344,6 +469,7 @@ export function CasesTab({
             onClose={() => set({ case: null, edit: null })}
           />
         )}
+      </div>
       </div>
     </div>
   );

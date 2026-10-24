@@ -8,8 +8,12 @@ import {
   diffCase,
   diffLines,
   filterCases,
+  caseTree,
   groupRows,
+  inScope,
   isDirty,
+  orderByGroup,
+  paginate,
   isSelectable,
   nextPointId,
   prepFlowUsage,
@@ -58,7 +62,7 @@ describe('filterCases', () => {
 describe('groupRows', () => {
   it('기능 › 세부 기능 순서대로 묶고, 승인 수는 삭제 케이스를 빼고 센다', async () => {
     const d = await doc130();
-    const rows = groupRows(d.cases);
+    const rows = groupRows(orderByGroup(d.cases));
     const groups = rows.filter((r) => r.kind === 'group');
     expect(groups.map((g) => g.subFeature)).toEqual([
       '온보딩을 처음부터 끝까지 밟는다',
@@ -71,6 +75,56 @@ describe('groupRows', () => {
     // 삭제 케이스(TS-040)는 첫 그룹에 들어가지만 total에는 안 센다
     expect(groups[0]).toMatchObject({ total: 15 });
     expect(rows[16]).toMatchObject({ kind: 'case', case: { tcId: 'TC-ONBOARDING-062' } });
+    expect(groups.every((g) => !g.continued)).toBe(true);
+  });
+
+  it('페이지 단위로 묶을 때 승인 수는 전체에서 세고, 앞 페이지에서 이어지는 묶음을 표시한다', async () => {
+    const d = await doc130();
+    const all = orderByGroup(d.cases);
+    const p2 = paginate(all, 2, 10);
+    const rows = groupRows(p2.items, all);
+    // 첫 묶음(16개)이 1페이지에서 이어진다
+    expect(rows[0]).toMatchObject({ kind: 'group', subFeature: '온보딩을 처음부터 끝까지 밟는다', total: 15, continued: true });
+    expect(rows.filter((r) => r.kind === 'case')).toHaveLength(10);
+    const second = rows.filter((r) => r.kind === 'group')[1];
+    expect(second).toMatchObject({ continued: false });
+  });
+});
+
+describe('paginate', () => {
+  it('페이지를 범위 안으로 맞춘다', () => {
+    const items = Array.from({ length: 25 }, (_, i) => i);
+    expect(paginate(items, 1, 10)).toMatchObject({ page: 1, pageCount: 3, start: 0, items: items.slice(0, 10) });
+    expect(paginate(items, 3, 10).items).toEqual([20, 21, 22, 23, 24]);
+    expect(paginate(items, 9, 10)).toMatchObject({ page: 3, start: 20 });
+    expect(paginate(items, 0, 10)).toMatchObject({ page: 1 });
+    expect(paginate([], 2, 10)).toMatchObject({ page: 1, pageCount: 1, items: [] });
+  });
+});
+
+describe('caseTree · inScope', () => {
+  it('기능 › 세부 기능별로 케이스 수와 승인 수를 센다', async () => {
+    const d = await doc130();
+    const tree = caseTree(d.cases);
+    expect(tree).toHaveLength(1);
+    const [f] = tree;
+    expect(f!.count).toBe(62);
+    expect(f!.total).toBe(61); // 삭제 1 제외
+    expect(f!.hasNew).toBe(true);
+    expect(f!.flows.map((x) => x.subFeature)).toHaveLength(5);
+    expect(f!.flows.reduce((n, x) => n + x.count, 0)).toBe(62);
+  });
+
+  it('기능만 고르면 그 기능 전체, 세부 기능까지 고르면 그 플로우만', async () => {
+    const d = await doc130();
+    const [f] = caseTree(d.cases);
+    const flow = f!.flows[1]!;
+    expect(d.cases.filter((c) => inScope(c, { feature: null, subFeature: null }))).toHaveLength(62);
+    expect(d.cases.filter((c) => inScope(c, { feature: f!.feature, subFeature: null }))).toHaveLength(62);
+    expect(d.cases.filter((c) => inScope(c, { feature: f!.feature, subFeature: flow.subFeature }))).toHaveLength(
+      flow.count,
+    );
+    expect(d.cases.filter((c) => inScope(c, { feature: '없는 기능', subFeature: null }))).toHaveLength(0);
   });
 });
 
