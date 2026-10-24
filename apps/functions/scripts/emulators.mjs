@@ -83,7 +83,8 @@ const args = [
   ...rest,
 ];
 
-const child = spawn('firebase', args, {
+// 전역 설치가 아니라 이 패키지에 고정한 firebase-tools (호스트 에이전트 테스트처럼 다른 패키지에서 불러도 같은 버전)
+const child = spawn(join(import.meta.dirname, '../node_modules/.bin/firebase'), args, {
   stdio: 'inherit',
   env: {
     ...process.env,

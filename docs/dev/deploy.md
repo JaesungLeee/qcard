@@ -2,7 +2,7 @@
 
 운영 프로젝트는 `qcard-d2ade`(`.firebaserc`의 `prod`)다. 지역은 Firestore·Storage·Functions 모두 `asia-northeast3`. 기본 별칭 `default`는 에뮬레이터용 `demo-qcard`라서 `--project prod` 없이 배포하면 실패한다.
 
-배포는 사람이 직접 실행한다(`guard-bash.sh`가 막는다).
+평소 배포는 GitHub Actions가 한다: `main`에 푸시하면 바뀐 대상만 배포하고, 태그 `host-v<버전>`이면 npm에 올린다([ci.md](ci.md)). 아래 명령은 손으로 배포할 때이며, 에이전트는 실행하지 않는다(`guard-bash.sh`가 막는다).
 
 ## 콘솔에서 한 번 할 일
 

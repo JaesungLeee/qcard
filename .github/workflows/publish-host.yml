@@ -1,0 +1,46 @@
+# 태그 host-v<버전>을 푸시하면 호스트 에이전트(@qcard/host)를 npm에 올린다.
+# 태그 버전은 apps/host-agent/package.json의 version과 같아야 한다. npm 인증은 Trusted Publishing(토큰 없음) — docs/dev/ci.md
+name: publish-host
+
+on:
+  push:
+    tags: ['host-v*']
+
+env:
+  # 로컬 콘솔에 넣는 웹 빌드용 Firebase 설정 (공개값)
+  VITE_DATA: firebase
+  VITE_FIREBASE_API_KEY: AIzaSyBn9Z9tJqfKiXPWYnNUX0flAFoP-OO4P6E
+  VITE_FIREBASE_AUTH_DOMAIN: qcard-d2ade.firebaseapp.com
+  VITE_FIREBASE_PROJECT_ID: qcard-d2ade
+  VITE_FIREBASE_STORAGE_BUCKET: qcard-d2ade.firebasestorage.app
+  VITE_FIREBASE_APP_ID: 1:692024432834:web:bc0d61dc6eaa8676c2c35b
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: pnpm/action-setup@v4.1.0
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - uses: actions/setup-java@v4.7.1
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: 태그와 package.json 버전 확인
+        run: |
+          want="host-v$(node -p "require('./apps/host-agent/package.json').version")"
+          [ "$GITHUB_REF_NAME" = "$want" ] || { echo "태그 $GITHUB_REF_NAME ≠ $want"; exit 1; }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify
+      - run: pnpm --filter @qcard/host bundle
+      # Trusted Publishing은 npm 11.5.1 이상
+      - run: npm install -g npm@11.6.2
+      - run: npm publish apps/host-agent/pkg --access public
