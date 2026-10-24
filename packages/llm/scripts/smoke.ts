@@ -44,7 +44,7 @@ const exec = await llm.create(
     messages: [
       {
         role: 'user',
-        content: `단계 0: 닉네임 입력란에 "harukong01"을 입력한다.\n\n현재 화면 접근성 트리:\n${tree}`,
+        content: `단계 0: 닉네임 입력란에 "haru01"을 입력한다.\n\n현재 화면 접근성 트리:\n${tree}`,
       },
     ],
   },

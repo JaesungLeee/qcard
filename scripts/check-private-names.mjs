@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // 이 파일에 이름이 그대로 남지 않게 조각으로 만든다
-const NAMES = new RegExp(['\\bm' + 'ino\\b', 'gg' + 'uk', '\\uAFB9'].join('|'), 'i');
+const NAMES = new RegExp(['\\bm' + 'ino\\b', 'gg' + 'uk', 'kk' + 'uk', '\\uAFB9'].join('|'), 'i');
 const root = join(import.meta.dirname, '..');
 const files = execFileSync('git', ['ls-files', '-c', '-o', '--exclude-standard'], { cwd: root, encoding: 'utf8' })
   .split('\n')
