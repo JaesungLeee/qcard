@@ -8,9 +8,16 @@
     <script>
       // 운영 프로젝트의 Firebase 기본 주소로 들어오면 qcard.dev로 보낸다 (경로·쿼리 유지).
       // 로그인 핸들러 /__/auth/*는 Hosting 예약 경로라 이 페이지를 거치지 않는다.
-      // /connect는 예외: @qcard/host 0.1.4 이하는 web.app의 연결 화면을 열고 그 출처(Origin)만 받는다
+      // /connect는 예외: @qcard/host 0.1.4 이하는 web.app의 연결 화면을 열고 그 출처(Origin)만 받는다.
+      // qcard.dev가 HTTPS로 열릴 때만 보낸다 (인증서 발급 전·도메인 문제면 기본 주소에 그대로 둔다)
       if (/^qcard-d2ade\.(web\.app|firebaseapp\.com)$/.test(location.hostname) && location.pathname !== '/connect') {
-        location.replace('https://qcard.dev' + location.pathname + location.search + location.hash);
+        fetch('https://qcard.dev/favicon.svg', {
+          mode: 'no-cors',
+          cache: 'no-store',
+          signal: AbortSignal.timeout(3000),
+        })
+          .then(() => location.replace('https://qcard.dev' + location.pathname + location.search + location.hash))
+          .catch(() => {});
       }
     </script>
   </head>
