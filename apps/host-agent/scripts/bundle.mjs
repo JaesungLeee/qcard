@@ -1,5 +1,5 @@
 // 배포 패키지 @qcard/host를 pkg/에 만든다: `qcard` 명령 번들(dist/) + 로컬 콘솔용 웹 빌드(dist/web/) + package.json.
-// 내부 패키지(workspace:*)까지 모두 번들에 넣어 의존성 없이 설치된다. 올리기: npm publish apps/host-agent/pkg --access public
+// 내부 패키지(workspace:*)까지 모두 번들에 넣어 의존성 없이 설치된다. 올리기: 태그 host-v<버전> 푸시(.github/workflows/publish-host.yml)
 import { build } from 'esbuild';
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -43,6 +43,8 @@ writeFileSync(
       version: src.version,
       description: 'qcard 호스트 에이전트 — 스펙 기반 QA를 내 PC의 Android 기기와 Claude Code로 실행합니다',
       homepage: 'https://qcard-d2ade.web.app',
+      // npm Trusted Publishing의 출처 증명(provenance)이 이 저장소와 맞아야 한다
+      repository: { type: 'git', url: 'git+https://github.com/JaesungLeee/qcard.git', directory: 'apps/host-agent' },
       keywords: ['qa', 'android', 'adb', 'claude-code', 'test-automation'],
       type: 'module',
       bin: { qcard: 'dist/qcard.js' },
