@@ -56,6 +56,7 @@ jobs:
     environment: production
     permissions:
       contents: read
+      actions: read
       id-token: write
     steps:
       - uses: actions/checkout@v4.2.2
@@ -64,13 +65,17 @@ jobs:
       - name: 배포할 대상 고르기
         id: targets
         env:
-          BEFORE: ${{ github.event.before }}
+          GH_TOKEN: ${{ github.token }}
           ALL: ${{ inputs.all }}
         run: |
-          if [ "$ALL" = "true" ] || [ -z "$BEFORE" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+          # 마지막으로 성공한 배포 이후 바뀐 것 전체 (직전 푸시만 보면 실패한 실행의 변경을 놓친다)
+          base=$(gh run list --workflow deploy.yml --branch main --status success --limit 20 \
+            --json headSha,event --jq '[.[] | select(.event != "pull_request")][0].headSha // empty')
+          if [ "$ALL" = "true" ] || [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
             changed='*'
           else
-            changed=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
+            echo "기준: $base"
+            changed=$(git diff --name-only "$base" "$GITHUB_SHA")
           fi
           has() { [ "$changed" = '*' ] || echo "$changed" | grep -Eq "$1"; }
           # 테스트·문서만 바뀌면 배포하지 않는다

@@ -5,7 +5,7 @@
 | `.github/workflows/deploy.yml`       | `main` 푸시 · PR · 수동 실행 | `pnpm verify` → (`main`만) 바뀐 대상만 운영 배포. 수동 실행에서 "모두 배포"를 고를 수 있다 |
 | `.github/workflows/publish-host.yml` | 태그 `host-v<버전>` 푸시     | 버전 확인 → `pnpm verify` → `bundle` → `npm publish`                                       |
 
-배포 대상은 직전 푸시와의 차이로 고른다: 웹·패키지 소스 → `hosting`, Functions·그 의존 패키지 소스 → `functions`, `firebase/firestore*` → `firestore`, `firebase/storage*` → `storage`. 테스트·문서만 바뀌면 배포하지 않는다.
+배포 대상은 마지막으로 성공한 deploy 실행 이후 바뀐 것으로 고른다(실패한 실행의 변경도 다음 성공 때 함께 나간다): 웹·패키지 소스 → `hosting`, Functions·그 의존 패키지 소스 → `functions`, `firebase/firestore*` → `firestore`, `firebase/storage*` → `storage`. 테스트·문서만 바뀌면 배포하지 않는다.
 
 인증 정보(키·토큰)는 저장소에 없다. Google Cloud는 Workload Identity Federation, npm은 Trusted Publishing으로 GitHub Actions의 OIDC 토큰만 믿는다.
 
