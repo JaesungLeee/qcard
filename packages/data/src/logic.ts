@@ -5,6 +5,9 @@ import {
   type CaseResult,
   type Job,
   type QaDocJob,
+  type QaDocJobDraft,
+  type QaDocJobEvent,
+  type QaDocJobSpec,
   type RunCycleJob,
   type TargetDevice,
   type SpecBundle,
@@ -237,6 +240,13 @@ export function retriedJob(job: Job, uid: string): Job {
   const { error: _e, progress: _p, host: _h, ...rest } = job;
   return { ...rest, status: 'queued' };
 }
+
+/** 생성 진행 목록의 순서 (두 구현 공통): 스펙은 묶음 순서, 기록은 오래된 것 먼저, 초안은 TC ID 순 */
+export const jobPartOrder = {
+  specs: (a: QaDocJobSpec, b: QaDocJobSpec) => a.order - b.order,
+  events: (a: QaDocJobEvent, b: QaDocJobEvent) => (a.at === b.at ? (a.id < b.id ? -1 : 1) : a.at < b.at ? -1 : 1),
+  drafts: (a: QaDocJobDraft, b: QaDocJobDraft) => (a.tcId < b.tcId ? -1 : a.tcId > b.tcId ? 1 : 0),
+};
 
 /**
  * 웹에서 내 호스트로 Run 시작 요청 (작업 kind `run_cycle`). 호스트가 받아 로컬 콘솔과 같은 경로로 시작한다.

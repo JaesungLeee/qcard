@@ -12,6 +12,8 @@ import { INSTALL_NOTE } from '../hosts/model';
 import { fmtDateTime, fmtNumber } from '../../components/format';
 import { useApi, useMyHosts, useRetryJob } from '../../data/hooks';
 import { Progress, Tag, type Tone } from './Badges';
+import { fmtDuration, jobTiming, PHASE_LABEL, phaseSteps, type PhaseState } from './jobProgress';
+import './job-progress.css';
 
 /*
  * QA 문서 생성 작업 (PRD §5.2, §6.2): 요청자 본인의 호스트 에이전트가 처리한다.
@@ -77,7 +79,7 @@ export function HostStatus() {
   );
 }
 
-const STATUS_TONE: Record<JobStatus, Tone> = {
+export const JOB_STATUS_TONE: Record<JobStatus, Tone> = {
   queued: 'neutral',
   running: 'brand',
   done: 'pass',
@@ -85,7 +87,28 @@ const STATUS_TONE: Record<JobStatus, Tone> = {
   paused: 'blocked',
 };
 
-const PHASE_LABEL = { plan: '스펙 계획', cases: '케이스 변환', save: '저장' } as const;
+const PHASE_STATE_LABEL: Record<PhaseState, string> = {
+  done: '끝남',
+  current: '진행 중',
+  stopped: '멈춤',
+  todo: '아직',
+};
+
+/** 단계 표시: 스펙 계획 → 케이스 변환 → 저장. 점의 색과 함께 글자(굵기·흐림)와 숨은 상태 이름으로도 구분한다 */
+export function PhaseSteps({ job }: { job: QaDocJob }) {
+  return (
+    <ol className={`${textClass('label2')} qd-phases`} aria-label="생성 단계">
+      {phaseSteps(job).map((s) => (
+        <li key={s.key} className={`is-${s.state}`}>
+          <span className="qd-phase-dot" aria-hidden />
+          <span className={s.state === 'todo' ? 'qd-faint' : textClass('label2', 'bold')}>{PHASE_LABEL[s.key]}</span>
+          {s.count && <span className="qd-faint qd-num">{s.count}</span>}
+          <span className="qd-sr-only">({PHASE_STATE_LABEL[s.state]})</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 /** 생성 작업 목록 (최근 것부터). 진행 중이면 진행률, 끝났으면 결과·문서 링크, 멈췄으면 이유와 다시 시도 */
 export function JobList({ jobs, projectId, canEdit }: { jobs: QaDocJob[]; projectId: string; canEdit: boolean }) {
@@ -113,7 +136,7 @@ function JobCard({ job, projectId, canEdit }: { job: QaDocJob; projectId: string
     <article className="qc-card qd-stack" style={{ gap: token('space-8') }}>
       <div className="qd-row" style={{ gap: token('space-8') }}>
         <span className={textClass('label1', 'bold')}>QA 문서 {job.input.appVersion}</span>
-        <Tag tone={STATUS_TONE[job.status]}>{JOB_STATUS_LABEL[job.status]}</Tag>
+        <Tag tone={JOB_STATUS_TONE[job.status]}>{JOB_STATUS_LABEL[job.status]}</Tag>
         {job.error && job.status !== 'done' && <Tag tone="quiet">{JOB_ERROR_LABEL[job.error.kind]}</Tag>}
         <span className={`${textClass('label2')} qd-faint`} style={{ marginLeft: 'auto' }}>
           {job.requestedByName} · {fmtDateTime(job.createdAt)}
@@ -129,13 +152,12 @@ function JobCard({ job, projectId, canEdit }: { job: QaDocJob; projectId: string
         </span>
       )}
 
+      {job.status !== 'queued' && p && <PhaseSteps job={job} />}
+
       {(job.status === 'running' || job.status === 'paused') && p && (
         <div className={`${textClass('label2')} qd-row`} style={{ gap: token('space-12') }}>
-          <Progress value={p.done} total={p.total} label="생성 진행" />
-          <span>
-            {PHASE_LABEL[p.phase]}
-            {p.spec && <span className="qd-faint"> · {p.spec}</span>}
-          </span>
+          <Progress value={p.done} total={p.total} label={`${PHASE_LABEL[p.phase]} 진행`} />
+          {p.spec && <span className="qd-faint">{p.spec}</span>}
         </div>
       )}
 
@@ -180,6 +202,30 @@ function JobCard({ job, projectId, canEdit }: { job: QaDocJob; projectId: string
           </span>
         </div>
       )}
+
+      {job.status !== 'queued' && (
+        <div className={`${textClass('label2')} qd-row qd-job-foot`}>
+          <span className="qd-faint">{timingLine(job)}</span>
+          <Link
+            to={`/p/${projectId}/docs/jobs/${job.id}`}
+            className={`${textClass('label2', 'bold')} qd-link qd-row`}
+            style={{ gap: token('space-2') }}
+          >
+            {job.status === 'done' ? '진행 기록 보기' : '진행 보기'}
+            <Icons.IconChevronRightSmall aria-hidden />
+          </Link>
+        </div>
+      )}
     </article>
   );
+}
+
+function timingLine(job: QaDocJob): string {
+  const { elapsedMs, etaMs } = jobTiming(job);
+  return [
+    elapsedMs !== undefined && `${job.status === 'done' ? '걸린 시간' : '경과'} ${fmtDuration(elapsedMs)}`,
+    etaMs !== undefined && `남은 시간 약 ${fmtDuration(etaMs)}`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }

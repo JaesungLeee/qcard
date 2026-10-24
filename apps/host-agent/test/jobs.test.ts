@@ -6,6 +6,7 @@ import { createFirebaseApi, writeAll } from '@qcard/data/firebase';
 import { seedDocs } from '@qcard/data/seed';
 import { GITHUB, PEOPLE } from '@qcard/fixtures';
 import { PlanLimitError, type LlmClient } from '@qcard/llm';
+import type { QaDocJob } from '@qcard/shared';
 import { fakeGeneratorLlm } from '@qcard/qadoc';
 import { setLogLevel, type Firestore } from 'firebase/firestore';
 import type { FirebaseStorage } from 'firebase/storage';
@@ -111,7 +112,29 @@ describe('QA 문서 생성 작업', () => {
     ]);
     expect(doc.specs).toEqual([{ name: 'sample', feature: '샘플 기능', file: 'docs/specs/sample/spec.md' }]);
     expect((await qa.api.listPrepFlows(PROJECT)).map((f) => f.id)).toContain('pf-home');
-    expect((await qa.api.listJobs(PROJECT))[0]).toMatchObject({ id: job.id, status: 'done' });
+    expect((await qa.api.listJobs(PROJECT))[0]).toMatchObject({
+      id: job.id,
+      status: 'done',
+      plan: { specs: [{ name: 'sample', title: '샘플 기능', new: 3, changed: 0, same: 0 }], removed: 0 },
+      progress: { phase: 'save', done: 3, total: 3, active: [], drafted: { sample: 3 } },
+    });
+
+    // 작업 상세 화면: 생성 계획·초안·진행 기록이 남아 다른 멤버도 본다
+    const [spec] = await qa.api.listJobSpecs(PROJECT, job.id);
+    expect(spec!.rows.map((r) => [r.id, r.tcId, r.change])).toEqual([
+      ['TS-001', 'TC-SAMPLE-001', 'new'],
+      ['TS-002', 'TC-SAMPLE-002', 'new'],
+      ['EC-001', 'TC-SAMPLE-003', 'new'],
+    ]);
+    const drafts = await qa.api.listJobDrafts(PROJECT, job.id, 'sample');
+    expect(drafts.map((d) => [d.rowId, d.questions.length])).toEqual([
+      ['TS-001', 0],
+      ['TS-002', 0],
+      ['EC-001', 1],
+    ]);
+    expect((await qa.api.listJobEvents(PROJECT, job.id)).map((e) => e.kind)).toEqual(
+      expect.arrayContaining(['start', 'plan', 'prep_flow', 'cases', 'question', 'warning', 'done']),
+    );
     expect((await qa.api.listQaDocs(PROJECT)).map((d) => d.appVersion)).toContain('2.0.0');
   });
 
@@ -149,6 +172,16 @@ describe('QA 문서 생성 작업', () => {
     const [again] = await pendingJobs(lead.db, lead.uid);
     expect(again).toMatchObject({ id: job.id, status: 'queued' });
     expect(again).not.toHaveProperty('error');
+
+    // 멈춘 이유가 진행 기록에 남고, 다시 처리하면 "다시 시작"만 더해진다 (같은 기록이 두 번 생기지 않는다)
+    const before = await lead.api.listJobEvents(PROJECT, job.id);
+    expect([...new Set(before.map((e) => e.kind))].sort()).toEqual(['plan', 'prep_flow', 'start', 'stop', 'warning']);
+    expect(before.find((e) => e.kind === 'stop')!.text).toContain('5시간 한도');
+    await processJob(lead.deps(fakeGeneratorLlm().llm), (await claimJob(lead.db, again as QaDocJob, 'pc', 'now'))!);
+    const after = await lead.api.listJobEvents(PROJECT, job.id);
+    expect(after.filter((e) => e.kind === 'start').map((e) => e.id)).toEqual(['start', `restart-${before.length}`]);
+    expect(after.filter((e) => e.kind === 'plan')).toHaveLength(1);
+    expect(after.filter((e) => e.kind === 'warning')).toHaveLength(before.filter((e) => e.kind === 'warning').length + 1);
   });
 
   it('Viewer는 요청할 수 없고, 스펙 묶음은 만든 뒤 바꿀 수 없다', async () => {

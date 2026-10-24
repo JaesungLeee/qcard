@@ -81,6 +81,27 @@ describe('메모리 구현과 같은 결과', () => {
     const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
     expect(await fb.getCycle(cref)).toEqual(await mem.getCycle(cref));
   });
+
+  it('QA 문서 생성 진행: 생성 계획·진행 기록·스펙별 초안 (다른 멤버도 읽는다)', async () => {
+    const fb = apiAs(PEOPLE.planner);
+    const mem = memory();
+    expect(await fb.listJobs('haru')).toEqual(await mem.listJobs('haru'));
+    for (const job of ['job-140', 'job-131', 'job-130']) {
+      expect(await fb.listJobSpecs('haru', job)).toEqual(await mem.listJobSpecs('haru', job));
+      expect(await fb.listJobEvents('haru', job)).toEqual(await mem.listJobEvents('haru', job));
+      expect(await fb.listJobDrafts('haru', job, 'onboarding-flow')).toEqual(
+        await mem.listJobDrafts('haru', job, 'onboarding-flow'),
+      );
+    }
+    expect((await fb.listJobDrafts('haru', 'job-140', 'onboarding-flow')).length).toBe(16);
+    expect(await fb.listJobDrafts('haru', 'job-140', 'other')).toEqual([]);
+    // 작업을 처리하는 요청자가 아니면 진행을 쓸 수 없다
+    const { doc, setDoc } = await import('firebase/firestore');
+    const other = env.authenticatedContext(GITHUB[PEOPLE.qa]!).firestore() as unknown as Firestore;
+    await expect(
+      setDoc(doc(other, 'projects/haru/jobs/job-140/events/x'), { id: 'x', at: 'now', kind: 'warning', text: '' }),
+    ).rejects.toThrow();
+  });
 });
 
 describe('권한 (보안 규칙)', () => {

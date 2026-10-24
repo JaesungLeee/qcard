@@ -1,0 +1,166 @@
+/* QA 문서 생성 작업: 단계 표시(목록 카드·작업 상세), 작업 상세 화면. 색은 --qc-* 토큰만 쓴다. */
+
+.qd-phases {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qc-space-6) var(--qc-space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.qd-phases li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qc-space-6);
+}
+.qd-phases li + li::before {
+  content: '';
+  width: var(--qc-space-24);
+  height: 1px;
+  margin-right: var(--qc-space-2);
+  background: var(--qc-line-neutral-primary);
+}
+.qd-phase-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: var(--qc-radius-full);
+  box-shadow: inset 0 0 0 2px var(--qc-line-neutral-primary);
+}
+.qd-phases .is-done .qd-phase-dot {
+  background: var(--qc-qcard-verdict-pass-fg);
+  box-shadow: none;
+}
+.qd-phases .is-current .qd-phase-dot {
+  background: var(--qc-surface-brand-primary);
+  box-shadow: 0 0 0 3px var(--qc-surface-brand-subtle);
+}
+.qd-phases .is-stopped .qd-phase-dot {
+  background: var(--qc-qcard-verdict-blocked-fg);
+  box-shadow: none;
+}
+.qd-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.qd-job-foot {
+  justify-content: space-between;
+  padding-top: var(--qc-space-12);
+  border-top: 1px solid var(--qc-line-neutral-tertiary);
+}
+
+/* 요약 숫자 */
+.qd-job-stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--qc-space-16);
+  margin: 0;
+}
+.qd-job-stats dd {
+  margin: 0;
+}
+@media (max-width: 900px) {
+  .qd-job-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* 행 목록 */
+.qc-card.qd-jobrows {
+  padding: 0;
+  overflow: hidden;
+}
+.qd-jobrows-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--qc-space-4) var(--qc-space-8);
+  padding: var(--qc-space-16);
+}
+.qd-jobrows-empty {
+  margin: 0;
+  padding: 0 var(--qc-space-16) var(--qc-space-16);
+}
+.qd-jobrows-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.qd-jobrows-flow {
+  padding: var(--qc-space-6) var(--qc-space-16);
+  background: var(--qc-surface-neutral-tertiary);
+  color: var(--qc-foreground-neutral-tertiary);
+}
+.qd-jobrow {
+  display: flex;
+  align-items: center;
+  gap: var(--qc-space-12);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--qc-space-10) var(--qc-space-16);
+  border: 0;
+  border-top: 1px solid var(--qc-line-neutral-tertiary);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.qd-jobrow:hover {
+  background: var(--qc-surface-neutral-tertiary);
+}
+.qd-jobrow.is-current {
+  background: var(--qc-surface-brand-subtle);
+}
+.qd-jobrow:focus-visible {
+  outline: 3px solid var(--qc-line-brand-focus);
+  outline-offset: -3px;
+}
+.qd-jobrow-id {
+  flex: none;
+  width: 56px;
+}
+.qd-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--qc-space-8) var(--qc-space-12);
+  padding: var(--qc-space-8) var(--qc-space-16);
+  border-top: 1px solid var(--qc-line-neutral-tertiary);
+}
+
+/* 진행 기록 */
+.qd-timeline {
+  display: grid;
+  grid-template-columns: max-content max-content minmax(0, 1fr);
+  gap: var(--qc-space-8) var(--qc-space-12);
+  align-items: baseline;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.qd-timeline li {
+  display: contents;
+}
+
+@media (max-width: 600px) {
+  .qd-jobrow {
+    flex-wrap: wrap;
+    row-gap: var(--qc-space-4);
+  }
+  .qd-jobrow .qd-cell-title {
+    flex-basis: calc(100% - 68px) !important;
+  }
+  .qd-timeline {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+  .qd-timeline li > span:nth-child(2) {
+    display: none;
+  }
+}

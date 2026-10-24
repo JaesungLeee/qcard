@@ -35,6 +35,9 @@ export const keys = {
   cycle: (projectId: string, cycleId: string) => ['cycle', projectId, cycleId] as const,
   console: ['console'] as const,
   jobs: (projectId: string) => ['jobs', projectId] as const,
+  jobSpecs: (projectId: string, jobId: string) => ['jobSpecs', projectId, jobId] as const,
+  jobEvents: (projectId: string, jobId: string) => ['jobEvents', projectId, jobId] as const,
+  jobDrafts: (projectId: string, jobId: string, spec: string) => ['jobDrafts', projectId, jobId, spec] as const,
   hosts: ['hosts'] as const,
   hostConnections: ['hostConnections'] as const,
   builds: (projectId: string) => ['builds', projectId] as const,
@@ -229,6 +232,40 @@ export function useJobs(projectId: string) {
     void qc.invalidateQueries({ queryKey: keys.prepFlows(projectId) });
   }, [done, projectId, qc]);
   return q;
+}
+
+/*
+ * 작업 상세 화면 (생성 진행). 작업이 대기·생성 중이면 3초마다 다시 읽는다.
+ * 생성 계획은 호스트가 시작할 때 한 번 쓰므로, 생기기 전까지만 다시 읽는다
+ */
+const jobPoll = (active: boolean) => (active ? 3000 : false);
+
+export function useJobSpecs(projectId: string, jobId: string, active: boolean) {
+  const api = useApi();
+  return useQuery({
+    queryKey: keys.jobSpecs(projectId, jobId),
+    queryFn: () => api.listJobSpecs(projectId, jobId),
+    refetchInterval: (q) => jobPoll(active && !q.state.data?.length),
+  });
+}
+
+export function useJobEvents(projectId: string, jobId: string, active: boolean) {
+  const api = useApi();
+  return useQuery({
+    queryKey: keys.jobEvents(projectId, jobId),
+    queryFn: () => api.listJobEvents(projectId, jobId),
+    refetchInterval: jobPoll(active),
+  });
+}
+
+export function useJobDrafts(projectId: string, jobId: string, spec: string | undefined, active: boolean) {
+  const api = useApi();
+  return useQuery({
+    queryKey: keys.jobDrafts(projectId, jobId, spec ?? ''),
+    queryFn: () => api.listJobDrafts(projectId, jobId, spec!),
+    enabled: !!spec,
+    refetchInterval: jobPoll(active),
+  });
 }
 
 /** 내 호스트 에이전트 연결 상태 (15초마다) */

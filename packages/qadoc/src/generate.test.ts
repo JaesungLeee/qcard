@@ -2,7 +2,7 @@ import { hash, type QADocument, type TestCase } from '@qcard/shared';
 import { readBundle } from '@qcard/spec';
 import { describe, expect, it } from 'vitest';
 import { fakeGeneratorLlm } from './fake';
-import { CLEAN_FLOW, generateQaDoc, type GenerateInput } from './generate';
+import { CLEAN_FLOW, generateQaDoc, type GenerateInput, type GenerateProgress } from './generate';
 
 // 팀 스펙 템플릿 모양의 합성 문서 (실제 스펙 원문은 저장소에 두지 않는다)
 const SPEC = `# 스펙 명세서: 샘플 기능
@@ -148,14 +148,50 @@ describe('generateQaDoc — 다음 버전 (F-QD-08)', async () => {
     .replace(/\| EC-001 .*\n/, '') // EC-001 삭제
     .replace('| TS-003 |', '| TS-004 | 다시 연다 | 첫 화면 | 앱을 다시 연다 | 첫 화면이 보인다 | FR-001 |\n| TS-003 |'); // TS-004 신규
   const { llm, calls } = fakeGeneratorLlm();
+  const events: GenerateProgress[] = [];
   const { doc } = await run({
     llm,
     bundle: bundleOf(next),
     prev: edited,
     prevBundle: bundleOf(SPEC),
     meta: { ...META, id: 'doc-2' },
+    onProgress: (e) => events.push(e),
   });
   const byId = (src: string) => doc.cases.find((c) => c.sourceId === `sample/${src}`)!;
+
+  it('진행 이벤트: 매칭 결과 → 스펙 계획 → 묶음 시작·끝(초안), 경고', () => {
+    expect(events.map((e) => e.kind)).toEqual([
+      'match',
+      'plan',
+      'warning', // 가짜 모델이 없는 준비 플로우를 가리킨다
+      'warning',
+      'warning',
+      'planned',
+      'batch_start',
+      'batch',
+      'warning', // 조립할 때 버튼 이름 추정
+    ]);
+    const match = events[0] as Extract<GenerateProgress, { kind: 'match' }>;
+    expect(match.removed).toBe(1);
+    expect(match.specs[0]!.rows.map((r) => [r.id, r.change, r.tcId])).toEqual([
+      ['TS-001', 'same', 'TC-SAMPLE-001'],
+      ['TS-002', 'changed', 'TC-SAMPLE-002'],
+      ['TS-004', 'new', 'TC-SAMPLE-005'],
+      ['TS-003', 'new', 'TC-SAMPLE-006'], // 첫 버전에서 iOS로 빠져 다시 신규
+    ]);
+    // 변경 행만 비교할 이전 케이스를 싣는다
+    expect(match.specs[0]!.rows.find((r) => r.id === 'TS-002')!.previous).toMatchObject({ title: 'TS-002 제목' });
+    expect(match.specs[0]!.rows.find((r) => r.id === 'TS-001')!.previous).toBeUndefined();
+
+    const batch = events.find((e) => e.kind === 'batch') as Extract<GenerateProgress, { kind: 'batch' }>;
+    expect(batch.sources).toEqual(['sample/TS-002', 'sample/TS-004', 'sample/TS-003']);
+    expect(batch.drafts.map((d) => [d.rowId, d.tcId])).toEqual([
+      ['TS-002', 'TC-SAMPLE-002'],
+      ['TS-004', 'TC-SAMPLE-005'],
+      ['TS-003', 'TC-SAMPLE-006'],
+    ]);
+    expect(batch.drafts[0]!.body.verificationPoints[0]!.id).toBe('TC-SAMPLE-002-P1');
+  });
 
   it('동일 행은 LLM 없이 사람의 수정·승인을 그대로 복사한다', () => {
     expect(byId('TS-001')).toMatchObject({

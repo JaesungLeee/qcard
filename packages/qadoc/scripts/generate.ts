@@ -108,12 +108,11 @@ const result = await generateQaDoc({
     specBundleId: `bundle-${values['app-version']}`,
     createdAt: new Date().toISOString(),
   },
-  onProgress: (e) =>
-    console.log(
-      e.kind === 'plan'
-        ? `계획 ${e.spec} · 대상 ${e.targets}행`
-        : `  ${e.done}/${e.total} ${e.spec} ${e.rows.join(' ')} (${((Date.now() - started) / 1000).toFixed(0)}s)`,
-    ),
+  onProgress: (e) => {
+    if (e.kind === 'plan') console.log(`계획 ${e.spec} · 대상 ${e.targets}행`);
+    if (e.kind === 'batch')
+      console.log(`  ${e.done}/${e.total} ${e.spec} ${e.rows.join(' ')} (${((Date.now() - started) / 1000).toFixed(0)}s)`);
+  },
 });
 live.close?.();
 

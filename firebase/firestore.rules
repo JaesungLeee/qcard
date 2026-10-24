@@ -186,6 +186,14 @@ service cloud.firestore {
         allow create: if canEdit(p) && request.resource.data.requestedBy == request.auth.uid;
         allow update: if canEdit(p) && resource.data.requestedBy == request.auth.uid;
         allow delete: if false;
+
+        // 생성 진행 (작업 상세 화면): 생성 계획·케이스 초안·진행 기록. 작업을 처리하는 요청자 본인만 쓴다
+        match /{part}/{partId} {
+          allow read: if isMember(p);
+          allow create, update: if part in ['specs', 'drafts', 'events'] && canEdit(p)
+            && get(/databases/$(database)/documents/projects/$(p)/jobs/$(id)).data.requestedBy == request.auth.uid;
+          allow delete: if false;
+        }
       }
     }
 

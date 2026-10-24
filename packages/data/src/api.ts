@@ -11,6 +11,9 @@ import type {
   Invitation,
   Job,
   QaDocJob,
+  QaDocJobDraft,
+  QaDocJobEvent,
+  QaDocJobSpec,
   RunCycleJob,
   InvitationState,
   Member,
@@ -89,6 +92,12 @@ export interface QcardApi {
   requestRun(projectId: string, input: RequestRunInput): Promise<RunCycleJob>;
   /** 최근 작업 (새것 먼저) */
   listJobs(projectId: string): Promise<Job[]>;
+  /** QA 문서 생성 작업의 생성 계획 (스펙 순서). 호스트가 시작하기 전이나 이 기능 전에 만든 작업은 빈 목록 */
+  listJobSpecs(projectId: string, jobId: string): Promise<QaDocJobSpec[]>;
+  /** 진행 기록 (오래된 것 먼저) */
+  listJobEvents(projectId: string, jobId: string): Promise<QaDocJobEvent[]>;
+  /** 한 스펙의 케이스 초안 (TC ID 순) */
+  listJobDrafts(projectId: string, jobId: string, spec: string): Promise<QaDocJobDraft[]>;
   /** 실패·일시정지한 내 작업을 다시 대기열에 넣는다 */
   retryJob(projectId: string, jobId: string): Promise<void>;
   /** 내 호스트 에이전트 (연결 상태는 `lastSeen`으로 판단, HOST_ONLINE_MS) */

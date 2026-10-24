@@ -611,6 +611,23 @@ export const QaDocJob = z.object({
       done: z.number(),
       total: z.number(),
       spec: z.string().optional(),
+      /** 지금 모델이 만들고 있는 행 (출처 ID). 케이스 변환 중에만 */
+      active: z.array(z.string()).optional(),
+      /** 스펙별 만든 초안 수 */
+      drafted: z.record(z.string(), z.number()).optional(),
+      /** 이 단계를 시작한 시각 · 마지막으로 갱신한 시각 (남은 시간 추정) */
+      phaseStartedAt: z.string().optional(),
+      updatedAt: z.string().optional(),
+      tokens: z.number().optional(),
+    })
+    .optional(),
+  /** 생성 계획 요약 (이전 문서와 매칭한 결과). 행 단위 내용은 하위 컬렉션 `specs` */
+  plan: z
+    .object({
+      specs: z.array(
+        z.object({ name: z.string(), title: z.string(), new: z.number(), changed: z.number(), same: z.number() }),
+      ),
+      removed: z.number(),
     })
     .optional(),
   result: z
@@ -626,6 +643,65 @@ export const QaDocJob = z.object({
     .optional(),
 });
 export type QaDocJob = z.infer<typeof QaDocJob>;
+
+/*
+ * QA 문서 생성 진행 (작업 상세 화면). 호스트가 생성하는 동안 작업 문서 아래 하위 컬렉션에 쓴다:
+ *   specs/{스펙}      — 스펙의 행과 매칭 결과(신규·변경·동일). 시작할 때 한 번
+ *   drafts/{스펙~행}  — 모델이 만든 케이스 초안. 행 묶음이 끝날 때마다
+ *   events/{id}       — 진행 기록. id가 정해져 있어 다시 시도해도 같은 기록이 두 번 생기지 않는다
+ */
+
+/** 생성 계획의 행 하나. EC는 when=상황, then=처리 */
+export const JobPlanRow = z.object({
+  id: z.string(),
+  tcId: z.string(),
+  kind: z.enum(['TS', 'EC']),
+  flow: z.string(),
+  title: z.string(),
+  given: z.string(),
+  when: z.string(),
+  then: z.string(),
+  requirementIds: z.array(z.string()),
+  change: z.enum(['new', 'changed', 'same']),
+  /** 변경 행의 이전 케이스 (비교용). 동일 행은 이전 문서의 케이스를 그대로 쓴다 */
+  previous: CaseBody.optional(),
+});
+export type JobPlanRow = z.infer<typeof JobPlanRow>;
+
+export const QaDocJobSpec = z.object({
+  spec: z.string(),
+  title: z.string(),
+  /** 스펙 묶음 안의 순서 */
+  order: z.number(),
+  rows: z.array(JobPlanRow),
+});
+export type QaDocJobSpec = z.infer<typeof QaDocJobSpec>;
+
+/** 모델이 만든 케이스 초안. 문서에 저장되기 전 모습이라 버튼 이름 추정 표시·iOS 제외는 아직 하지 않았다 */
+export const QaDocJobDraft = z.object({
+  spec: z.string(),
+  rowId: z.string(),
+  tcId: z.string(),
+  body: CaseBody,
+  questions: z.array(z.string()),
+  at: z.string(),
+});
+export type QaDocJobDraft = z.infer<typeof QaDocJobDraft>;
+
+export const JobEventKind = z.enum(['start', 'plan', 'prep_flow', 'cases', 'question', 'warning', 'stop', 'done']);
+export type JobEventKind = z.infer<typeof JobEventKind>;
+export const JOB_EVENT_LABEL: Record<JobEventKind, string> = {
+  start: '시작',
+  plan: '스펙 계획',
+  prep_flow: '준비 플로우',
+  cases: '케이스 변환',
+  question: '확인 질문',
+  warning: '경고',
+  stop: '멈춤',
+  done: '저장',
+};
+export const QaDocJobEvent = z.object({ id: z.string(), at: z.string(), kind: JobEventKind, text: z.string() });
+export type QaDocJobEvent = z.infer<typeof QaDocJobEvent>;
 
 /**
  * 웹에서 내 호스트로 Run 시작 요청: 호스트가 받아 로컬 콘솔의 [실행]과 같은 경로로 시작한다.

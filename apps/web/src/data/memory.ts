@@ -36,6 +36,7 @@ import {
   confirmedResult,
   cycleSummary,
   isActiveCycle,
+  jobPartOrder,
   newBuild,
   newCycle,
   nextCase,
@@ -397,6 +398,15 @@ export function createMemoryApi(
     },
     async listJobs(projectId) {
       return wait(db.jobs.filter((j) => j.projectId === projectId));
+    },
+    async listJobSpecs(_projectId, jobId) {
+      return wait([...(db.jobParts[jobId]?.specs ?? [])].sort(jobPartOrder.specs));
+    },
+    async listJobEvents(_projectId, jobId) {
+      return wait([...(db.jobParts[jobId]?.events ?? [])].sort(jobPartOrder.events));
+    },
+    async listJobDrafts(_projectId, jobId, spec) {
+      return wait((db.jobParts[jobId]?.drafts ?? []).filter((d) => d.spec === spec).sort(jobPartOrder.drafts));
     },
     async retryJob(projectId, jobId) {
       return rules(() => {

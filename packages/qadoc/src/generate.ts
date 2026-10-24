@@ -4,6 +4,8 @@ import {
   hash,
   type PrepFlow,
   type QADocument,
+  type QaDocJobDraft,
+  type QaDocJobSpec,
   type Requirement,
   type SpecQuestion,
   type SpecSuggestion,
@@ -43,9 +45,25 @@ export type GenerateInput = {
 };
 
 export type GenerateProgress =
+  /** 이전 문서와 매칭한 결과 (스펙마다 행과 신규·변경·동일). 모델을 부르기 전에 한 번 */
+  | { kind: 'match'; specs: QaDocJobSpec[]; removed: number }
   /** index: 이번에 계획하는 스펙 순번(0부터) · total: 바뀐 행이 있는 스펙 수 */
   | { kind: 'plan'; spec: string; targets: number; index: number; total: number }
-  | { kind: 'batch'; spec: string; rows: string[]; done: number; total: number };
+  /** 스펙 계획이 끝났다. prepFlows: 이 스펙에서 새로 만든 준비 플로우 */
+  | { kind: 'planned'; spec: string; prepFlows: PrepFlow[]; suggestions: number; index: number; total: number }
+  /** 행 묶음을 모델에 보냈다 (출처 ID) */
+  | { kind: 'batch_start'; spec: string; sources: string[] }
+  /** 행 묶음이 끝났다. drafts: 묶음의 케이스 초안 */
+  | {
+      kind: 'batch';
+      spec: string;
+      rows: string[];
+      sources: string[];
+      drafts: Omit<QaDocJobDraft, 'at'>[];
+      done: number;
+      total: number;
+    }
+  | { kind: 'warning'; text: string };
 
 export type GenerateResult = {
   doc: QADocument;
@@ -75,9 +93,19 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
   const model = input.model ?? MODELS.generator;
   const specRoot = input.specRoot ?? 'docs/specs';
   const fileOf = (spec: string) => `${specRoot}/${spec}/spec.md`;
-  const warnings: string[] = [];
+  const warnings = {
+    list: [] as string[],
+    push(...texts: string[]) {
+      for (const text of texts) {
+        this.list.push(text);
+        input.onProgress?.({ kind: 'warning', text });
+      }
+      return this.list.length;
+    },
+  };
   const plan = matchVersions(bundle, prev);
   const targets = plan.rows.filter((r) => r.decision !== 'same');
+  input.onProgress?.({ kind: 'match', specs: planSpecsOf(bundle, plan.rows), removed: plan.removed.length });
 
   // ------------------------------------------------------------ 1. 스펙 계획 (스펙 순서대로 — 앞 스펙이 만든 준비 플로우를 뒤 스펙이 재사용)
   const flows = [...input.prepFlows];
@@ -108,6 +136,7 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
     const out = await ask(llm, model, PLAN_SYSTEM, SpecPlanOutput, planPrompt(spec, rows, flows), (o) =>
       missingRows(rows, o.rows),
     );
+    const addedBefore = added.length;
     for (const f of out.prep_flows) {
       if (flows.some((x) => x.id === f.id)) {
         warnings.push(`${spec.name}: 준비 플로우 ID ${f.id}가 이미 있어 기존 것을 쓴다`);
@@ -137,6 +166,14 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
       }
       newSuggestions.push({ spec: spec.name, requirementId: req, technique: s.technique, text: s.text });
     }
+    input.onProgress?.({
+      kind: 'planned',
+      spec: spec.name,
+      prepFlows: added.slice(addedBefore),
+      suggestions: newSuggestions.filter((s) => s.spec === spec.name).length,
+      index,
+      total: planSpecs.length,
+    });
   }
 
   // ------------------------------------------------------------ 2. 케이스 변환 (행 묶음, 동시에 몇 개씩)
@@ -149,6 +186,8 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
   const generated = new Map<string, GenCase>();
   let done = 0;
   await pool(batches, input.concurrency ?? 3, async (batch) => {
+    const spec = batch[0]!.spec.name;
+    input.onProgress?.({ kind: 'batch_start', spec, sources: batch.map((r) => r.sourceId) });
     const out = await ask(
       llm,
       model,
@@ -157,12 +196,19 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
       casePrompt(batch, flows, startOf, prev, input.prevBundle),
       (o) => missingRows(batch, o.cases),
     );
-    for (const c of out.cases) generated.set(sourceId(batch[0]!.spec.name, c.row_id), c);
+    for (const c of out.cases) generated.set(sourceId(spec, c.row_id), c);
     done += batch.length;
     input.onProgress?.({
       kind: 'batch',
-      spec: batch[0]!.spec.name,
+      spec,
       rows: batch.map((r) => r.row.id),
+      sources: batch.map((r) => r.sourceId),
+      drafts: batch.flatMap((r) => {
+        const g = generated.get(r.sourceId);
+        if (!g) return [];
+        const body = bodyOf(g, r.tcId, startOf.get(r.sourceId) ?? { prepFlowIds: [], cleanState: false });
+        return [{ spec, rowId: r.row.id, tcId: r.tcId, body, questions: g.questions.map((q) => q.text) }];
+      }),
       done,
       total: targets.length,
     });
@@ -277,7 +323,31 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
     questions,
     suggestions,
   };
-  return { doc, prepFlows: added, skipped, warnings };
+  return { doc, prepFlows: added, skipped, warnings: warnings.list };
+}
+
+/** 진행 화면용 생성 계획: 스펙마다 행과 매칭 결과. 변경 행에는 비교할 이전 케이스를 붙인다 */
+function planSpecsOf(bundle: SpecBundle, rows: RowPlan[]): QaDocJobSpec[] {
+  return bundle.specs.map((spec, order) => ({
+    spec: spec.name,
+    title: spec.title,
+    order,
+    rows: rows
+      .filter((r) => r.spec === spec)
+      .map((r) => ({
+        id: r.row.id,
+        tcId: r.tcId,
+        kind: r.row.kind,
+        flow: r.row.flow,
+        title: r.row.title,
+        given: r.row.given,
+        when: r.row.when,
+        then: r.row.then,
+        requirementIds: r.row.frs.map((f) => `${spec.name}/${f}`),
+        change: r.decision,
+        ...(r.decision === 'changed' && r.previous ? { previous: CaseBody.parse(r.previous) } : {}),
+      })),
+  }));
 }
 
 // ---------------------------------------------------------------- 조립 도우미

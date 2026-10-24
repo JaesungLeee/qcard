@@ -1,7 +1,17 @@
 import type { QcardApi } from '@qcard/data';
 import { ClaudeCodeSetupError, PlanLimitError, UsageMeter, withUsage, type LlmClient } from '@qcard/llm';
-import { generateQaDoc } from '@qcard/qadoc';
-import type { Host, Job, JobErrorKind, QADocument, QaDocJob, RunCycleJob, SpecBundle } from '@qcard/shared';
+import { generateQaDoc, type GenerateProgress } from '@qcard/qadoc';
+import {
+  hash,
+  type Host,
+  type Job,
+  type JobErrorKind,
+  type QADocument,
+  type QaDocJob,
+  type QaDocJobEvent,
+  type RunCycleJob,
+  type SpecBundle,
+} from '@qcard/shared';
 import { readBundle, type SpecBundle as ParsedBundle } from '@qcard/spec';
 import {
   collection,
@@ -114,6 +124,7 @@ export async function processJob(deps: JobDeps, job: QaDocJob): Promise<Job> {
   const log = deps.log ?? (() => {});
   const r = jobRef(db, job);
   const meter = new UsageMeter();
+  let rec: ProgressRecorder | undefined;
   try {
     const bundle = await loadBundle(db, storage, job.projectId, job.input.bundleId);
     if (!bundle) throw new Error(`스펙 묶음이 없습니다: ${job.input.bundleId}`);
@@ -127,7 +138,9 @@ export async function processJob(deps: JobDeps, job: QaDocJob): Promise<Job> {
     const docId = await docIdFor(db, job);
     log(`${job.input.appVersion}: 스펙 ${bundle.parsed.specs.length}개${prev ? ` · 이전 ${prev.appVersion}` : ''}`);
 
-    // 진행률은 스펙 계획(바뀐 스펙 수) → 케이스 변환(행 수) 순서로 보인다
+    // 진행률은 스펙 계획(바뀐 스펙 수) → 케이스 변환(행 수) 순서로 보인다. 계획·초안·기록은 작업 상세 화면용
+    const recorder = await progressRecorder(db, job, now, meter, prev);
+    rec = recorder;
     const result = await generateQaDoc({
       bundle: bundle.parsed,
       prev,
@@ -143,17 +156,15 @@ export async function processJob(deps: JobDeps, job: QaDocJob): Promise<Job> {
         ...(prev ? { prevDocId: prev.id } : {}),
       },
       onProgress: (e) => {
-        const progress =
-          e.kind === 'plan'
-            ? { phase: 'plan' as const, done: e.index, total: e.total, spec: e.spec }
-            : { phase: 'cases' as const, done: e.done, total: e.total, spec: e.spec };
-        log(`  ${progress.phase} ${progress.done}/${progress.total} ${progress.spec}`);
-        void updateDoc(r, { progress }).catch(() => {});
+        recorder.on(e);
+        if (e.kind === 'plan') log(`  plan ${e.index}/${e.total} ${e.spec}`);
+        if (e.kind === 'batch') log(`  cases ${e.done}/${e.total} ${e.spec}`);
       },
     });
 
     // 저장: 문서 → 케이스(순서 _i) → 새 준비 플로우. 한 번에 500개까지라 나눠 쓴다
-    await updateDoc(r, { progress: { phase: 'save', done: 0, total: result.doc.cases.length } });
+    recorder.progress({ phase: 'save', done: 0, total: result.doc.cases.length, active: [] });
+    await recorder.flush();
     const { cases, ...meta } = result.doc;
     const base = ['projects', job.projectId, 'qaDocs', docId] as const;
     const writes: [ReturnType<typeof doc>, unknown][] = [
@@ -174,16 +185,25 @@ export async function processJob(deps: JobDeps, job: QaDocJob): Promise<Job> {
     // 문서 머리는 마지막에 쓴다 — 목록에 보이는 순간 케이스가 다 있다
     await setDoc(doc(db, ...base), clean(meta));
 
+    const questions = result.doc.questions.filter((q) => q.status === 'open').length;
+    recorder.event(
+      'done',
+      'done',
+      `케이스 ${cases.length}개 · 확인 질문 ${questions}개 · 새 준비 플로우 ${result.prepFlows.length}개 → QA 문서 ${job.input.appVersion}`,
+    );
+    await recorder.flush();
+    const latest = (await getDoc(r)).data() as QaDocJob | undefined;
     const done: QaDocJob = {
       ...job,
+      ...(latest?.plan ? { plan: latest.plan } : {}),
       status: 'done',
       finishedAt: now(),
-      progress: { phase: 'save', done: cases.length, total: cases.length },
+      progress: { ...recorder.current(), phase: 'save', done: cases.length, total: cases.length },
       result: {
         docId,
         cases: cases.length,
         generated: cases.filter((c) => c.change === 'new' || c.change === 'changed').length,
-        questions: result.doc.questions.filter((q) => q.status === 'open').length,
+        questions,
         newPrepFlows: result.prepFlows.length,
         tokens: meter.run.tokens,
         costUsd: meter.run.costUsd,
@@ -195,6 +215,11 @@ export async function processJob(deps: JobDeps, job: QaDocJob): Promise<Job> {
   } catch (e) {
     const kind = errorKind(e);
     const message = (e as Error).message ?? String(e);
+    if (rec) {
+      rec.progress({ active: [] });
+      rec.stop(`${kind ? '일시정지' : '실패'} · ${message}`);
+      await rec.flush();
+    }
     const latest = ((await getDoc(r)).data() as QaDocJob | undefined) ?? job;
     const next: QaDocJob = {
       ...latest,
@@ -206,6 +231,129 @@ export async function processJob(deps: JobDeps, job: QaDocJob): Promise<Job> {
     log(`${kind ? '일시정지' : '실패'}: ${message}`);
     return next;
   }
+}
+
+type Progress = NonNullable<QaDocJob['progress']>;
+type ProgressRecorder = Awaited<ReturnType<typeof progressRecorder>>;
+
+/**
+ * 생성 진행을 작업 문서와 하위 컬렉션(specs·drafts·events)에 쓴다 (작업 상세 화면).
+ * 생성기 이벤트는 몰려 오므로 쓰기를 한 줄로 세운다 — 진행률이 뒤로 가지 않게. 쓰기 실패는 생성을 멈추지 않는다.
+ * 기록 id가 정해져 있어, 다시 시도해 녹화에서 건너뛴 호출이 같은 기록을 또 남기지 않는다
+ */
+async function progressRecorder(
+  db: Firestore,
+  job: QaDocJob,
+  now: () => string,
+  meter: UsageMeter,
+  prev: QADocument | undefined,
+) {
+  const r = jobRef(db, job);
+  const seen = new Set((await getDocs(collection(r, 'events'))).docs.map((d) => d.id));
+  let chain: Promise<void> = Promise.resolve();
+  const write = (fn: () => Promise<unknown>) => {
+    chain = chain.then(fn).then(
+      () => {},
+      () => {},
+    );
+  };
+  const event = (id: string, kind: QaDocJobEvent['kind'], text: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    const e: QaDocJobEvent = { id, at: now(), kind, text };
+    write(() => setDoc(doc(r, 'events', id), e));
+  };
+  const at = now();
+  let state: Progress = { ...job.progress, phase: 'plan', done: 0, total: 0, phaseStartedAt: at, updatedAt: at };
+  const progress = (p: Partial<Progress>) => {
+    const t = now();
+    const phaseStartedAt = p.phase && p.phase !== state.phase ? t : state.phaseStartedAt;
+    state = { ...state, ...p, phaseStartedAt, updatedAt: t, tokens: meter.run.tokens };
+    const snapshot = clean(state);
+    write(() => updateDoc(r, { progress: snapshot }));
+  };
+  const active = new Set<string>();
+  const drafted: Record<string, number> = {};
+  let targets = 0;
+
+  if (seen.has('start')) event(`restart-${seen.size}`, 'start', '다시 시작 — 끝난 호출은 녹화에서 건너뜁니다');
+
+  const on = (e: GenerateProgress) => {
+    switch (e.kind) {
+      case 'match': {
+        const specs = e.specs.map((s) => ({
+          name: s.spec,
+          title: s.title,
+          new: s.rows.filter((x) => x.change === 'new').length,
+          changed: s.rows.filter((x) => x.change === 'changed').length,
+          same: s.rows.filter((x) => x.change === 'same').length,
+        }));
+        targets = specs.reduce((n, s) => n + s.new + s.changed, 0);
+        const same = specs.reduce((n, s) => n + s.same, 0);
+        write(async () => {
+          const batch = writeBatch(db);
+          for (const s of e.specs) batch.set(doc(r, 'specs', s.spec), clean(s));
+          batch.update(r, { plan: { specs, removed: e.removed } });
+          await batch.commit();
+        });
+        event(
+          'start',
+          'start',
+          `스펙 ${specs.length}개${prev ? ` · 이전 문서 ${prev.appVersion}` : ''} · 만들 행 ${targets}개` +
+            (same ? `, 동일 ${same}개는 이전 케이스를 씁니다` : ''),
+        );
+        return;
+      }
+      case 'plan':
+        return progress({ phase: 'plan', done: e.index, total: e.total, spec: e.spec });
+      case 'planned':
+        event(`plan-${e.spec}`, 'plan', `${e.spec} 계획 · 보강 제안 ${e.suggestions}개`);
+        if (e.prepFlows.length)
+          event(`prep-${e.spec}`, 'prep_flow', `새로 만듦: ${e.prepFlows.map((f) => `${f.id} (${f.name})`).join(', ')}`);
+        return progress({ done: e.index + 1 });
+      case 'batch_start':
+        for (const s of e.sources) active.add(s);
+        return progress({
+          phase: 'cases',
+          ...(state.phase === 'cases' ? {} : { done: 0, total: targets }),
+          spec: e.spec,
+          active: [...active],
+        });
+      case 'batch': {
+        for (const s of e.sources) active.delete(s);
+        drafted[e.spec] = (drafted[e.spec] ?? 0) + e.drafts.length;
+        const at = now();
+        write(async () => {
+          const batch = writeBatch(db);
+          for (const d of e.drafts) batch.set(doc(r, 'drafts', `${d.spec}~${d.rowId}`), clean({ ...d, at }));
+          await batch.commit();
+        });
+        const range = e.rows.length > 1 ? `${e.rows[0]}~${e.rows.at(-1)}` : e.rows[0];
+        event(`cases-${e.spec}-${e.rows[0]}`, 'cases', `${e.spec} ${range} 초안 ${e.drafts.length}개`);
+        for (const d of e.drafts)
+          if (d.questions.length) event(`q-${d.spec}-${d.rowId}`, 'question', `${d.spec}/${d.rowId}: ${d.questions.join(' / ')}`);
+        return progress({
+          phase: 'cases',
+          done: e.done,
+          total: e.total,
+          spec: e.spec,
+          active: [...active],
+          drafted: { ...drafted },
+        });
+      }
+      case 'warning':
+        return event(`warn-${hash(e.text)}`, 'warning', e.text);
+    }
+  };
+
+  return {
+    on,
+    progress,
+    event,
+    stop: (text: string) => event(`stop-${seen.size}`, 'stop', text),
+    current: () => state,
+    flush: () => chain,
+  };
 }
 
 /**

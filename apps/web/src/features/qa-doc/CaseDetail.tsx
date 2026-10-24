@@ -6,6 +6,7 @@ import {
   PRIORITY_LABEL,
   type QADocument,
   TEST_TYPE_LABEL,
+  type CaseBody,
   type TestCase,
 } from '@qcard/shared';
 import { Button, IconButton, Icons, SectionMessage, textClass, token } from '@qcard/ui';
@@ -241,15 +242,52 @@ function CaseView({
         </ul>
       </Block>
 
+      <CaseBodyBlocks body={c} tcId={c.tcId} prepName={prepName}>
+        <dt>세부 기능</dt>
+        <dd>
+          {c.feature} › {c.subFeature}
+        </dd>
+      </CaseBodyBlocks>
+
+      <Block title="원본 스펙 근거">
+        <div className={`${textClass('label2')} qd-source`}>
+          <span className="qc-mono">{c.sourceRef.file}</span>
+          <span className="qd-muted">{c.sourceRef.headingPath.join(' › ')}</span>
+          <span className="qd-faint">
+            {c.sourceRef.lineStart === c.sourceRef.lineEnd
+              ? `${c.sourceRef.lineStart}번째 줄`
+              : `${c.sourceRef.lineStart}–${c.sourceRef.lineEnd}번째 줄`}{' '}
+            · 출처 ID <span className="qc-mono">{c.sourceId}</span>
+          </span>
+        </div>
+      </Block>
+    </>
+  );
+}
+
+/** 케이스 본문(준비·단계·검증 포인트·속성). 문서의 케이스와 생성 중인 초안이 함께 쓴다. children은 속성 끝에 붙는다 */
+export function CaseBodyBlocks({
+  body,
+  tcId,
+  prepName,
+  children,
+}: {
+  body: CaseBody;
+  tcId: string;
+  prepName: (id: string) => string;
+  children?: ReactNode;
+}) {
+  return (
+    <>
       <Block title="준비">
         <dl className={`${textClass('label1')} qd-fields`}>
           <dt>사전 조건</dt>
           <dd>
-            {c.preconditions.length === 1 ? (
-              <RichText text={c.preconditions[0]!} />
-            ) : c.preconditions.length ? (
+            {body.preconditions.length === 1 ? (
+              <RichText text={body.preconditions[0]!} />
+            ) : body.preconditions.length ? (
               <ul className="qd-list">
-                {c.preconditions.map((p, i) => (
+                {body.preconditions.map((p, i) => (
                   <li key={i}>
                     <RichText text={p} />
                   </li>
@@ -261,9 +299,9 @@ function CaseView({
           </dd>
           <dt>준비 플로우</dt>
           <dd>
-            {c.prepFlowIds.length ? (
+            {body.prepFlowIds.length ? (
               <span className="qd-row" style={{ gap: token('space-4') }}>
-                {c.prepFlowIds.map((id, i) => (
+                {body.prepFlowIds.map((id, i) => (
                   <span key={id} className="qd-row" style={{ gap: token('space-4') }}>
                     {i > 0 && (
                       <Icons.IconChevronRightSmall
@@ -280,21 +318,21 @@ function CaseView({
             )}
           </dd>
           <dt>클린 상태</dt>
-          <dd>{c.cleanState ? '필요 — 시작 전 앱 데이터 초기화' : '필요 없음 — 앱 재시작만'}</dd>
-          {c.accountRole && (
+          <dd>{body.cleanState ? '필요 — 시작 전 앱 데이터 초기화' : '필요 없음 — 앱 재시작만'}</dd>
+          {body.accountRole && (
             <>
               <dt>계정 역할</dt>
-              <dd>{c.accountRole}</dd>
+              <dd>{body.accountRole}</dd>
             </>
           )}
           <dt>테스트 데이터</dt>
-          <dd>{c.data ? <RichText text={c.data} /> : <span className="qd-faint">없음</span>}</dd>
+          <dd>{body.data ? <RichText text={body.data} /> : <span className="qd-faint">없음</span>}</dd>
         </dl>
       </Block>
 
-      <Block title={`단계 ${c.steps.length}`}>
+      <Block title={`단계 ${body.steps.length}`}>
         <ol className={`${textClass('body2-reading')} qd-list`}>
-          {c.steps.map((s, i) => (
+          {body.steps.map((s, i) => (
             <li key={i}>
               <RichText text={s.text} />{' '}
               {s.manual && (
@@ -307,12 +345,12 @@ function CaseView({
         </ol>
       </Block>
 
-      <Block title={`검증 포인트 ${c.verificationPoints.length}`}>
+      <Block title={`검증 포인트 ${body.verificationPoints.length}`}>
         <div className="qd-points">
-          {c.verificationPoints.map((p) => (
+          {body.verificationPoints.map((p) => (
             <div key={p.id} className="qd-point">
               <div className="qd-row" style={{ gap: token('space-6') }}>
-                <span className={`${textClass('caption1')} qc-mono qd-faint`}>{p.id.replace(`${c.tcId}-`, '')}</span>
+                <span className={`${textClass('caption1')} qc-mono qd-faint`}>{p.id.replace(`${tcId}-`, '')}</span>
                 <span className={textClass('label2', 'medium')}>{p.target}</span>
                 <Tag tone="quiet">{POINT_COMPARE_LABEL[p.compare]}</Tag>
                 <Tag tone={p.method === 'vision' ? 'violet' : 'neutral'}>{POINT_METHOD_LABEL[p.method]}</Tag>
@@ -328,33 +366,17 @@ function CaseView({
       <Block title="속성">
         <dl className={`${textClass('label1')} qd-fields`}>
           <dt>우선순위</dt>
-          <dd>{PRIORITY_LABEL[c.priority]}</dd>
+          <dd>{PRIORITY_LABEL[body.priority]}</dd>
           <dt>유형</dt>
-          <dd>{TEST_TYPE_LABEL[c.type]}</dd>
+          <dd>{TEST_TYPE_LABEL[body.type]}</dd>
           <dt>플랫폼</dt>
-          <dd>{PLATFORM_LABEL[c.platform]}</dd>
+          <dd>{PLATFORM_LABEL[body.platform]}</dd>
           <dt>수행 방식</dt>
           <dd>
-            <ModeBadge c={c} />
+            <ModeBadge c={body} />
           </dd>
-          <dt>세부 기능</dt>
-          <dd>
-            {c.feature} › {c.subFeature}
-          </dd>
+          {children}
         </dl>
-      </Block>
-
-      <Block title="원본 스펙 근거">
-        <div className={`${textClass('label2')} qd-source`}>
-          <span className="qc-mono">{c.sourceRef.file}</span>
-          <span className="qd-muted">{c.sourceRef.headingPath.join(' › ')}</span>
-          <span className="qd-faint">
-            {c.sourceRef.lineStart === c.sourceRef.lineEnd
-              ? `${c.sourceRef.lineStart}번째 줄`
-              : `${c.sourceRef.lineStart}–${c.sourceRef.lineEnd}번째 줄`}{' '}
-            · 출처 ID <span className="qc-mono">{c.sourceId}</span>
-          </span>
-        </div>
       </Block>
     </>
   );

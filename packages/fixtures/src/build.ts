@@ -27,8 +27,13 @@ import type {
   ThoughtEntry,
   VerificationPoint,
   Verdict,
+  JobPlanRow,
+  QaDocJob,
+  QaDocJobDraft,
+  QaDocJobEvent,
+  QaDocJobSpec,
 } from '@qcard/shared';
-import { hash } from '@qcard/shared';
+import { CaseBody as CaseBodySchema, hash } from '@qcard/shared';
 import { rowHash } from '@qcard/spec';
 import raw from './data/onboarding-flow.json';
 import generatedPoints from './data/onboarding-points.json';
@@ -1332,6 +1337,116 @@ function consoleSession(): ConsoleSession {
 
 // ---------------------------------------------------------------- QA 문서 생성 작업 (PRD §5.2, §6.2)
 
+/** 생성 진행 (작업 상세 화면): 생성 계획·케이스 초안·진행 기록 */
+export type JobParts = { specs: QaDocJobSpec[]; drafts: QaDocJobDraft[]; events: QaDocJobEvent[] };
+
+/**
+ * 1.3.0 문서를 이전 문서로 삼은 생성 작업의 진행. rows[from, from+targets)가 바뀐 행(변경)이고 나머지는 동일.
+ * 8행 묶음 순서로 drafted개까지 초안이 있고, running이면 다음 3묶음을 만드는 중이다
+ */
+function jobProgress(opts: {
+  day: number;
+  start: [number, number];
+  from: number;
+  targets: number;
+  drafted: number;
+  running: boolean;
+  stop?: string;
+}): { progress: NonNullable<QaDocJob['progress']>; plan: NonNullable<QaDocJob['plan']>; parts: JobParts } {
+  const at = (min: number) => T(opts.day, opts.start[0] + Math.floor((opts.start[1] + min) / 60), (opts.start[1] + min) % 60);
+  const prevOf = (row: Row) => CaseBodySchema.parse(qaDocV130.cases.find((c) => c.sourceId === `${SPEC}/${row.id}`)!);
+  const planRows: JobPlanRow[] = rows.map((row, i) => {
+    const target = i >= opts.from && i < opts.from + opts.targets;
+    return {
+      id: row.id,
+      tcId: tcIdOf(i + 1),
+      kind: row.kind,
+      flow: row.flow,
+      title: row.title,
+      given: row.given,
+      when: row.when,
+      then: row.then,
+      requirementIds: row.frs.map(reqId),
+      change: target ? 'changed' : 'same',
+      ...(target ? { previous: prevOf(row) } : {}),
+    };
+  });
+  const targets = planRows.filter((r) => r.change !== 'same');
+  // 초안: 이전 케이스에서 첫 검증 포인트를 이번 스펙의 Then으로 바꾼 모양
+  const drafts: QaDocJobDraft[] = targets.slice(0, opts.drafted).map((r, i) => ({
+    spec: SPEC,
+    rowId: r.id,
+    tcId: r.tcId,
+    body: {
+      ...r.previous!,
+      verificationPoints: r.previous!.verificationPoints.map((p, j) => (j === 0 ? { ...p, expected: r.then } : p)),
+    },
+    questions: r.id === 'TS-023' ? ['토스트 위치 40px이 dp 기준인가요? 기기 밀도에 따라 확인 방법이 달라집니다.'] : [],
+    at: at(3 + Math.floor(i / 8)),
+  }));
+  const batches = Math.ceil(opts.drafted / 8);
+  const events: QaDocJobEvent[] = [
+    {
+      id: 'start',
+      at: at(0),
+      kind: 'start',
+      text: `스펙 1개 · 이전 문서 1.3.0 · 만들 행 ${targets.length}개, 동일 ${rows.length - targets.length}개는 이전 케이스를 씁니다`,
+    },
+    { id: `plan-${SPEC}`, at: at(1), kind: 'plan', text: `${SPEC} 계획 · 보강 제안 2개` },
+    ...Array.from({ length: batches }, (_, b): QaDocJobEvent => {
+      const batch = targets.slice(b * 8, Math.min((b + 1) * 8, opts.drafted));
+      return {
+        id: `cases-${SPEC}-${batch[0]!.id}`,
+        at: at(3 + b),
+        kind: 'cases',
+        text: `${SPEC} ${batch[0]!.id}~${batch.at(-1)!.id} 초안 ${batch.length}개`,
+      };
+    }),
+    ...drafts
+      .filter((d) => d.questions.length)
+      .map(
+        (d): QaDocJobEvent => ({
+          id: `q-${SPEC}-${d.rowId}`,
+          at: d.at,
+          kind: 'question',
+          text: `${SPEC}/${d.rowId}: ${d.questions.join(' / ')}`,
+        }),
+      ),
+    ...(opts.stop ? [{ id: 'stop-1', at: at(3 + batches), kind: 'stop' as const, text: opts.stop }] : []),
+  ];
+  const active = opts.running ? targets.slice(opts.drafted, opts.drafted + 24).map((r) => `${SPEC}/${r.id}`) : [];
+  return {
+    progress: {
+      phase: 'cases',
+      done: opts.drafted,
+      total: targets.length,
+      spec: SPEC,
+      active,
+      drafted: { [SPEC]: opts.drafted },
+      phaseStartedAt: at(1),
+      updatedAt: at(2 + batches),
+      tokens: 9_800 + opts.drafted * 2_600,
+    },
+    plan: {
+      specs: [{ name: SPEC, title: FEATURE, new: 0, changed: targets.length, same: rows.length - targets.length }],
+      removed: 0,
+    },
+    parts: { specs: [{ spec: SPEC, title: FEATURE, order: 0, rows: planRows }], drafts, events },
+  };
+}
+
+const job140 = jobProgress({ day: 21, start: [16, 41], from: 21, targets: 40, drafted: 16, running: true });
+const job131 = jobProgress({
+  day: 18,
+  start: [14, 6],
+  from: 15,
+  targets: 12,
+  drafted: 8,
+  running: false,
+  stop: '일시정지 · Claude 플랜 사용 한도(5시간)에 닿았습니다.',
+});
+export const jobParts: Record<string, JobParts> = { 'job-140': job140.parts, 'job-131': job131.parts };
+
 /** 완료(1.3.0 문서를 만든 작업), 생성 중(1.4.0), 플랜 한도로 일시정지(1.3.1) */
 export const jobs: Job[] = [
   {
@@ -1345,7 +1460,8 @@ export const jobs: Job[] = [
     input: { bundleId: 'bundle-140', appVersion: '1.4.0', prevDocId: qaDocV130.id },
     host: '이재성의 MacBook Pro',
     startedAt: T(21, 16, 41),
-    progress: { phase: 'cases', done: 16, total: 40, spec: 'onboarding-flow' },
+    progress: job140.progress,
+    plan: job140.plan,
   },
   {
     id: 'job-131',
@@ -1358,7 +1474,8 @@ export const jobs: Job[] = [
     input: { bundleId: 'bundle-131', appVersion: '1.3.1', prevDocId: qaDocV130.id },
     host: '최서준의 MacBook Air',
     startedAt: T(18, 14, 6),
-    progress: { phase: 'cases', done: 8, total: 12, spec: 'onboarding-flow' },
+    progress: job131.progress,
+    plan: job131.plan,
     error: {
       kind: 'plan_limit',
       message: 'Claude 플랜 사용 한도(5시간)에 닿았습니다. 한도가 풀린 뒤 다시 시도하면 끝난 호출은 건너뜁니다.',
@@ -1394,6 +1511,8 @@ export type FixtureDb = {
   runs: Record<string, Run[]>;
   prepFlows: PrepFlow[];
   jobs: Job[];
+  /** 작업 id → 생성 진행 */
+  jobParts: Record<string, JobParts>;
   console: ConsoleSession;
 };
 
@@ -1413,6 +1532,7 @@ export function createFixtureDb(): FixtureDb {
     runs: { [cycle130.id]: runs130, [cycle121.id]: [] },
     prepFlows: PREP_FLOWS,
     jobs,
+    jobParts,
     console: consoleSession(),
   });
 }

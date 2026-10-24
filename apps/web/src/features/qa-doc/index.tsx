@@ -3,3 +3,4 @@ export { QaDocListPage } from './QaDocListPage';
 export { QaDocReviewPage } from './QaDocReviewPage';
 export { NewQaDocPage } from './NewQaDocPage';
 export { PrepFlowPage } from './PrepFlowPage';
+export { JobProgressPage } from './JobProgressPage';

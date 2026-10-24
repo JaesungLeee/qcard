@@ -12,6 +12,9 @@ import type {
   PrepFlow,
   Project,
   QADocument,
+  QaDocJobDraft,
+  QaDocJobEvent,
+  QaDocJobSpec,
   Run,
   TestCase,
   TestCycle,
@@ -54,6 +57,7 @@ import {
   confirmedResult,
   cycleSummary,
   isActiveCycle,
+  jobPartOrder,
   newBuild,
   newCycle,
   nextCase,
@@ -559,6 +563,23 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       guard(async () => {
         const snap = await getDocs(collection(db, P(projectId), 'jobs'));
         return snap.docs.map((d) => d.data() as Job).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      }),
+    listJobSpecs: (projectId, jobId) =>
+      guard(async () => {
+        const snap = await getDocs(collection(db, P(projectId), 'jobs', jobId, 'specs'));
+        return snap.docs.map((d) => d.data() as QaDocJobSpec).sort(jobPartOrder.specs);
+      }),
+    listJobEvents: (projectId, jobId) =>
+      guard(async () => {
+        const snap = await getDocs(collection(db, P(projectId), 'jobs', jobId, 'events'));
+        return snap.docs.map((d) => d.data() as QaDocJobEvent).sort(jobPartOrder.events);
+      }),
+    listJobDrafts: (projectId, jobId, spec) =>
+      guard(async () => {
+        const snap = await getDocs(
+          query(collection(db, P(projectId), 'jobs', jobId, 'drafts'), where('spec', '==', spec)),
+        );
+        return snap.docs.map((d) => d.data() as QaDocJobDraft).sort(jobPartOrder.drafts);
       }),
     retryJob: (projectId, jobId) =>
       guard(() =>
