@@ -30,7 +30,7 @@ export type ConsoleServiceDeps = {
   claudeCode: () => ClaudeCodeState;
   log: (line: string) => void;
   /** 빌드 파일이 없는 사이클(시드)에서 실행할 앱 */
-  fallbackPackage: string;
+  fallbackPackage?: string;
   allowNetworkToggle?: boolean;
   /** 테스트에서 LLM·Agent 환경을 바꾼다 */
   llm?: CycleRunDeps['llm'];

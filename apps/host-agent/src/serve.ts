@@ -4,7 +4,7 @@
  *
  *   pnpm --filter @qcard/host-agent serve
  *     --user <시드 사용자>          개발용: 에뮬레이터에서 브라우저 없이 그 사용자 이름으로 연결
- *     --package com.example.harukong.qa   빌드 파일이 없는 사이클(시드)에서 실행할 앱
+ *     --package <앱>               빌드 파일이 없는 사이클(개발 시드)에서 실행할 앱. 기본: qcard.local.json의 devApp
  *     --serial <시리얼>            디바이스가 여러 대일 때 (기본: 처음 연결된 것, 1인 1대)
  *     --allow-network              set_network(네트워크 끄기) 허용
  *     --headless                   로컬 콘솔을 띄우지 않는다
@@ -24,7 +24,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { AdbDriver, listDevices } from '@qcard/device/node';
+import { AdbDriver, devAppPackage, listDevices } from '@qcard/device/node';
 import { claudeCodeStatus, createCassetteLlm, createLiveLlm, type ClaudeCodeStatus } from '@qcard/llm';
 import { collectionGroup, onSnapshot, query, where } from 'firebase/firestore';
 import { HostDisconnectedError, openHostSession } from './connect';
@@ -37,7 +37,7 @@ import { firestoreApply } from './sink';
 const { values } = parseArgs({
   options: {
     user: { type: 'string' },
-    package: { type: 'string', default: 'com.example.harukong.qa' },
+    package: { type: 'string', default: devAppPackage() },
     serial: { type: 'string' },
     'allow-network': { type: 'boolean', default: false },
     headless: { type: 'boolean', default: false },

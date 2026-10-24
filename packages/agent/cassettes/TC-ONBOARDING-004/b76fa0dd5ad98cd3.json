@@ -1,0 +1,118 @@
+{
+  "key": "b76fa0dd5ad98cd32ec10b991a9057227763d45e12de88ee8fea8838863e214a",
+  "recordedAt": "2026-10-24T04:02:05.340Z",
+  "meta": {
+    "role": "locator",
+    "caseId": "TC-ONBOARDING-004"
+  },
+  "request": {
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 4096,
+    "output_config": {
+      "effort": "low",
+      "format": {
+        "type": "json_schema",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "found",
+                      "absent",
+                      "unclear"
+                    ]
+                  },
+                  "element_ref": {
+                    "description": "찾은 요소 참조(관찰 번호가 붙은 o7.e6 형태 그대로). found가 아니면 null",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "point_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status",
+                  "element_ref",
+                  "reason",
+                  "point_id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "points"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "system": [
+      {
+        "type": "text",
+        "text": "너는 Android 앱 QA의 검증 보조다. 검증 포인트마다 판정 근거가 될 요소를 접근성 트리에서 찾아 그 번호(e12)를 돌려준다. 판정은 하지 않는다.\n\n관찰은 마지막 단계를 수행하며 본 화면들이고, 번호가 클수록 나중이다. 요소 참조에는 관찰 번호가 붙어 있다(o7.e6 = 관찰 7의 e6). element_ref에는 그 참조를 그대로 쓴다.\n\n비교 종류별로 찾을 요소:\n- visible·text_exists·count·size_dp: 대상 요소. 토스트처럼 잠깐 뜨는 요소가 있으므로 어느 관찰에서든 찾는다\n- not_visible: 마지막 관찰에서만 본다. 대상이 있으면 그 요소\n- screen: 마지막 관찰에서만 본다. 그 화면임을 보여 주는 요소(제목·고유 버튼 등)\n- state: 마지막 관찰에서만 본다. 그 앱 상태를 보여 주는 요소\n\nstatus: found(찾음) · absent(화면에 분명히 없음) · unclear(화면만으로는 알 수 없음).\n대상이 화면에 나타나는 종류가 아니어서 판단할 수 없으면 absent가 아니라 unclear다.\n\nunclear로 답해야 하는 경우 (잘못 쓰인 포인트가 섞여 온다):\n- 대상이 화면 요소가 아니라 동작·결과·내부 상태다: \"이동한다\", \"버린다\", \"기록된다\", \"되돌아가지 않는다\", \"다시 확보하지 않는다\", 문장 조각(\"방을 만들지 않\")\n- not_visible인데 기대 문장이 \"보이면 안 되는 요소\"가 아니라 일어나야 할 결과를 말한다 (예: \"튜토리얼로 이동한다\", \"앱을 백그라운드로 보낸다\", \"처음부터 다시 거친다\")\nnot_visible의 found는 보이면 안 되는 바로 그 요소가 화면에 있을 때만이다. 기대한 결과 화면의 요소(이동해 간 화면의 제목, 런처 화면 등)를 고르지 않는다.\n비슷하지만 다른 요소를 고르지 않는다. 모든 포인트에 답한다.",
+        "cache_control": {
+          "type": "ephemeral"
+        }
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "검증 포인트:\n- TC-ONBOARDING-004-P1 · 대상: 복사 완료 토스트 · 비교: visible · 기대: 초대 링크 복사 후 복사 완료 토스트가 보인다.\n- TC-ONBOARDING-004-P2 · 대상: 메이트 초대 스텝 화면 · 비교: screen · 기대: 복사 후 기다린 뒤에도 메이트 초대 스텝 화면이 그대로 열려 있다."
+          },
+          {
+            "type": "text",
+            "text": "[관찰 7]\n포그라운드 앱: com.example.harukong\n접근성 트리:\no7.e0 ImageButton desc=\"닫기\" id=mate_close [930,110 110x110] clickable\no7.e1 TextView \"함께할 메이트를 불러볼까요?\" id=mate_title [60,320 960x120]\no7.e2 TextView \"혼자 하면 사흘, 같이 하면 습관이 돼요. 메이트가 들어오면 서로의 체크를 응원할 수 있어요.\" id=mate_body [60,460 960x220]\no7.e3 ImageView desc=\"메이트 일러스트\" id=mate_image [240,820 600x600]\no7.e4 Button \"메이트 초대하기\" id=mate_share [60,1960 960x160] clickable\no7.e5 Button \"초대 링크 복사\" id=mate_copy [60,2150 960x130] clickable\no7.e6 Toast \"초대 링크를 복사했어요\" id=toast [90,2120 900x120]"
+          },
+          {
+            "type": "text",
+            "text": "[관찰 8] (마지막)\n포그라운드 앱: com.example.harukong\n접근성 트리:\no8.e0 ImageButton desc=\"닫기\" id=mate_close [930,110 110x110] clickable\no8.e1 TextView \"함께할 메이트를 불러볼까요?\" id=mate_title [60,320 960x120]\no8.e2 TextView \"혼자 하면 사흘, 같이 하면 습관이 돼요. 메이트가 들어오면 서로의 체크를 응원할 수 있어요.\" id=mate_body [60,460 960x220]\no8.e3 ImageView desc=\"메이트 일러스트\" id=mate_image [240,820 600x600]\no8.e4 Button \"메이트 초대하기\" id=mate_share [60,1960 960x160] clickable\no8.e5 Button \"초대 링크 복사\" id=mate_copy [60,2150 960x130] clickable"
+          }
+        ]
+      }
+    ]
+  },
+  "response": {
+    "id": "msg_cli_mvlvh95o",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-sonnet-5-5",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"points\":[{\"point_id\":\"TC-ONBOARDING-004-P1\",\"status\":\"found\",\"element_ref\":\"o7.e6\",\"reason\":\"관찰 7에 '초대 링크를 복사했어요' 토스트가 있음\"},{\"point_id\":\"TC-ONBOARDING-004-P2\",\"status\":\"found\",\"element_ref\":\"o8.e1\",\"reason\":\"마지막 관찰에서 메이트 초대 스텝 제목이 그대로 보임\"}]}",
+        "citations": null
+      }
+    ],
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "stop_details": null,
+    "container": null,
+    "usage": {
+      "input_tokens": 2,
+      "output_tokens": 204,
+      "cache_creation_input_tokens": 1727,
+      "cache_read_input_tokens": 1523
+    }
+  }
+}

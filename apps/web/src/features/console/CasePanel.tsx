@@ -11,7 +11,7 @@ export function CasePanel({
   step,
   phase,
   verified,
-  prepText = '준비 — 앱 데이터 초기화 후 프로필·습관 준비 플로우 수행',
+  prepText = '준비 — 앱 데이터 초기화 후 닉네임·습관 준비 플로우 수행',
 }: {
   tc: TestCase;
   /** 지금 스텝. 없으면 준비 중 */

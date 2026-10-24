@@ -9,7 +9,7 @@
  *     --resume <실행 id>     끝난 케이스는 건너뛰고 이어서
  *     --budget 8             누적 환산 비용(USD)이 넘으면 멈춤
  *     --allow-network        set_network(네트워크 끄기) 허용. 케이스가 끝나면 다시 켠다
- *     --package com.example.harukong.qa  --serial <시리얼>
+ *     --package <앱>  --serial <시리얼>   앱 기본값: qcard.local.json의 devApp (packages/device/src/devApp.ts)
  *
  * 플랜 사용 한도에 닿거나 Claude Code 로그인이 풀리면 일시정지한다(run.json status: paused).
  * 해소한 뒤 --resume <실행 id>로 이어 간다 (멈춘 케이스는 처음부터 다시).
@@ -23,7 +23,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
-import { AdbDriver, execAdb, listDevices } from '@qcard/device/node';
+import { AdbDriver, execAdb, listDevices, requireDevApp } from '@qcard/device/node';
 import { PREP_FLOWS, qaDocV130 } from '@qcard/fixtures';
 import {
   assertClaudeCodeReady,
@@ -41,13 +41,14 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     serial: { type: 'string' },
-    package: { type: 'string', default: 'com.example.harukong.qa' },
+    package: { type: 'string' },
     all: { type: 'boolean', default: false },
     resume: { type: 'string' },
     budget: { type: 'string', default: '8' },
     'allow-network': { type: 'boolean', default: false },
   },
 });
+const appPackage = requireDevApp(values.package);
 const MANUAL_TIMEOUT_MS = 10 * 60_000;
 const MAX_ENV_ERRORS = 3;
 const budget = Number(values.budget);
@@ -120,7 +121,7 @@ const meta = {
   id,
   startedAt: prev.startedAt ?? new Date().toISOString(),
   device: info,
-  appPackage: values.package,
+  appPackage: appPackage,
   docId: qaDocV130.id,
   allowNetwork: values['allow-network'],
 };
@@ -129,7 +130,7 @@ const writeMeta = (extra: object = {}) =>
   writeFile(metaFile, JSON.stringify({ ...meta, costUsd: total, ...extra }, null, 2) + '\n');
 await writeMeta({ status: 'running', planned: cases.length });
 log(
-  `${info.model} · Android ${info.osMajor} · ${values.package} · ${cases.length}케이스 · 예산 $${budget} → ${runDir}`,
+  `${info.model} · Android ${info.osMajor} · ${appPackage} · ${cases.length}케이스 · 예산 $${budget} → ${runDir}`,
 );
 
 const notify = (msg: string) =>
@@ -202,7 +203,7 @@ for (const [i, testCase] of cases.entries()) {
     {
       device,
       llm: createLlm({ mode: 'live', cassetteDir: '', meter }),
-      appPackage: values.package,
+      appPackage: appPackage,
       allowNetworkToggle: values['allow-network'],
       saveScreenshot: async (png, { index, treeText, foreground }) => {
         const file = `obs-${String(index).padStart(2, '0')}.png`;

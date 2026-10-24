@@ -52,8 +52,8 @@ export type CycleRunRequest = {
   tcIds?: string[];
   /** 일시정지된 Run을 이어서 (결과가 있는 칸은 건너뛴다) */
   resumeRunId?: string;
-  /** 빌드 파일이 없는 사이클(시드)에서 실행할 앱 */
-  fallbackPackage: string;
+  /** 빌드 파일이 없는 사이클(개발 시드)에서 실행할 앱. 없으면 그런 사이클은 시작하지 않는다 */
+  fallbackPackage?: string;
   allowNetworkToggle?: boolean;
 };
 
@@ -77,8 +77,14 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
       `이 디바이스(${info.model} · Android ${info.osMajor})는 사이클 대상이 아닙니다. 대상: ${cycle.targets.map((t) => t.label).join(', ')}`,
     );
   }
-  // 빌드 파일이 있으면 그 앱을, 없으면(시드) 지정한 앱을 실행한다
-  const appPackage = build.storagePath ? build.packageName : req.fallbackPackage;
+  // 빌드 파일이 있으면 그 앱을, 없으면(개발 시드) 지정한 앱을 실행한다
+  const chosen = build.storagePath ? build.packageName : req.fallbackPackage;
+  if (!chosen) {
+    throw new CycleRunError(
+      `빌드 ${build.version} (${build.buildNumber})에 APK 파일이 없어 실행할 앱을 알 수 없습니다. 웹에서 빌드를 올린 사이클로 실행하세요.`,
+    );
+  }
+  const appPackage: string = chosen;
   try {
     const r = await ensureBuild({
       storage: deps.storage,

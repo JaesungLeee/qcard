@@ -4,17 +4,19 @@
  *
  *   ANTHROPIC_API_KEY=… pnpm --filter @qcard/agent eval-locator [--only TC-ONBOARDING-020]
  *
- * 평가 세트: eval/locator/set.json · 관찰: eval/locator/obs/<TC>/obs-NN.txt
+ * 평가 세트는 실기기 관찰이라 저장소 밖에 둔다: ../qcard-specs/eval/locator/set.json · obs/<TC>/obs-NN.txt
+ * (QCARD_EVAL_DIR로 바꿀 수 있다). 대상 앱은 qcard.local.json의 devApp
  */
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { formatTree, type DeviceDriver, type UiElement } from '@qcard/device';
+import { requireDevApp } from '@qcard/device/node';
 import { createLlm, UsageMeter } from '@qcard/llm';
 import type { PointResult, VerificationPoint } from '@qcard/shared';
 import { outsideAppTree, verifyPoints, type Observation } from '../src';
 
-const APP = 'com.example.harukong.qa';
+const APP = requireDevApp();
 
 type Item = {
   tc: string;
@@ -27,7 +29,7 @@ type Item = {
   why: string;
 };
 
-const root = resolve(import.meta.dirname, '../eval/locator');
+const root = process.env.QCARD_EVAL_DIR ?? resolve(import.meta.dirname, '../../../../qcard-specs/eval/locator');
 const { values } = parseArgs({ options: { only: { type: 'string' } } });
 const items = (JSON.parse(await readFile(join(root, 'set.json'), 'utf8')) as Item[]).filter(
   (x) => !values.only || x.tc === values.only,

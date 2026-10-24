@@ -39,7 +39,7 @@ pnpm --filter @qcard/host-agent serve --user jaesung-lee # 개발: 에뮬레이�
 같은 일을 `serve`의 로컬 콘솔에서 한다.
 
 ```sh
-pnpm --filter @qcard/host-agent run-cycle --project haru --cycle cycle-130-device --user jaesung-lee [TC-ID…] [--package com.example.harukong.qa]
+pnpm --filter @qcard/host-agent run-cycle --project haru --cycle cycle-130-device --user jaesung-lee [TC-ID…] [--package <앱>]
 ```
 
 연결된 실기기에서 사이클 케이스를 실행해 에뮬레이터에 올린다(웹 QA 시트에 바로 보임, 플랜 사용량 차감).

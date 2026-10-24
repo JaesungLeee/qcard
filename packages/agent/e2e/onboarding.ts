@@ -29,8 +29,8 @@ export const slug = (c: (typeof E2E_CASES)[number]) => `${c.tcId}${'buggy' in c 
 
 function buggyScenario(): FakeScenario {
   const s = onboardingScenario();
-  const nav = syntheticScreen('home').tree.find((e) => e.resourceId === 'bottom_nav')!;
-  return { ...s, screens: { ...s.screens, profile: { tree: [...s.screens.profile!.tree, nav] } } };
+  const nav = syntheticScreen('today').tree.find((e) => e.resourceId === 'bottom_nav')!;
+  return { ...s, screens: { ...s.screens, nickname: { tree: [...s.screens.nickname!.tree, nav] } } };
 }
 
 export async function runE2E(c: (typeof E2E_CASES)[number], mode: LlmMode) {

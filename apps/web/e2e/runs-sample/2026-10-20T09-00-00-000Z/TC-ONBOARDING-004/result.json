@@ -12,7 +12,7 @@
       "action": "tap",
       "target": {
         "label": "초대 링크 복사",
-        "elementId": "invite_copy",
+        "elementId": "mate_copy",
         "bounds": {
           "x": 60,
           "y": 2150,
@@ -20,10 +20,10 @@
           "h": 130
         }
       },
-      "intent": "초대 링크 복사 버튼 누르기",
+      "intent": "초대 링크 복사 버튼을 눌러 링크를 복사한다",
       "screenshot": {
         "kind": "mock",
-        "screen": "invite"
+        "screen": "mate-invite"
       },
       "durationMs": 0,
       "index": 0,
@@ -32,12 +32,12 @@
     },
     {
       "action": "wait",
-      "intent": "복사 후 대기",
+      "intent": "복사 후 잠시 기다리며 화면 변화 여부를 확인한다",
       "screenshot": {
         "kind": "mock",
-        "screen": "invite-toast"
+        "screen": "mate-toast"
       },
-      "durationMs": 5000,
+      "durationMs": 3000,
       "index": 1,
       "videoTs": 500,
       "caseStepIndex": 0
@@ -50,11 +50,11 @@
       "method": "tree",
       "evidence": {
         "kind": "mock",
-        "screen": "invite-toast"
+        "screen": "mate-toast"
       },
       "result": "match",
       "observed": "찾은 요소: id=toast \"초대 링크를 복사했어요\"",
-      "reason": "요소가 화면에 있다 — 관찰 7에 '초대 링크를 복사했어요' 토스트가 있어 복사 완료 토스트로 볼 수 있다.",
+      "reason": "요소가 화면에 있다 — 관찰 7에 '초대 링크를 복사했어요' 토스트가 있음",
       "targetElement": "toast",
       "targetBounds": {
         "x": 90,
@@ -69,12 +69,12 @@
       "method": "tree",
       "evidence": {
         "kind": "mock",
-        "screen": "invite"
+        "screen": "mate-invite"
       },
       "result": "match",
-      "observed": "찾은 요소: id=invite_title \"함께할 메이트를 불러볼까요?\"",
-      "reason": "요소가 화면에 있다 — 마지막 관찰 8에 메이트 초대 스텝의 제목 '함께할 메이트를 불러볼까요?'가 그대로 보인다.",
-      "targetElement": "invite_title",
+      "observed": "찾은 요소: id=mate_title \"함께할 메이트를 불러볼까요?\"",
+      "reason": "요소가 화면에 있다 — 마지막 관찰에서 메이트 초대 스텝 제목이 그대로 보임",
+      "targetElement": "mate_title",
       "targetBounds": {
         "x": 60,
         "y": 320,
@@ -87,8 +87,8 @@
   "decidedBy": {
     "kind": "agent"
   },
-  "tokens": 45593,
-  "costUsd": 0.0322219,
+  "tokens": 72384,
+  "costUsd": 0.052496100000000004,
   "verdict": "pass",
   "agentVerdict": "pass"
 }

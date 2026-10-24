@@ -93,7 +93,7 @@ export function childLabels(tree: UiElement[]): Map<string, string> {
 
 /**
  * LLM 입력용 트리 텍스트. 한 줄에 요소 하나, 의미 없는 컨테이너는 뺀다.
- * 예: `e12 Button "저장" id=profile_save [60,2160 960x160] clickable`, `e45 View label="저장" […] clickable`
+ * 예: `e12 Button "저장" id=nickname_save [60,2160 960x160] clickable`, `e45 View label="저장" […] clickable`
  */
 export function formatTree(tree: UiElement[]): string {
   const labels = childLabels(tree);

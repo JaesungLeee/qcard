@@ -62,9 +62,9 @@ describe('groupRows', () => {
     const groups = rows.filter((r) => r.kind === 'group');
     expect(groups.map((g) => g.subFeature)).toEqual([
       '온보딩을 처음부터 끝까지 밟는다',
-      '습관 만들기를 건너뛴다',
-      '첫 습관에 친구를 초대한다',
-      '사용법 안내을 본다',
+      '첫 습관 만들기를 건너뛴다',
+      '첫 습관에 메이트를 초대한다',
+      '사용법 안내를 본다',
       '온보딩을 끝낸 뒤 앱을 다시 켠다',
     ]);
     expect(rows.filter((r) => r.kind === 'case')).toHaveLength(62);
@@ -204,7 +204,7 @@ describe('coverage · prepFlowUsage', () => {
     const d = await doc130();
     const usage = prepFlowUsage(d.cases);
     expect(usage.get('pf-clean')).toHaveLength(61);
-    const total = ['pf-room', 'pf-invite', 'pf-tutorial', 'pf-done'].reduce(
+    const total = ['pf-habit', 'pf-mate', 'pf-guide', 'pf-done'].reduce(
       (n, id) => n + (usage.get(id)?.length ?? 0),
       0,
     );

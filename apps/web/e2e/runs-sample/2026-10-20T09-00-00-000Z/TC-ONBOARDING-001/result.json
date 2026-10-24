@@ -12,7 +12,7 @@
   "steps": [
     {
       "action": "wait",
-      "intent": "스플래시 종료 대기",
+      "intent": "스플래시가 끝나고 온보딩 화면이 자리 잡을 때까지 대기",
       "screenshot": {
         "kind": "mock",
         "screen": "splash"
@@ -30,12 +30,12 @@
       "method": "tree",
       "evidence": {
         "kind": "mock",
-        "screen": "profile"
+        "screen": "nickname"
       },
       "result": "match",
-      "observed": "찾은 요소: id=profile_title \"닉네임 설정\"",
-      "reason": "요소가 화면에 있다 — 마지막 관찰에 '닉네임 설정' 제목(profile_title)이 있어 닉네임 설정 스텝 화면임을 보여 준다.",
-      "targetElement": "profile_title",
+      "observed": "찾은 요소: id=nickname_title \"닉네임 설정\"",
+      "reason": "요소가 화면에 있다 — '닉네임 설정' 제목이 닉네임 설정 스텝 화면임을 보여 준다.",
+      "targetElement": "nickname_title",
       "targetBounds": {
         "x": 300,
         "y": 110,
@@ -49,11 +49,11 @@
       "method": "tree",
       "evidence": {
         "kind": "mock",
-        "screen": "profile"
+        "screen": "nickname"
       },
       "result": "mismatch",
-      "observed": "찾은 요소: id=bottom_nav \"홈 · 방 · 마이\"",
-      "reason": "보이면 안 되는 요소가 있다 — 보이지 않아야 할 바텀 네비게이션(bottom_nav)이 마지막 관찰에 존재한다.",
+      "observed": "찾은 요소: id=bottom_nav \"오늘 · 기록 · 마이\"",
+      "reason": "보이면 안 되는 요소가 있다 — 보이면 안 되는 bottom_nav 요소가 마지막 관찰에 존재한다.",
       "targetElement": "bottom_nav",
       "targetBounds": {
         "x": 0,
@@ -67,9 +67,9 @@
   "decidedBy": {
     "kind": "agent"
   },
-  "tokens": 14944,
-  "costUsd": 0.0119907,
+  "tokens": 12418,
+  "costUsd": 0.015548000000000001,
   "verdict": "fail",
   "agentVerdict": "fail",
-  "actualSummary": "바텀 네비게이션이 화면에 보이지 않는다. → 찾은 요소: id=bottom_nav \"홈 · 방 · 마이\""
+  "actualSummary": "바텀 네비게이션이 화면에 보이지 않는다. → 찾은 요소: id=bottom_nav \"오늘 · 기록 · 마이\""
 }

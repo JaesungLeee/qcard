@@ -1,0 +1,405 @@
+{
+  "key": "618579737b91d70ddc5cad4251b46dc49b62c90788f9e8661eb11ff04102d648",
+  "recordedAt": "2026-10-24T04:02:10.016Z",
+  "meta": {
+    "role": "executor",
+    "caseId": "TC-ONBOARDING-005"
+  },
+  "request": {
+    "model": "claude-sonnet-5-5",
+    "max_tokens": 4096,
+    "output_config": {
+      "effort": "medium"
+    },
+    "cache_control": {
+      "type": "ephemeral"
+    },
+    "system": [
+      {
+        "type": "text",
+        "text": "너는 Android 앱 QA Executor다. QA 케이스의 단계를 순서대로 디바이스에서 수행한다.\n\n- 매 턴 화면 관찰(접근성 트리, 가능하면 스크린샷)을 받는다. 요소는 트리의 번호(e12)나 resource-id로 가리킨다. 트리에 없는 요소만 tap_point를 쓴다.\n- 스크린샷은 기본으로 오지 않는다. 트리로 알 수 없을 때만 view_screen으로 본다(글자 없는 아이콘, 이미지·배치, 트리가 비거나 화면과 안 맞아 보일 때).\n- 한 턴에 디바이스 액션은 하나만 부른다. 결과 화면을 본 뒤 다음 액션을 정한다.\n- 단계 하나를 끝내면 step_done(case_step_index)을 부른다. \"화면을 확인한다\"처럼 확인만 하는 단계는 액션 없이 step_done을 부른다.\n- 기대 결과 판정은 하지 않는다. 기대와 다르게 보여도 단계를 수행할 수 있으면 진행한다.\n- 스플래시·로딩처럼 화면이 바뀌는 중이면 wait로 기다린 뒤 진행한다. 확인만 하는 단계도 화면이 자리 잡은 뒤 step_done을 부른다.\n- 사전조건이 아직 갖춰지지 않았으면 단계 전에 UI로 갖춘다(예: 입력돼 있어야 할 값 입력).\n- 기대 결과는 이 케이스가 무엇을 확인하는지 알려 주는 참고다. 단계가 \"~상황을 만든다\"처럼 막연하면 그 결과를 확인할 수 있는 상황과 조작을 만든다(예: 유지되는지 보려면 먼저 값을 입력해 두고, 실패 처리를 보려면 실패 조건을 만든 뒤 해당 버튼을 누른다). 결과가 좋게 보이도록 단계에 없는 우회를 하지 않는다.\n- 예상치 못한 팝업·권한 요청·키보드가 단계를 막으면 닫고 진행한다.\n- 앱이 꺼지거나 크래시 대화상자가 보이면 give_up(kind=crash). 진행할 방법이 없으면 give_up(kind=stuck).\n- 비밀값은 {{secret.이름}} 플레이스홀더 그대로 입력한다.",
+        "cache_control": {
+          "type": "ephemeral"
+        }
+      }
+    ],
+    "tools": [
+      {
+        "name": "tap",
+        "description": "접근성 트리의 요소를 탭한다. 요소가 트리에 있으면 tap_point보다 이것을 쓴다.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "element_ref": {
+              "type": "string",
+              "description": "접근성 트리의 요소 번호(예: e12) 또는 resource-id"
+            },
+            "intent": {
+              "type": "string",
+              "description": "이 액션을 하는 이유 (스텝 타임라인의 \"의도\"로 기록된다)"
+            }
+          },
+          "required": [
+            "element_ref",
+            "intent"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true
+      },
+      {
+        "name": "tap_point",
+        "description": "트리에 없는 요소를 스크린샷 좌표로 탭한다.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "integer",
+              "description": "디바이스 px (minimum: -9007199254740991, maximum: 9007199254740991)"
+            },
+            "y": {
+              "type": "integer",
+              "description": "디바이스 px (minimum: -9007199254740991, maximum: 9007199254740991)"
+            },
+            "intent": {
+              "type": "string",
+              "description": "이 액션을 하는 이유 (스텝 타임라인의 \"의도\"로 기록된다)"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "intent"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true
+      },
+      {
+        "name": "input_text",
+        "description": "요소를 탭해 포커스한 뒤 텍스트를 입력한다.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "element_ref": {
+              "type": "string",
+              "description": "접근성 트리의 요소 번호(예: e12) 또는 resource-id"
+            },
+            "text": {
+              "type": "string",
+              "description": "입력할 값. 비밀값은 {{secret.이름}} 플레이스홀더로 쓴다"
+            },
+            "intent": {
+              "type": "string",
+              "description": "이 액션을 하는 이유 (스텝 타임라인의 \"의도\"로 기록된다)"
+            }
+          },
+          "required": [
+            "element_ref",
+            "text",
+            "intent"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true
+      },
+      {
+        "name": "swipe",
+        "description": "화면 가운데에서 지정 방향으로 쓸어넘긴다. left는 다음 페이지, up은 아래 내용 보기.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "direction": {
+              "type": "string",
+              "enum": [
+                "up",
+                "down",
+                "left",
+                "right"
+              ]
+            },
+            "intent": {
+              "type": "string",
+              "description": "이 액션을 하는 이유 (스텝 타임라인의 \"의도\"로 기록된다)"
+            }
+          },
+          "required": [
+            "direction",
+            "intent"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true
+      },
+      {
+        "name": "press_key",
+        "description": "시스템 키를 누른다.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "enum": [
+                "back",
+                "home",
+                "enter"
+              ]
+            },
+            "intent": {
+              "type": "string",
+              "description": "이 액션을 하는 이유 (스텝 타임라인의 \"의도\"로 기록된다)"
+            }
+          },
+          "required": [
+            "key",
+            "intent"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true
+      },
+      {
+        "name": "restart_app",
+        "description": "테스트 대상 앱을 강제 종료했다가 다시 실행한다 (데이터는 유지).",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "intent": {
+              "type": "string",
+              "description": "이 액션을 하는 이유 (스텝 타임라인의 \"의도\"로 기록된다)"
+            }
+          },
+          "required": [
+            "intent"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true
+      },
+      {
+        "name": "reopen_app",
+        "description": "백그라운드로 간 테스트 대상 앱을 종료하지 않고 다시 앞으로 가져온다 (최근 앱에서 다시 여는 것과 같다).",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "intent": {
+              "type": "string",
+              "description": "이 액션을 하는 이유 (스텝 타임라인의 \"의도\"로 기록된다)"
+            }
+          },
+          "required": [
+            "intent"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true
+      },
+      {
+        "name": "set_network",
+        "description": "디바이스 네트워크를 켜거나 끈다. 네트워크 실패 상황을 만들 때만 쓴다. 케이스가 끝나면 자동으로 다시 켜진다. 허용되지 않은 실행이면 에러가 난다.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "wifi": {
+              "type": "boolean",
+              "description": "Wi-Fi를 켤지"
+            },
+            "data": {
+              "type": "boolean",
+              "description": "모바일 데이터를 켤지"
+            },
+            "intent": {
+              "type": "string",
+              "description": "이 액션을 하는 이유 (스텝 타임라인의 \"의도\"로 기록된다)"
+            }
+          },
+          "required": [
+            "wifi",
+            "data",
+            "intent"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true
+      },
+      {
+        "name": "wait",
+        "description": "로딩·애니메이션이 끝나기를 기다린다.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "seconds": {
+              "type": "integer",
+              "description": "(minimum: 1, maximum: 10)"
+            },
+            "intent": {
+              "type": "string",
+              "description": "이 액션을 하는 이유 (스텝 타임라인의 \"의도\"로 기록된다)"
+            }
+          },
+          "required": [
+            "seconds",
+            "intent"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true
+      },
+      {
+        "name": "view_screen",
+        "description": "지금 화면의 스크린샷을 본다. 트리로 알 수 없을 때만 쓴다: 글자 없는 아이콘 버튼, 이미지·색·배치, 트리가 비었거나 화면과 안 맞아 보일 때.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "description": "트리만으로 알 수 없는 것"
+            }
+          },
+          "required": [
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true
+      },
+      {
+        "name": "step_done",
+        "description": "케이스 단계 하나를 끝냈다고 알린다. 다음 단계로 넘어가기 전에 부른다.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "case_step_index": {
+              "type": "integer",
+              "description": "끝낸 케이스 단계 번호 (0부터) (minimum: -9007199254740991, maximum: 9007199254740991)"
+            },
+            "summary": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "case_step_index",
+            "summary"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true
+      },
+      {
+        "name": "give_up",
+        "description": "더 진행할 수 없을 때 이유와 함께 멈춘다.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "crash",
+                "prep_failed",
+                "env_unavailable",
+                "stuck",
+                "environment_error"
+              ]
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        "strict": true
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "준비 플로우 \"온보딩 · 사용법 안내 스텝 1\"를 수행한다. 끝나면 이 상태여야 한다: 제목 `사용법 안내`과 STEP 1이 보인다\n\n단계:\n0. 닉네임 `콩콩이` 입력\n1. [저장]\n2. 습관 [건너뛰기]"
+          },
+          {
+            "type": "text",
+            "text": "[관찰 0] 진행: 단계 0 수행 중 — \"닉네임 `콩콩이` 입력\"\n포그라운드 앱: com.example.harukong\n접근성 트리:\ne0 ImageView desc=\"하루콩\" id=splash_logo [390,1000 300x300]"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "스플래시 화면이다. 화면이 바뀔 때까지 기다린다.",
+            "citations": null
+          },
+          {
+            "type": "tool_use",
+            "id": "toolu_cli_mvlvhbf3_26",
+            "name": "wait",
+            "input": {
+              "seconds": 3,
+              "intent": "스플래시가 끝나고 닉네임 입력 화면이 나타나길 기다림"
+            },
+            "caller": {
+              "type": "direct"
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "toolu_cli_mvlvhbf3_26",
+            "content": "수행했습니다."
+          },
+          {
+            "type": "text",
+            "text": "[관찰 1] 진행: 단계 0 수행 중 — \"닉네임 `콩콩이` 입력\"\n포그라운드 앱: com.example.harukong\n접근성 트리:\ne0 TextView \"닉네임 설정\" id=nickname_title [300,110 480x100]\ne1 ImageView desc=\"캐릭터 이미지\" id=nickname_avatar [390,320 300x300]\ne2 EditText \"닉네임\" id=nickname_input [60,720 960x150] clickable\ne3 TextView \"2~10자, 한글·영문·숫자\" id=nickname_helper [60,890 960x70]\ne4 Button \"저장\" id=nickname_save [60,2160 960x160] clickable"
+          }
+        ]
+      }
+    ]
+  },
+  "response": {
+    "id": "msg_cli_mvlvhcrk",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-sonnet-5-5",
+    "content": [
+      {
+        "type": "text",
+        "text": "닉네임 입력 화면이다. 입력창에 콩콩이를 입력한다.",
+        "citations": null
+      },
+      {
+        "type": "tool_use",
+        "id": "toolu_cli_mvlvhcrk_27",
+        "name": "input_text",
+        "input": {
+          "element_ref": "e2",
+          "text": "콩콩이",
+          "intent": "닉네임 입력란에 콩콩이 입력"
+        },
+        "caller": {
+          "type": "direct"
+        }
+      }
+    ],
+    "stop_reason": "tool_use",
+    "stop_sequence": null,
+    "stop_details": null,
+    "container": null,
+    "usage": {
+      "input_tokens": 2,
+      "output_tokens": 106,
+      "cache_creation_input_tokens": 1030,
+      "cache_read_input_tokens": 3583
+    }
+  }
+}

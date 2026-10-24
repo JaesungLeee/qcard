@@ -22,10 +22,10 @@
           1200
         ]
       },
-      "intent": "튜토리얼 다음 스텝으로 이동",
+      "intent": "안내를 다음 스텝(2/5)으로 넘기기",
       "screenshot": {
         "kind": "mock",
-        "screen": "tutorial-1"
+        "screen": "guide-1"
       },
       "durationMs": 0,
       "index": 0,
@@ -44,10 +44,10 @@
           1200
         ]
       },
-      "intent": "다음 스텝으로 이동",
+      "intent": "안내를 3/5로 넘기기",
       "screenshot": {
         "kind": "mock",
-        "screen": "tutorial-2"
+        "screen": "guide-2"
       },
       "durationMs": 0,
       "index": 1,
@@ -66,10 +66,10 @@
           1200
         ]
       },
-      "intent": "다음 스텝으로 이동",
+      "intent": "안내를 4/5로 넘기기",
       "screenshot": {
         "kind": "mock",
-        "screen": "tutorial-3"
+        "screen": "guide-3"
       },
       "durationMs": 0,
       "index": 2,
@@ -88,10 +88,10 @@
           1200
         ]
       },
-      "intent": "스텝 5로 이동",
+      "intent": "안내를 5/5로 넘기기",
       "screenshot": {
         "kind": "mock",
-        "screen": "tutorial-4"
+        "screen": "guide-4"
       },
       "durationMs": 0,
       "index": 3,
@@ -102,7 +102,7 @@
       "action": "tap",
       "target": {
         "label": "하루콩 시작하기",
-        "elementId": "tutorial_start",
+        "elementId": "guide_start",
         "bounds": {
           "x": 60,
           "y": 2160,
@@ -110,10 +110,10 @@
           "h": 160
         }
       },
-      "intent": "하루콩 시작하기 누르기",
+      "intent": "하루콩 시작하기 버튼 누르기",
       "screenshot": {
         "kind": "mock",
-        "screen": "tutorial-5"
+        "screen": "guide-5"
       },
       "durationMs": 0,
       "index": 4,
@@ -128,24 +128,24 @@
       "method": "tree",
       "evidence": {
         "kind": "mock",
-        "screen": "home"
+        "screen": "today"
       },
       "observed": "화면으로 알 수 없음",
       "result": "unknown",
-      "reason": "온보딩 완료 기록은 앱 내부에 저장되는 상태로, 화면 요소로 나타나지 않아 접근성 트리만으로 알 수 없다."
+      "reason": "온보딩 완료 기록은 내부 상태로 화면 요소로 확인할 수 없다."
     },
     {
       "pointId": "TC-ONBOARDING-005-P2",
-      "expected": "하루콩 시작하기를 누른 뒤 홈 탭 화면이 열려 있다.",
+      "expected": "하루콩 시작하기를 누른 뒤 오늘 탭 화면이 열려 있다.",
       "method": "tree",
       "evidence": {
         "kind": "mock",
-        "screen": "home"
+        "screen": "today"
       },
       "result": "match",
-      "observed": "찾은 요소: id=home_title \"하루콩\"",
-      "reason": "요소가 화면에 있다 — 마지막 관찰에 홈 화면 제목 '하루콩'(home_title)이 있어 홈 탭 화면임을 보여 준다.",
-      "targetElement": "home_title",
+      "observed": "찾은 요소: id=today_title \"오늘\"",
+      "reason": "요소가 화면에 있다 — 마지막 관찰에 '오늘' 제목(today_title)이 있어 오늘 탭 화면임을 보여 준다.",
+      "targetElement": "today_title",
       "targetBounds": {
         "x": 60,
         "y": 110,
@@ -155,15 +155,15 @@
     },
     {
       "pointId": "TC-ONBOARDING-005-P3",
-      "expected": "홈 탭에서 바텀 네비게이션이 보인다.",
+      "expected": "오늘 탭에서 바텀 네비게이션이 보인다.",
       "method": "tree",
       "evidence": {
         "kind": "mock",
-        "screen": "home"
+        "screen": "today"
       },
       "result": "match",
-      "observed": "찾은 요소: id=bottom_nav \"홈 · 방 · 마이\"",
-      "reason": "요소가 화면에 있다 — 마지막 관찰에 '홈 · 방 · 마이' 바텀 네비게이션(bottom_nav)이 보인다.",
+      "observed": "찾은 요소: id=bottom_nav \"오늘 · 기록 · 마이\"",
+      "reason": "요소가 화면에 있다 — 오늘 탭 화면에 바텀 네비게이션(bottom_nav)이 보인다.",
       "targetElement": "bottom_nav",
       "targetBounds": {
         "x": 0,
@@ -177,8 +177,8 @@
   "decidedBy": {
     "kind": "agent"
   },
-  "tokens": 63841,
-  "costUsd": 0.042518700000000006,
+  "tokens": 76661,
+  "costUsd": 0.054525800000000006,
   "verdict": "check",
   "agentVerdict": "check",
   "actualSummary": "온보딩 완료 표시가 앱 설치에 기록된다. → 화면으로 알 수 없음"

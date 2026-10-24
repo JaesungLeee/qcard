@@ -6,7 +6,7 @@
  *
  *   pnpm --filter @qcard/host-agent run-cycle --project haru --cycle cycle-130-1 [TC-ID…]
  *     --user <시드 사용자>          개발용: 에뮬레이터에서 브라우저 없이 그 사용자 이름으로 연결
- *     --package com.example.harukong.qa   빌드 파일이 없는 사이클(시드)에서 실행할 앱 (앱 데이터 초기화는 이 앱에만)
+ *     --package <앱>               빌드 파일이 없는 사이클(개발 시드)에서 실행할 앱 (앱 데이터 초기화는 이 앱에만). 기본: qcard.local.json의 devApp
  *     --serial <시리얼>            디바이스가 여러 대일 때
  *     --resume <run id>            일시정지된 Run을 이어서 (이미 결과가 있는 칸은 건너뜀)
  *     --allow-network              set_network(네트워크 끄기) 허용
@@ -21,7 +21,7 @@
  * 먼저 `connect`로 이 PC를 계정에 연결해 둔다(F-TM-14).
  */
 import { parseArgs } from 'node:util';
-import { AdbDriver, listDevices } from '@qcard/device/node';
+import { AdbDriver, devAppPackage, listDevices } from '@qcard/device/node';
 import { assertClaudeCodeReady, llmProviderFromEnv } from '@qcard/llm';
 import type { ClaudeCodeState } from '@qcard/shared';
 import { HostDisconnectedError, openHostSession } from './connect';
@@ -36,7 +36,7 @@ const { values, positionals } = parseArgs({
     project: { type: 'string' },
     cycle: { type: 'string' },
     user: { type: 'string' },
-    package: { type: 'string', default: 'com.example.harukong.qa' },
+    package: { type: 'string', default: devAppPackage() },
     serial: { type: 'string' },
     resume: { type: 'string' },
     'allow-network': { type: 'boolean', default: false },

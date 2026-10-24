@@ -15,7 +15,7 @@ pnpm workspace + Turborepo, TypeScript 단일 언어.
 | `packages/ui`       | 디자인 시스템 "Montage for qcard" — Montage 재수출, `--qc-*` 토큰, `VerdictBadge`                                            |
 | `packages/shared`   | 도메인 스키마(Zod, PRD §6.4)·표시용 라벨·membership 규칙. Agent 도구·Verifier 출력 스키마는 `src/agent.ts`                   |
 | `packages/data`     | 데이터 접근 인터페이스 `QcardApi`, 공용 계산 `logic.ts`, Firestore 구현, 에뮬레이터 시드                                     |
-| `packages/fixtures` | 하루콩 onboarding-flow 스펙에서 만든 결정적 데이터와 목업 디바이스 화면(`screens.ts`)·합성 시나리오(`device.ts`)               |
+| `packages/fixtures` | 가상 앱 하루콩의 온보딩 스펙(`spec/`)에서 만든 결정적 데이터와 목업 디바이스 화면(`screens.ts`)·합성 시나리오(`device.ts`)   |
 | `packages/device`   | `DeviceDriver`, 접근성 트리 파서, `AdbDriver`·녹화(`@qcard/device/node`), `FakeDevice`                                       |
 | `packages/llm`      | `LlmClient`, 실제 호출(본인 Claude Code `claude -p` = 기본 / API 키 = 개발용), 녹화·재생(cassette), 사용량·한도              |
 | `packages/agent`    | Executor 루프(`runSteps`), 검증 포인트 판정(`verifyPoints`·`settle`), 판정 집계(`judge`), 케이스 실행(`runCase`), `e2e/`     |
@@ -50,4 +50,4 @@ pnpm이 전역에 없으면 `npx -y pnpm@10.34.6 <명령>`으로 실행한다.
 
 - 배포(Firebase·gcloud), `git push --force`, 비밀값 조회 — `guard-bash.sh`가 막는다. 필요하면 사용자에게 명령을 알려준다.
 - `.env`·서비스 계정 키 읽기(`settings.json`의 deny).
-- 실기기 대상 파괴적 ADB 명령(앱 데이터 삭제, 앱 삭제, 재부팅, 초기화, `/data/local/tmp` 밖 파일 삭제)을 사용자 확인 없이 실행. `guard-bash.sh`가 막으며, `pm clear`는 QA 앱 `com.example.harukong.qa`만 허용한다.
+- 실기기 대상 파괴적 ADB 명령(앱 데이터 삭제, 앱 삭제, 재부팅, 초기화, `/data/local/tmp` 밖 파일 삭제)을 사용자 확인 없이 실행. `guard-bash.sh`가 막으며, `pm clear`는 로컬 설정 `qcard.local.json`(gitignore)의 `devApp`만 허용한다.

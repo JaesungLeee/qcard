@@ -32,6 +32,7 @@ import { hash } from '@qcard/shared';
 import { rowHash } from '@qcard/spec';
 import raw from './data/onboarding-flow.json';
 import generatedPoints from './data/onboarding-points.json';
+import { APP_PACKAGE } from './device';
 import { SCREENS, element, type MockElement } from './screens';
 
 type Row = {
@@ -87,48 +88,48 @@ export const PREP_FLOWS: PrepFlow[] = [
     steps: ['앱 데이터 초기화(pm clear)', '앱 실행'],
   },
   {
-    id: 'pf-room',
+    id: 'pf-habit',
     name: '온보딩 · 첫 습관 만들기 스텝',
     kind: 'data_state',
     check: '첫 습관 만들기 스텝에 [건너뛰기]가 보인다',
     steps: ['닉네임 `콩콩이` 입력', '[저장]'],
   },
   {
-    id: 'pf-invite',
+    id: 'pf-mate',
     name: '온보딩 · 메이트 초대 스텝',
     kind: 'data_state',
     check: '`함께할 메이트를 불러볼까요?`가 보인다',
-    steps: ['닉네임 `콩콩이` 입력', '[저장]', '습관 이름 `물 2L 마시기` 입력', '[방 만들기]'],
+    steps: ['닉네임 `콩콩이` 입력', '[저장]', '습관 이름 `물 2L 마시기` 입력', '[습관 만들기]'],
   },
   {
-    id: 'pf-tutorial',
-    name: '온보딩 · 튜토리얼 스텝 1',
+    id: 'pf-guide',
+    name: '온보딩 · 사용법 안내 스텝 1',
     kind: 'data_state',
-    check: '제목 `튜토리얼`과 STEP 1이 보인다',
+    check: '제목 `사용법 안내`과 STEP 1이 보인다',
     steps: ['닉네임 `콩콩이` 입력', '[저장]', '습관 [건너뛰기]'],
   },
   {
     id: 'pf-done',
     name: '온보딩 완료',
     kind: 'data_state',
-    check: '홈 탭과 바텀 네비게이션이 보인다',
-    steps: ['닉네임 `콩콩이` 입력', '[저장]', '습관 [건너뛰기]', '튜토리얼 [건너뛰기]'],
+    check: '오늘 탭과 바텀 네비게이션이 보인다',
+    steps: ['닉네임 `콩콩이` 입력', '[저장]', '습관 [건너뛰기]', '사용법 안내 [건너뛰기]'],
   },
 ];
 
 /** Given 문장으로 케이스가 시작할 화면과 준비 플로우를 정한다. */
 function startOf(row: Row): { screen: string; prep: string[] } {
   // 링크를 받기 전에 네트워크를 끊어야 하므로 메이트 초대 스텝에 들어가기 전(습관 생성)에서 시작한다
-  if (row.id === 'EC-008') return { screen: 'room-create', prep: ['pf-clean', 'pf-room'] };
+  if (row.id === 'EC-008') return { screen: 'habit-create', prep: ['pf-clean', 'pf-habit'] };
   const g = `${row.given} ${row.kind === 'EC' ? row.title : ''}`;
-  const step = /(?:튜토리얼 스텝|dot으로 스텝) ([1-5])/.exec(g);
-  if (/완료한|완료 표시가 기록|완료해/.test(g)) return { screen: 'home', prep: ['pf-clean', 'pf-done'] };
-  if (step) return { screen: `tutorial-${step[1]}`, prep: ['pf-clean', 'pf-tutorial'] };
-  if (/튜토리얼/.test(g)) return { screen: 'tutorial-1', prep: ['pf-clean', 'pf-tutorial'] };
-  if (/메이트 초대|초대 링크|공유 시트/.test(g)) return { screen: 'invite', prep: ['pf-clean', 'pf-invite'] };
-  if (/습관 생성|습관 스텝|방 정보|습관 이름|프로필을 막 저장|닉네임 저장 직후|습관을 만들/.test(g))
-    return { screen: 'room-create', prep: ['pf-clean', 'pf-room'] };
-  return { screen: 'profile', prep: ['pf-clean'] };
+  const step = /(?:사용법 안내 스텝|dot으로 스텝) ([1-5])/.exec(g);
+  if (/끝낸|완료 표시가 기록|완료해/.test(g)) return { screen: 'today', prep: ['pf-clean', 'pf-done'] };
+  if (step) return { screen: `guide-${step[1]}`, prep: ['pf-clean', 'pf-guide'] };
+  if (/사용법 안내/.test(g)) return { screen: 'guide-1', prep: ['pf-clean', 'pf-guide'] };
+  if (/메이트 초대|초대 링크|공유 시트/.test(g)) return { screen: 'mate-invite', prep: ['pf-clean', 'pf-mate'] };
+  if (/첫 습관|습관 이름|닉네임을 막 저장|닉네임 저장 직후|습관을 만들/.test(g))
+    return { screen: 'habit-create', prep: ['pf-clean', 'pf-habit'] };
+  return { screen: 'nickname', prep: ['pf-clean'] };
 }
 
 // ---------------------------------------------------------------- 케이스 변환
@@ -153,7 +154,7 @@ function pointsOf(key: string, tcId: string): VerificationPoint[] {
 const STEP_OVERRIDES: Record<string, CaseBody['steps']> = {
   'EC-008': [
     { text: 'Wi-Fi와 모바일 데이터를 끈다 (초대 링크를 받지 못하는 상황)', manual: false },
-    { text: '습관 이름 `물 2L 마시기`을 입력하고 방을 만들어 메이트 초대 스텝에 들어간다', manual: false },
+    { text: '습관 이름 `물 2L 마시기`를 입력하고 습관을 만들어 메이트 초대 스텝에 들어간다', manual: false },
     { text: '[초대 링크 복사]와 [메이트 초대하기]를 차례로 누른다', manual: false },
   ],
 };
@@ -163,7 +164,7 @@ const MANUAL_STEP_CASES: Record<string, CaseBody['steps']> = {
   'TS-021': [
     { text: '[메이트 초대하기]를 눌러 OS 공유 시트를 연다', manual: false },
     {
-      text: '공유 시트에서 카카오톡으로 링크를 보내거나 시트를 취소한다 (외부 발송이므로 실행자가 직접)',
+      text: '공유 시트에서 메신저로 링크를 보내거나 시트를 취소한다 (외부 발송이므로 실행자가 직접)',
       manual: true,
     },
   ],
@@ -191,7 +192,7 @@ function bodyOf(row: Row, tcId: string): CaseBody {
     preconditions,
     prepFlowIds: prep,
     cleanState: prep.includes('pf-clean'),
-    data: prep.includes('pf-invite')
+    data: prep.includes('pf-mate')
       ? '닉네임 `콩콩이`, 습관 이름 `물 2L 마시기`'
       : prep.length > 1
         ? '닉네임 `콩콩이`'
@@ -209,7 +210,7 @@ function bodyOf(row: Row, tcId: string): CaseBody {
 const PREVIOUS_THEN: Record<string, string> = {
   'TS-008': '아무 반응 없이 첫 습관 만들기 스텝에 머무른다',
   'EC-004': '아무 반응 없이 현재 스텝에 머무른다. 온보딩은 종료되지 않는다',
-  'TS-019': '1.5초 뒤 튜토리얼 스텝 1로 자동 이동한다',
+  'TS-019': '1.5초 뒤 사용법 안내 스텝 1로 자동 이동한다',
 };
 /** 검증 포인트 생성기(packages/agent/scripts/gen-points.ts)의 입력 */
 export const SPEC_INPUT = { spec: SPEC, rows, previousThen: PREVIOUS_THEN, requirements: raw.requirements };
@@ -238,7 +239,7 @@ export const GITHUB: Record<string, string> = {
 
 /**
  * 하루콩 외의 프로젝트: 빈 프로젝트(Admin), 내가 Viewer인 프로젝트, 삭제 예정 프로젝트, 아직 멤버가 아닌 프로젝트(초대 대기).
- * 데이터(QA 문서·사이클)는 하루콩에만 있다.
+ * 데이터(QA 문서·사이클)는 하루콩에만 있다. 모두 가상의 앱이다.
  */
 export const otherProjects: Project[] = [
   {
@@ -253,7 +254,7 @@ export const otherProjects: Project[] = [
     id: 'roomie',
     name: 'Roomie',
     appName: '루미',
-    packageName: 'com.roomie.app',
+    packageName: 'com.example.roomie',
     createdBy: PEOPLE.dev,
     createdAt: T(5, 14),
   },
@@ -271,7 +272,7 @@ export const otherProjects: Project[] = [
     id: 'atlas',
     name: 'Atlas',
     appName: '아틀라스',
-    packageName: 'com.atlas.trip',
+    packageName: 'com.example.atlas',
     createdBy: PEOPLE.dev,
     createdAt: T(8, 9),
   },
@@ -419,7 +420,7 @@ function buildCases(version: '1.2.0' | '1.3.0'): TestCase[] {
   const removedBody: CaseBody = {
     title: '온보딩 상단 진행 인디케이터',
     preconditions: ['온보딩의 첫 습관 만들기 스텝에 있다'],
-    prepFlowIds: ['pf-clean', 'pf-room'],
+    prepFlowIds: ['pf-clean', 'pf-habit'],
     cleanState: true,
     steps: [{ text: '화면 상단을 확인한다', manual: false }],
     verificationPoints: [
@@ -478,7 +479,7 @@ function questions(cases: TestCase[]): SpecQuestion[] {
       id: 'Q-2',
       requirementId: reqId('FR-022'),
       caseIds: [tc('TS-038')],
-      text: '"프로필은 있으나 온보딩 완료 표시가 없는 설치"를 테스트에서 어떻게 만드나요? 온보딩 중 강제 종료로 만들면 되는지, 디버그 메뉴가 따로 필요한지 확인 부탁드립니다.',
+      text: '"닉네임은 있으나 온보딩 완료 표시가 없는 설치"를 테스트에서 어떻게 만드나요? 온보딩 중 강제 종료로 만들면 되는지, 디버그 메뉴가 따로 필요한지 확인 부탁드립니다.',
       assignee: PEOPLE.dev,
       status: 'open',
       comments: [],
@@ -513,19 +514,19 @@ const SUGGESTIONS: SpecSuggestion[] = [
     id: 'S-3',
     requirementId: reqId('FR-013'),
     technique: 'negative',
-    text: '초대 링크를 확보하지 못한 상태에서 [X]로 튜토리얼에 나아가는 경로가 TS로 없습니다. EC-008은 실패 알림만 다룹니다.',
+    text: '초대 링크를 확보하지 못한 상태에서 [X]로 사용법 안내에 나아가는 경로가 TS로 없습니다. EC-008은 실패 알림만 다룹니다.',
   },
   {
     id: 'S-4',
     requirementId: reqId('FR-024'),
     technique: 'state',
-    text: '튜토리얼 안에서 스텝을 옮길 때 현재 스텝이 기록되는지 확인하는 TS가 없습니다. EC-022(스텝 1로 복원)와 FR-024(스텝마다 기록)의 관계도 확인이 필요합니다.',
+    text: '사용법 안내 안에서 스텝을 옮길 때 현재 스텝이 기록되는지 확인하는 TS가 없습니다. EC-022(스텝 1로 복원)와 FR-024(스텝마다 기록)의 관계도 확인이 필요합니다.',
   },
   {
     id: 'S-5',
     requirementId: reqId('FR-005'),
     technique: 'partition',
-    text: '키보드가 올라온 상태(프로필 닉네임·습관 이름 입력 중)에서 바텀 네비게이션 비노출을 확인하는 TS가 없습니다.',
+    text: '키보드가 올라온 상태(닉네임·습관 이름 입력 중)에서 바텀 네비게이션 비노출을 확인하는 TS가 없습니다.',
   },
 ];
 
@@ -598,100 +599,100 @@ function prepActions(
       screen: 'launcher',
       action: 'env',
       intent: '준비: 앱 데이터 초기화(pm clear) 후 실행',
-      next: 'profile',
+      next: 'nickname',
     });
-  const toRoom = () => {
+  const toHabit = () => {
     out.push({
-      screen: 'profile',
-      el: 'profile_nickname',
+      screen: 'nickname',
+      el: 'nickname_input',
       action: 'input',
       input: '콩콩이',
       intent: '준비: 닉네임 입력',
-      next: 'profile',
+      next: 'nickname',
     });
     out.push({
-      screen: 'profile',
-      el: 'profile_save',
+      screen: 'nickname',
+      el: 'nickname_save',
       action: 'tap',
       intent: '준비: 닉네임 저장',
-      next: 'room-create',
+      next: 'habit-create',
     });
   };
-  if (prep.includes('pf-room')) toRoom();
-  if (prep.includes('pf-invite')) {
-    toRoom();
+  if (prep.includes('pf-habit')) toHabit();
+  if (prep.includes('pf-mate')) {
+    toHabit();
     out.push({
-      screen: 'room-create',
-      el: 'room_name',
+      screen: 'habit-create',
+      el: 'habit_name',
       action: 'input',
       input: '물 2L 마시기',
       intent: '준비: 습관 이름 입력',
-      next: 'room-create',
+      next: 'habit-create',
     });
     out.push({
-      screen: 'room-create',
-      el: 'room_create',
+      screen: 'habit-create',
+      el: 'habit_create',
       action: 'tap',
       intent: '준비: 습관 만들기',
-      next: 'invite',
+      next: 'mate-invite',
     });
   }
-  if (prep.includes('pf-tutorial') || prep.includes('pf-done')) {
-    toRoom();
+  if (prep.includes('pf-guide') || prep.includes('pf-done')) {
+    toHabit();
     out.push({
-      screen: 'room-create',
-      el: 'room_skip',
+      screen: 'habit-create',
+      el: 'habit_skip',
       action: 'tap',
       intent: '준비: 습관 건너뛰기',
-      next: 'tutorial-1',
+      next: 'guide-1',
     });
   }
   if (prep.includes('pf-done'))
     out.push({
-      screen: 'tutorial-1',
-      el: 'tutorial_skip',
+      screen: 'guide-1',
+      el: 'guide_skip',
       action: 'tap',
-      intent: '준비: 튜토리얼 건너뛰기',
-      next: 'home',
+      intent: '준비: 사용법 안내 건너뛰기',
+      next: 'today',
     });
   return out;
 }
 
 const TAP_TARGETS: [RegExp, string, string][] = [
-  [/초대 링크 복사/, 'invite_copy', 'invite-toast'],
-  [/메이트 초대하기/, 'invite_share', 'share-sheet'],
-  [/우상단 \[X\]/, 'invite_close', 'tutorial-1'],
-  [/하루콩 시작하기/, 'tutorial_start', 'home'],
-  [/방을 만든다/, 'room_create', 'invite'],
-  [/프로필을 저장/, 'profile_save', 'room-create'],
+  [/초대 링크 복사/, 'mate_copy', 'mate-toast'],
+  [/메이트 초대하기/, 'mate_share', 'share-sheet'],
+  [/\[X\]/, 'mate_close', 'guide-1'],
+  [/하루콩 시작하기/, 'guide_start', 'today'],
+  [/습관 만들기\]/, 'habit_create', 'mate-invite'],
+  [/\[저장\]/, 'nickname_save', 'habit-create'],
 ];
 
 const PRIMARY_TAP: Record<string, [string, string]> = {
-  profile: ['profile_save', 'room-create'],
-  'room-create': ['room_create', 'invite'],
-  invite: ['invite_copy', 'invite-toast'],
+  nickname: ['nickname_save', 'habit-create'],
+  'habit-create': ['habit_create', 'mate-invite'],
+  'mate-invite': ['mate_copy', 'mate-toast'],
 };
 const onScreen = (screen: string, id: string) =>
-  !!SCREENS[screen === 'invite-toast' ? 'invite' : screen]?.elements.some((e) => e.id === id);
+  !!SCREENS[screen === 'mate-toast' ? 'mate-invite' : screen]?.elements.some((e) => e.id === id);
 
 function mainActions(row: Row, screen: string): ReturnType<typeof prepActions> {
   const w = `${row.when} ${row.kind === 'EC' ? row.title : ''}`;
   const out: ReturnType<typeof prepActions> = [];
-  const tutorialStep = /^tutorial-(\d)$/.exec(screen)?.[1];
+  const guideStep = /^guide-(\d)$/.exec(screen)?.[1];
 
-  // 튜토리얼 중간 스텝에서 시작하면 스와이프로 이동한다
-  if (tutorialStep && Number(tutorialStep) > 1 && !/dot으로 스텝 5에 도달/.test(row.given)) {
-    for (let s = 1; s < Number(tutorialStep); s++)
+  // 사용법 안내 중간 스텝에서 시작하면 스와이프로 이동한다
+  if (guideStep && Number(guideStep) > 1 && !/dot으로 스텝 5에 도달/.test(row.given)) {
+    for (let s = 1; s < Number(guideStep); s++)
       out.push({
-        screen: `tutorial-${s}`,
+        screen: `guide-${s}`,
         action: 'swipe',
-        intent: `준비: 튜토리얼 스텝 ${s + 1}로 넘기기`,
-        next: `tutorial-${s + 1}`,
+        intent: `준비: 사용법 안내 스텝 ${s + 1}로 넘기기`,
+        next: `guide-${s + 1}`,
       });
   }
   if (/연달아|연타/.test(w)) {
     const matched = TAP_TARGETS.find(([re, el]) => re.test(w) && onScreen(screen, el));
-    const target = matched ?? ['', ...(PRIMARY_TAP[screen] ?? ['tutorial_skip', 'home'])];
+    const target = matched ?? ['', ...(PRIMARY_TAP[screen] ?? ['guide_skip', 'today'])];
     // 화면 전환 중에 같은 자리를 연달아 누른다 — 스크린샷은 모두 누르기 직전 화면
     for (let k = 0; k < 3; k++)
       out.push({
@@ -704,46 +705,46 @@ function mainActions(row: Row, screen: string): ReturnType<typeof prepActions> {
     return out;
   }
   const dot = /(\d)번째 dot/.exec(w);
-  if (dot && screen.startsWith('tutorial')) {
+  if (dot && screen.startsWith('guide')) {
     out.push({
       screen,
-      el: 'tutorial_dots',
+      el: 'guide_dots',
       action: 'tap',
       intent: `${dot[1]}번째 dot 탭`,
-      next: `tutorial-${dot[1]}`,
+      next: `guide-${dot[1]}`,
     });
     return out;
   }
   if (/뒤로가기/.test(w)) {
-    const n = Number(tutorialStep ?? 0);
-    out.push({ screen, action: 'back', intent: '시스템 뒤로가기', next: n > 1 ? `tutorial-${n - 1}` : 'launcher' });
+    const n = Number(guideStep ?? 0);
+    out.push({ screen, action: 'back', intent: '시스템 뒤로가기', next: n > 1 ? `guide-${n - 1}` : 'launcher' });
     return out;
   }
   if (/건너뛰기/.test(w)) {
-    const first = screen.startsWith('tutorial') ? 'tutorial_skip' : 'room_skip';
+    const first = screen.startsWith('guide') ? 'guide_skip' : 'habit_skip';
     out.push({
       screen,
       el: first,
       action: 'tap',
       intent: '[건너뛰기] 탭',
-      next: first === 'room_skip' ? 'tutorial-1' : 'home',
+      next: first === 'habit_skip' ? 'guide-1' : 'today',
     });
     if (/두 번/.test(w))
       out.push({
-        screen: 'tutorial-1',
-        el: 'tutorial_skip',
+        screen: 'guide-1',
+        el: 'guide_skip',
         action: 'tap',
-        intent: '튜토리얼 [건너뛰기] 탭',
-        next: 'home',
+        intent: '사용법 안내 [건너뛰기] 탭',
+        next: 'today',
       });
     return out;
   }
-  if (/다시 켠다|강제 종료|다시 설치|불러온다|되돌아온다/.test(w)) {
+  if (/다시 켠다|다시 연다|강제 종료|다시 설치|불러온다|되돌아온다/.test(w)) {
     out.push({
       screen,
       action: 'restart',
       intent: '앱 강제 종료 후 다시 실행',
-      next: screen === 'home' ? 'home' : screen.startsWith('tutorial') ? 'tutorial-1' : screen,
+      next: screen === 'today' ? 'today' : screen.startsWith('guide') ? 'guide-1' : screen,
     });
     return out;
   }
@@ -753,7 +754,7 @@ function mainActions(row: Row, screen: string): ReturnType<typeof prepActions> {
         screen,
         el,
         action: 'tap',
-        intent: `${element(screen === 'invite-toast' ? 'invite' : screen, el).label} 탭`,
+        intent: `${element(screen === 'mate-toast' ? 'mate-invite' : screen, el).label} 탭`,
         next,
       });
       if (/기다린다/.test(w)) out.push({ screen: next, action: 'wait', intent: '3초 대기 후 화면 변화 확인', next });
@@ -768,11 +769,11 @@ function plan(
   row: Row | undefined,
   opts: { finalScreen?: string; finalState?: Record<string, string> } = {},
 ): Planned {
-  const { screen, prep } = row ? startOf(row) : { screen: 'room-create', prep: ['pf-clean', 'pf-room'] };
+  const { screen, prep } = row ? startOf(row) : { screen: 'habit-create', prep: ['pf-clean', 'pf-habit'] };
   const actions = [...prepActions(prep), ...(row ? mainActions(row, screen) : [])];
   let ts = 0;
   const steps: ExecStep[] = actions.map((a, i) => {
-    const el = a.el ? element(a.screen === 'invite-toast' ? 'invite' : a.screen, a.el) : undefined;
+    const el = a.el ? element(a.screen === 'mate-toast' ? 'mate-invite' : a.screen, a.el) : undefined;
     const durationMs = 900 + ((i * 37 + tc.tcId.length * 13) % 9) * 160;
     const step: ExecStep = {
       index: i + 1,
@@ -857,7 +858,7 @@ const SPECIAL_130: Record<string, Partial<Record<string, Special>>> = {
       verdict: 'fail',
       actual: '[초대 링크 복사]를 3번 누르자 토스트가 3개 겹쳐 쌓여 보였다.',
       defectId: 'D-1',
-      finalScreen: 'invite-toast',
+      finalScreen: 'mate-toast',
       finalState: { toastCount: '3' },
       points: {
         1: {
@@ -871,14 +872,14 @@ const SPECIAL_130: Record<string, Partial<Record<string, Special>>> = {
   [src('TS-034')]: {
     [P8.id]: {
       verdict: 'fail',
-      actual: '튜토리얼 스텝 3에서 뒤로가기를 누르자 스텝 2가 아니라 앱이 백그라운드로 갔다.',
+      actual: '사용법 안내 스텝 3에서 뒤로가기를 누르자 스텝 2가 아니라 앱이 백그라운드로 갔다.',
       defectId: 'D-2',
       finalScreen: 'launcher',
       points: {
         0: {
           result: 'mismatch',
           observed: '런처 화면 (앱이 백그라운드로 감)',
-          reason: '뒤로가기 뒤 화면이 튜토리얼 스텝 2가 아니라 런처다.',
+          reason: '뒤로가기 뒤 화면이 사용법 안내 스텝 2가 아니라 런처다.',
         },
       },
       attempts: 2,
@@ -889,7 +890,7 @@ const SPECIAL_130: Record<string, Partial<Record<string, Special>>> = {
           decidedBy: { kind: 'agent' },
           executor: 'agent',
           executedAt: T(16, 11, 5),
-          blockedReason: '준비 플로우 실패: 튜토리얼 스텝 3에 도달하지 못했다',
+          blockedReason: '준비 플로우 실패: 사용법 안내 스텝 3에 도달하지 못했다',
         },
       ],
     },
@@ -936,7 +937,7 @@ const SPECIAL_130: Record<string, Partial<Record<string, Special>>> = {
       verdict: 'fail',
       agentVerdict: 'pass',
       human: PEOPLE.qa,
-      actual: '본문 두 번째 문장 끝 마침표가 빠져 있다 ("…한눈에 모여요 다음 약속 장소").',
+      actual: '본문 두 번째 문장 끝 마침표가 빠져 있다 ("…습관이 돼요 메이트가 들어오면").',
       defectId: 'D-3',
       history: [
         { at: T(16, 15, 40), by: PEOPLE.qa, from: 'pass', to: 'fail', note: '자동 Pass 반전 — 문구 마침표 누락' },
@@ -974,7 +975,7 @@ const SPECIAL_130: Record<string, Partial<Record<string, Special>>> = {
   },
 };
 
-const GROUP_ORDER = ['pf-tutorial', 'pf-done', 'pf-clean', 'pf-room', 'pf-invite'];
+const GROUP_ORDER = ['pf-guide', 'pf-done', 'pf-clean', 'pf-habit', 'pf-mate'];
 const groupRank = (tc: TestCase) => GROUP_ORDER.indexOf(tc.prepFlowIds.at(-1) ?? 'pf-clean');
 const rowOf = (tc: TestCase) => rows.find((r) => `${SPEC}/${r.id}` === tc.sourceId);
 
@@ -1111,12 +1112,12 @@ export const defects130: Defect[] = [
   },
   {
     id: 'D-2',
-    title: '튜토리얼 스텝 3에서 뒤로가기 시 앱이 백그라운드로 감',
+    title: '사용법 안내 스텝 3에서 뒤로가기 시 앱이 백그라운드로 감',
     severity: 'major',
     tcId: caseBySrc('TS-034').tcId,
     deviceId: P8.id,
-    repro: ['온보딩을 튜토리얼 스텝 1까지 진행', '스텝 3까지 넘긴다', '시스템 뒤로가기(제스처)'],
-    expected: '튜토리얼 스텝 2가 노출된다 (FR-007, FR-016)',
+    repro: ['온보딩을 사용법 안내 스텝 1까지 진행', '스텝 3까지 넘긴다', '시스템 뒤로가기(제스처)'],
+    expected: '사용법 안내 스텝 2가 노출된다 (FR-007, FR-016)',
     actual: '앱이 백그라운드로 간다',
     status: 'open',
   },
@@ -1128,7 +1129,7 @@ export const defects130: Defect[] = [
     deviceId: S24.id,
     repro: ['온보딩을 메이트 초대 스텝까지 진행', '안내 본문을 확인한다'],
     expected: 'FR-009 문구와 같다',
-    actual: '"…한눈에 모여요 다음 약속 장소" — 마침표가 빠짐',
+    actual: '"…습관이 돼요 메이트가 들어오면" — 마침표가 빠짐',
     status: 'fixed',
   },
 ];
@@ -1238,7 +1239,7 @@ function thoughtsFor(steps: ExecStep[]): (ThoughtEntry & { stepIndex: number })[
         at: at + 500,
         stepIndex: s.index,
         kind: 'act',
-        text: `${s.action === 'input' ? `입력 "${s.input}"` : s.action === 'env' ? 'adb shell pm clear com.example.harukong' : s.action}${where}`,
+        text: `${s.action === 'input' ? `입력 "${s.input}"` : s.action === 'env' ? `adb shell pm clear ${APP_PACKAGE}` : s.action}${where}`,
       });
     }
     at += s.durationMs;
@@ -1250,7 +1251,7 @@ function consoleSession(): ConsoleSession {
   const tc = P8_CURRENT;
   const base = plan(tc, rowOf(tc));
   // TS-021: [메이트 초대하기] 탭 → 공유 시트에서 수동 스텝(외부 발송)으로 대기
-  const share = element('invite', 'invite_share');
+  const share = element('mate-invite', 'mate_share');
   const prep = base.steps.filter((s) => s.action !== 'verify');
   const last = prep.at(-1)!;
   const tap: ExecStep = {
@@ -1258,7 +1259,7 @@ function consoleSession(): ConsoleSession {
     action: 'tap',
     target: { label: share.label, elementId: share.id, bounds: share.bounds },
     intent: '[메이트 초대하기]를 눌러 OS 공유 시트를 연다',
-    screenshot: shot('invite'),
+    screenshot: shot('mate-invite'),
     videoTs: last.videoTs + last.durationMs,
     durationMs: 1300,
     caseStepIndex: 0,
@@ -1268,7 +1269,7 @@ function consoleSession(): ConsoleSession {
   const manual: ExecStep = {
     index: shareIdx + 2,
     action: 'manual',
-    intent: '수동 스텝: 공유 시트에서 카카오톡으로 링크를 보내거나 시트를 취소 (외부 발송 — 실행자 확인 필요)',
+    intent: '수동 스텝: 공유 시트에서 메신저로 링크를 보내거나 시트를 취소 (외부 발송 — 실행자 확인 필요)',
     screenshot: shot('share-sheet'),
     videoTs: (base.steps[shareIdx]?.videoTs ?? 0) + (base.steps[shareIdx]?.durationMs ?? 0),
     durationMs: 0,

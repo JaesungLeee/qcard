@@ -30,7 +30,7 @@ describe('loginPath', () => {
   it('기본 화면이면 next를 붙이지 않고, 아니면 인코딩해서 붙인다', () => {
     expect(loginPath()).toBe('/login');
     expect(loginPath('/projects')).toBe('/login');
-    expect(loginPath('/p/haru/cycles?tab=cases')).toBe('/login?next=%2Fp%2Fmino%2Fcycles%3Ftab%3Dcases');
+    expect(loginPath('/p/haru/cycles?tab=cases')).toBe('/login?next=%2Fp%2Fharu%2Fcycles%3Ftab%3Dcases');
   });
 });
 

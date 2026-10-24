@@ -3,12 +3,12 @@ import { center, findElement, formatTree, parseUiTree, pxToDp } from './tree';
 
 const XML = `<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy rotation="0">
 <node index="0" text="" resource-id="" class="android.widget.FrameLayout" package="com.example.harukong" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[0,0][1080,2400]">
-  <node index="0" text="닉네임 설정" resource-id="profile_title" class="android.widget.TextView" package="com.example.harukong" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[300,110][780,210]" />
+  <node index="0" text="닉네임 설정" resource-id="nickname_title" class="android.widget.TextView" package="com.example.harukong" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[300,110][780,210]" />
   <node index="1" text="" resource-id="com.example.harukong:id/nickname" class="android.widget.EditText" package="com.example.harukong" content-desc="" checkable="false" checked="false" clickable="true" enabled="true" focusable="true" focused="true" scrollable="false" long-clickable="true" password="false" selected="false" bounds="[60,720][1020,870]" />
   <node index="2" text="" resource-id="" class="android.view.View" package="com.example.harukong" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[0,900][1080,1000]">
     <node index="0" text="&quot;여기&quot; &amp; 저기 &#x2764;" resource-id="" class="android.widget.TextView" package="com.example.harukong" content-desc="" checkable="true" checked="true" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[60,900][1020,1000]" />
   </node>
-  <node index="3" text="저장" resource-id="profile_save" class="android.widget.Button" package="com.example.harukong" content-desc="" checkable="false" checked="false" clickable="true" enabled="false" focusable="true" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[60,2160][1020,2320]" />
+  <node index="3" text="저장" resource-id="nickname_save" class="android.widget.Button" package="com.example.harukong" content-desc="" checkable="false" checked="false" clickable="true" enabled="false" focusable="true" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[60,2160][1020,2320]" />
 </node>
 </hierarchy>`;
 
@@ -25,7 +25,7 @@ describe('parseUiTree', () => {
   it('bounds를 x·y·w·h로, 속성을 불리언으로 바꾼다', () => {
     expect(tree[5]).toMatchObject({
       text: '저장',
-      resourceId: 'profile_save',
+      resourceId: 'nickname_save',
       bounds: { x: 60, y: 2160, w: 960, h: 160 },
       clickable: true,
       enabled: false,
@@ -41,7 +41,7 @@ describe('parseUiTree', () => {
 
   it('번호나 resource-id로 찾는다', () => {
     expect(findElement(tree, 'e5')?.text).toBe('저장');
-    expect(findElement(tree, 'profile_save')?.ref).toBe('e5');
+    expect(findElement(tree, 'nickname_save')?.ref).toBe('e5');
     expect(findElement(tree, 'nope')).toBeUndefined();
     expect(center(tree[5]!.bounds)).toEqual([540, 2240]);
   });
@@ -50,10 +50,10 @@ describe('parseUiTree', () => {
 describe('formatTree', () => {
   it('의미 있는 요소만 한 줄씩, 상태 표시와 함께', () => {
     expect(formatTree(parseUiTree(XML)).split('\n')).toEqual([
-      'e1 TextView "닉네임 설정" id=profile_title [300,110 480x100]',
+      'e1 TextView "닉네임 설정" id=nickname_title [300,110 480x100]',
       'e2 EditText id=nickname [60,720 960x150] clickable focused',
       'e4 TextView "\\"여기\\" & 저기 ❤" [60,900 960x100] checked',
-      'e5 Button "저장" id=profile_save [60,2160 960x160] clickable disabled',
+      'e5 Button "저장" id=nickname_save [60,2160 960x160] clickable disabled',
     ]);
   });
 

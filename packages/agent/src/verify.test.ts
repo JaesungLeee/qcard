@@ -60,7 +60,7 @@ describe('트리 포인트 코드 비교', () => {
       observed: expect.stringContaining('5개'),
     });
     expect(compareTree(point('count', '4개'), dots[0], 420, tree).result).toBe('mismatch');
-    // 적게 셌으면 판단불가: 선택된 dot처럼 그림으로만 그린 요소는 트리에 없다 (실기기 SM-S711N 튜토리얼 dot 5개 중 4개만 트리에 있음)
+    // 적게 셌으면 판단불가: 선택된 dot처럼 그림으로만 그린 요소는 트리에 없다 (실기기 SM-S711N 사용법 안내 dot 5개 중 4개만 트리에 있음)
     expect(compareTree(point('count', '5'), dots[0], 420, tree.slice(0, 5)).result).toBe('unknown');
     expect(compareTree(point('count', '1'), undefined, 420).result).toBe('unknown');
     const items = [el({ ref: 'e1' }), el({ ref: 'e2' }), el({ ref: 'e3', resourceId: 'other' })];
@@ -94,7 +94,7 @@ describe('verifyPoints', () => {
   }
 
   it('트리 포인트는 한 번에 찾고, 비교는 코드가 한다', async () => {
-    const { env, obs } = await at('home');
+    const { env, obs } = await at('today');
     const llm = scriptedLlm([
       json({
         points: [
@@ -125,7 +125,7 @@ describe('verifyPoints', () => {
   });
 
   it('비전 포인트는 Verifier 판정을 그대로 쓴다', async () => {
-    const { env, obs } = await at('profile');
+    const { env, obs } = await at('nickname');
     const llm = scriptedLlm([
       json({
         points: [{ point_id: 'P1', result: 'mismatch', observed: '잘림', reason: '말줄임', target_element: 'e3' }],
@@ -138,7 +138,7 @@ describe('verifyPoints', () => {
     expect(r).toMatchObject({
       result: 'mismatch',
       observed: '잘림',
-      targetElement: 'profile_helper',
+      targetElement: 'nickname_helper',
       method: 'vision',
     });
   });
@@ -146,7 +146,7 @@ describe('verifyPoints', () => {
 
 describe('잠깐 뜨는 요소와 화면 안정화', () => {
   it('표시 포인트는 앞선 관찰(토스트가 뜬 화면)을 근거로 삼고, 비표시·화면은 마지막 관찰만 인정한다', async () => {
-    const device = new FakeDevice({ ...onboardingScenario(), start: 'invite-toast' });
+    const device = new FakeDevice({ ...onboardingScenario(), start: 'mate-toast' });
     const env = { device, appPackage: 'com.example.harukong', vision: false, clock: fakeClock() };
     const withToast = await observe({ ...env, llm: scriptedLlm([]).client }, 'TC', 3);
     const evidence = await settle(
@@ -186,7 +186,7 @@ describe('잠깐 뜨는 요소와 화면 안정화', () => {
   });
 
   it('비전 포인트도 "보인다"류면 앞선 화면 스크린샷을 함께 보낸다', async () => {
-    const device = new FakeDevice({ ...onboardingScenario(), start: 'invite-toast' });
+    const device = new FakeDevice({ ...onboardingScenario(), start: 'mate-toast' });
     const env = { device, appPackage: 'com.example.harukong', vision: true, clock: fakeClock() };
     const withToast = await observe({ ...env, llm: scriptedLlm([]).client }, 'TC', 3);
     const evidence = await settle(
@@ -274,13 +274,13 @@ describe('runCase', () => {
   it('클린 케이스: 데이터 초기화 → 실행 → 단계 → 검증 → Pass', async () => {
     const { device, env: e } = env([
       [toolUse('wait', { seconds: 1, intent: '스플래시 대기' })],
-      [toolUse('step_done', { case_step_index: 0, summary: '프로필 화면' })],
+      [toolUse('step_done', { case_step_index: 0, summary: '닉네임 화면' })],
       json({
         points: [
           {
             point_id: 'TC-ONBOARDING-001-P1',
             status: 'found',
-            element_ref: 'profile_title',
+            element_ref: 'nickname_title',
             reason: '제목',
           },
           { point_id: 'TC-ONBOARDING-001-P2', status: 'absent', element_ref: null, reason: '없음' },

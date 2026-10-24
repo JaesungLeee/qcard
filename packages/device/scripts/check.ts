@@ -2,13 +2,13 @@
  * 실기기 점검 (읽기 전용 — 디바이스 상태를 바꾸지 않는다).
  * 연결·기기 정보, 대상 앱 설치 여부, 키보드(IME), 트리 덤프·스크린샷 속도를 본다.
  *
- *   pnpm device:check [--serial <시리얼>] [--package com.example.harukong]
+ *   pnpm device:check [--serial <시리얼>] [--package <앱>]   앱 기본값: qcard.local.json의 devApp
  */
 import { parseArgs } from 'node:util';
-import { AdbDriver, execAdb, listDevices, resolveAdb } from '../src/node';
+import { AdbDriver, devAppPackage, execAdb, listDevices, resolveAdb } from '../src/node';
 
 const { values } = parseArgs({
-  options: { serial: { type: 'string' }, package: { type: 'string', default: 'com.example.harukong' } },
+  options: { serial: { type: 'string' }, package: { type: 'string', default: devAppPackage() } },
 });
 
 console.log(`adb: ${resolveAdb()}`);
@@ -38,10 +38,12 @@ console.log(
   `\n기기: ${info.model} · Android ${info.osMajor} · ${info.size.w}×${info.size.h} · ${info.density}dpi · ${info.connection === 'usb' ? 'USB' : 'Wi-Fi'}`,
 );
 
-const pkgs = await sh('pm', 'list', 'packages', values.package);
-console.log(
-  `앱 ${values.package}: ${pkgs.split('\n').some((l) => l.trim() === `package:${values.package}`) ? '설치됨' : '없음'}`,
-);
+if (values.package) {
+  const pkgs = await sh('pm', 'list', 'packages', values.package);
+  console.log(
+    `앱 ${values.package}: ${pkgs.split('\n').some((l) => l.trim() === `package:${values.package}`) ? '설치됨' : '없음'}`,
+  );
+} else console.log('앱: 확인하지 않음 (--package 또는 qcard.local.json의 devApp)');
 console.log(`포그라운드: ${(await d.foregroundPackage()) ?? '?'}`);
 
 const imes = (await sh('ime', 'list', '-s')).split('\n').filter(Boolean);

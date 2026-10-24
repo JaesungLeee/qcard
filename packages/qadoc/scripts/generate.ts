@@ -9,7 +9,7 @@
  *     --cassettes <폴더>     호출 녹화 폴더. 같은 요청은 다시 부르지 않고 재생한다(중단 후 이어 하기)
  *     --app-version <버전>
  *
- * 하루콩 스펙과 결과·녹화는 저장소 밖(../qcard-specs/)에 둔다.
+ * 실제 팀 스펙과 결과·녹화는 저장소 밖(../qcard-specs/)에 둔다.
  */
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';

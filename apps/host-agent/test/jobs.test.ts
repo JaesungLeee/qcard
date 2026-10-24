@@ -120,7 +120,7 @@ describe('QA 문서 생성 작업', () => {
     const first = await lead.api.requestQaDoc(PROJECT, { appVersion: '2.0.0', files: FILES });
     await processJob(lead.deps(fakeGeneratorLlm().llm), (await claimJob(lead.db, first, 'pc', 'now'))!);
 
-    const changed = SPEC.replace('홈으로 이동한다', '홈 탭이 선택된 채로 열린다');
+    const changed = SPEC.replace('홈으로 이동한다', '오늘 탭이 선택된 채로 열린다');
     const next = await lead.api.requestQaDoc(PROJECT, {
       appVersion: '2.1.0',
       files: [{ path: 'sample/spec.md', content: changed }],

@@ -9,7 +9,8 @@ echo "$cmd" | grep -Eq 'git[[:space:]]+push.*(--force|[[:space:]]-f([[:space:]]|
 echo "$cmd" | grep -Eq 'secrets?[[:space:]]+(versions[[:space:]]+)?access|functions:secrets:access' && deny "비밀값 조회"
 
 # 실기기(개인 폰) 대상 파괴적 ADB. adb 호출이 없는 명령은 보지 않는다.
-QA_APP='com.example.harukong.qa'
+# 앱 데이터 삭제를 허용할 QA 앱: 저장소 루트 qcard.local.json의 devApp (gitignore, packages/device/src/devApp.ts). 없으면 모두 막는다
+QA_APP=$(jq -r '.devApp // empty' "${CLAUDE_PROJECT_DIR:-.}/qcard.local.json" 2>/dev/null)
 # adb 호출 하나 = `adb `부터 다음 ; & | 줄바꿈 전까지(`adb.ts` 같은 파일 이름은 제외). 따옴표 안의 `&&`로 이어진 두 번째 명령은 놓칠 수 있다.
 segs=$(echo "$cmd" | grep -oE "(^|[[:space:]/(\`'\"])adb[[:space:]][^;&|]*")
 [ -n "$segs" ] || exit 0
@@ -21,7 +22,7 @@ echo "$segs" | grep -Eq '(wipe|factory|recovery)' && deny "기기 초기화"
 
 # 앱 데이터 삭제는 QA 앱만
 while read -r pkg; do
-  [ -z "$pkg" ] || [ "$pkg" = "$QA_APP" ] || deny "${pkg} 데이터 삭제(pm clear는 ${QA_APP}만)"
+  [ -z "$pkg" ] || { [ -n "$QA_APP" ] && [ "$pkg" = "$QA_APP" ]; } || deny "${pkg} 데이터 삭제(pm clear는 qcard.local.json의 devApp만: ${QA_APP:-없음})"
 done < <(echo "$segs" | grep -oE "(pm|cmd[[:space:]]+package)[[:space:]]+clear([[:space:]]+--user[[:space:]]+[0-9]+)?[[:space:]]+[^[:space:]'\"]+" | awk '{print $NF}')
 
 # 폰 안 파일 삭제는 /data/local/tmp 아래만

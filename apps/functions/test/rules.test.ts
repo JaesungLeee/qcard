@@ -71,14 +71,14 @@ describe('읽기', () => {
     await assertFails(getDoc(doc(as('u-admin'), 'invitationTokens/t1')));
   });
 
-  it('프로필은 본인만 읽는다', async () => {
+  it('닉네임은 본인만 읽는다', async () => {
     await assertSucceeds(getDoc(doc(as('u-qa'), 'users/u-qa')));
     await assertFails(getDoc(doc(as('u-admin'), 'users/u-qa')));
   });
 });
 
 describe('쓰기', () => {
-  it('프로젝트·멤버·초대·프로필은 클라이언트가 직접 못 쓴다', async () => {
+  it('프로젝트·멤버·초대·닉네임은 클라이언트가 직접 못 쓴다', async () => {
     await assertFails(setDoc(doc(as('u-admin'), 'projects/haru'), { name: 'X' }));
     await assertFails(setDoc(doc(as('u-admin'), 'projects/haru/members/u-qa'), { role: 'viewer' }));
     await assertFails(setDoc(doc(as('u-outsider'), 'projects/haru/members/u-outsider'), { role: 'admin' }));

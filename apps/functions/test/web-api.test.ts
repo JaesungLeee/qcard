@@ -211,7 +211,7 @@ describe('프로젝트·초대 (callable)', () => {
     await expect(lead.leaveProject('widget')).rejects.toBeInstanceOf(RuleError);
   });
 
-  it('시드 사용자는 프로필이 있다', async () => {
+  it('시드 사용자는 닉네임이 있다', async () => {
     const snaps = await Promise.all(SEED_USERS.map((u) => admin.doc(`users/${u.uid}`).get()));
     expect(snaps.every((s) => s.exists)).toBe(true);
   });

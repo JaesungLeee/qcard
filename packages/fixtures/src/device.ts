@@ -6,6 +6,7 @@ import { DEVICE_SIZE, SCREENS, type MockElement, type MockElementKind } from './
  * 실기기 녹화 전에 FakeDevice로 Agent 루프를 돌리기 위한 첫 데이터다.
  */
 
+/** 가상 앱 하루콩 (qcard 개발·테스트용, 실제 앱 아님) */
 export const APP_PACKAGE = 'com.example.harukong';
 
 const CLS: Record<MockElementKind, { cls: string; clickable?: boolean; asDesc?: boolean } | null> = {
@@ -55,7 +56,7 @@ export function syntheticScreen(key: string): FakeScreen {
 /** 닉네임 규칙: 2~10자, 한글·영문·숫자 */
 export const validNickname = (v = '') => /^[가-힣a-zA-Z0-9]{2,10}$/.test(v);
 
-/** 하루콩 온보딩 플로우 시나리오 (스플래시 → 프로필 → 습관 → 메이트 초대 → 튜토리얼 → 홈) */
+/** 하루콩 온보딩 시나리오 (스플래시 → 닉네임 → 첫 습관 → 메이트 초대 → 사용법 안내 → 오늘) */
 export function onboardingScenario(connection: 'usb' | 'wifi' = 'usb'): FakeScenario {
   const tap = (from: string, target: string, to: string, when?: FakeScenario['transitions'][number]['when']) => ({
     from,
@@ -63,16 +64,13 @@ export function onboardingScenario(connection: 'usb' | 'wifi' = 'usb'): FakeScen
     to,
     when,
   });
-  const tutorial = [1, 2, 3, 4, 5].flatMap((n) => {
-    const from = `tutorial-${n}`;
+  const guide = [1, 2, 3, 4, 5].flatMap((n) => {
+    const from = `guide-${n}`;
     return [
       ...(n < 5
-        ? [
-            tap(from, 'tutorial_skip', 'home'),
-            { from, on: { kind: 'swipe', direction: 'left' }, to: `tutorial-${n + 1}` },
-          ]
-        : [tap(from, 'tutorial_start', 'home')]),
-      ...(n > 1 ? [{ from, on: { kind: 'swipe', direction: 'right' }, to: `tutorial-${n - 1}` }] : []),
+        ? [tap(from, 'guide_skip', 'today'), { from, on: { kind: 'swipe', direction: 'left' }, to: `guide-${n + 1}` }]
+        : [tap(from, 'guide_start', 'today')]),
+      ...(n > 1 ? [{ from, on: { kind: 'swipe', direction: 'right' }, to: `guide-${n - 1}` }] : []),
     ] as FakeScenario['transitions'];
   });
   return {
@@ -90,17 +88,17 @@ export function onboardingScenario(connection: 'usb' | 'wifi' = 'usb'): FakeScen
     screens: Object.fromEntries(Object.keys(SCREENS).map((k) => [k, syntheticScreen(k)])),
     transitions: [
       tap('launcher', 'launcher_harukong', 'splash'),
-      { from: 'splash', on: { kind: 'auto' }, to: 'profile' },
-      tap('profile', 'profile_save', 'room-create', (s) => validNickname(s.values.profile_nickname)),
-      tap('room-create', 'room_skip', 'tutorial-1'),
-      tap('room-create', 'room_create', 'invite', (s) => Boolean(s.values.room_name?.trim())),
-      tap('invite', 'invite_copy', 'invite-toast'),
-      { from: 'invite-toast', on: { kind: 'auto' }, to: 'invite' },
-      tap('invite', 'invite_share', 'share-sheet'),
-      tap('invite', 'invite_close', 'tutorial-1'),
-      tap('share-sheet', 'share_copy', 'invite-toast'),
-      { from: 'share-sheet', on: { kind: 'key', key: 'back' }, to: 'invite' },
-      ...tutorial,
+      { from: 'splash', on: { kind: 'auto' }, to: 'nickname' },
+      tap('nickname', 'nickname_save', 'habit-create', (s) => validNickname(s.values.nickname_input)),
+      tap('habit-create', 'habit_skip', 'guide-1'),
+      tap('habit-create', 'habit_create', 'mate-invite', (s) => Boolean(s.values.habit_name?.trim())),
+      tap('mate-invite', 'mate_copy', 'mate-toast'),
+      { from: 'mate-toast', on: { kind: 'auto' }, to: 'mate-invite' },
+      tap('mate-invite', 'mate_share', 'share-sheet'),
+      tap('mate-invite', 'mate_close', 'guide-1'),
+      tap('share-sheet', 'share_copy', 'mate-toast'),
+      { from: 'share-sheet', on: { kind: 'key', key: 'back' }, to: 'mate-invite' },
+      ...guide,
     ],
   };
 }
