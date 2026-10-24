@@ -35,11 +35,13 @@ function Connected() {
     if (c.view?.kind === 'run' || c.error) setStarting(false);
   }, [c.view?.kind, c.error]);
   if (!c.view) return <Waiting link={c.link} />;
-  if (c.view.kind === 'run') return <Live state={c.view.state} link={c.link} control={c.control} />;
+  if (c.view.kind === 'run')
+    return <Live state={c.view.state} link={c.link} control={c.control} dashboardUrl={c.dashboardUrl} />;
   return (
     <Home
       home={c.view.home}
       link={c.link}
+      dashboardUrl={c.dashboardUrl}
       error={c.error}
       starting={starting}
       onDismissError={c.dismissError}
@@ -204,11 +206,13 @@ function Live({
   state,
   link,
   control,
+  dashboardUrl,
   screen,
 }: {
   state: LiveConsole;
   link: HostLink;
   control: ReturnType<typeof useLiveConsole>['control'];
+  dashboardUrl?: string;
   /** 화면을 바꿔 그린다 (데모) */
   screen?: (width: number) => ReactNode;
 }) {
@@ -226,6 +230,7 @@ function Live({
       <TopBar
         session={{
           ...state,
+          dashboardUrl,
           host: { connected: link === 'open', label: location.host },
         }}
       />

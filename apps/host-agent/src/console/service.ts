@@ -32,6 +32,8 @@ export type ConsoleServiceDeps = {
   /** 빌드 파일이 없는 사이클(시드)에서 실행할 앱 */
   fallbackPackage?: string;
   allowNetworkToggle?: boolean;
+  /** 웹 대시보드 주소 (콘솔의 [대시보드에서 보기]) */
+  dashboardUrl?: string;
   /** 테스트에서 LLM·Agent 환경을 바꾼다 */
   llm?: CycleRunDeps['llm'];
   env?: CycleRunDeps['env'];
@@ -53,6 +55,7 @@ export class ConsoleService implements ConsoleBackend {
 
   subscribe(send: (m: ConsoleServerMessage) => void) {
     this.listeners.add(send);
+    if (this.deps.dashboardUrl) send({ type: 'info', dashboardUrl: this.deps.dashboardUrl });
     if (this.run) send({ type: 'state', state: this.run.hub.snapshot() });
     else send({ type: 'home', home: this.home });
     return () => void this.listeners.delete(send);

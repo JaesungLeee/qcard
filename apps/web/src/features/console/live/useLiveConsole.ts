@@ -21,6 +21,8 @@ export function useLiveConsole() {
   const [link, setLink] = useState<HostLink>('connecting');
   /** 호스트가 거절한 요청 (Run 시작 실패 등) */
   const [error, setError] = useState<string>();
+  /** 웹 대시보드 주소 (호스트가 알려 준다). 없으면 같은 출처 — 개발 서버 */
+  const [dashboardUrl, setDashboardUrl] = useState<string>();
   const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -39,6 +41,7 @@ export function useLiveConsole() {
         const m = JSON.parse(String(e.data)) as ConsoleServerMessage;
         if (m.type === 'state') setView({ kind: 'run', state: m.state });
         else if (m.type === 'home') setView({ kind: 'home', home: m.home });
+        else if (m.type === 'info') setDashboardUrl(m.dashboardUrl);
         else setError(m.message);
       };
       sock.onclose = () => {
@@ -69,5 +72,5 @@ export function useLiveConsole() {
   );
   const refresh = useCallback(() => send({ type: 'refresh' }), [send]);
 
-  return { view, link, error, dismissError: () => setError(undefined), control, start, refresh };
+  return { view, link, error, dashboardUrl, dismissError: () => setError(undefined), control, start, refresh };
 }

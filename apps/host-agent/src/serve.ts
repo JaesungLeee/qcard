@@ -113,6 +113,7 @@ const service = new ConsoleService({
   // 로컬 설정(qcard.local.json)은 저장소에서 개발할 때만 본다
   fallbackPackage: values.package ?? (target.emulator ? devAppPackage() : undefined),
   allowNetworkToggle: values['allow-network'],
+  dashboardUrl: target.webUrl,
 });
 // 웹 사이드바의 [로컬 콘솔]로 들어오면 그 주소는 쓴 것이라, 연결 신호로 새 주소를 바로 올린다
 const consoleUi = values.headless ? undefined : await launchConsole(service, log, { onLogin: () => void beat() });

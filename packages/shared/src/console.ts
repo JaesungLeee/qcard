@@ -133,7 +133,11 @@ export type ConsoleHome = {
 
 /** 호스트 → 화면. home = Run이 없을 때, state = Run 중 */
 export type ConsoleServerMessage =
-  { type: 'state'; state: LiveConsole } | { type: 'home'; home: ConsoleHome } | { type: 'error'; message: string };
+  | { type: 'state'; state: LiveConsole }
+  | { type: 'home'; home: ConsoleHome }
+  | { type: 'error'; message: string }
+  /** 접속하면 한 번: 웹 대시보드 주소. 콘솔은 127.0.0.1에서 열리므로 대시보드 링크는 이 주소로 간다 */
+  | { type: 'info'; dashboardUrl: string };
 /** 화면 → 호스트 */
 export type ConsoleClientMessage =
   | { type: 'control'; action: ConsoleControl }

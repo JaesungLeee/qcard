@@ -328,6 +328,7 @@ describe('로컬 콘솔 서비스 (serve)', () => {
       llm: () => replay,
       env: { clock: fakeClock(Date.UTC(2026, 9, 20)), vision: false },
       awakeDir: mkdtempSync(join(tmpdir(), 'qcard-awake-')),
+      dashboardUrl: 'https://qcard.example',
     });
     service.subscribe((m) => msgs.push(m));
     service.setDevice({ driver: device, info: await device.info() });
@@ -335,6 +336,11 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     const home = () => (msgs.filter((m) => m.type === 'home').at(-1) as { home: ConsoleHome }).home;
     return { service, msgs, home };
   };
+
+  it('접속하면 먼저 웹 대시보드 주소를 알려 준다 (127.0.0.1 콘솔의 [대시보드에서 보기])', async () => {
+    const { msgs } = await serviceFor(galaxy());
+    expect(msgs[0]).toEqual({ type: 'info', dashboardUrl: 'https://qcard.example' });
+  });
 
   it('홈에 이 디바이스가 대상인 사이클을 보이고, Run을 시작하면 실행 화면 → 끝나면 홈으로 돌아온다', async () => {
     const device = galaxy();

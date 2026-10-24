@@ -16,6 +16,11 @@ export type TopBarInfo = {
   claudeCode: ClaudeCodeState;
   /** 호스트 에이전트 연결 */
   host: { connected: boolean; label: string };
+  /**
+   * 웹 대시보드 주소. 배포한 `qcard serve`의 콘솔은 127.0.0.1에서 열려 같은 출처의 대시보드가 없으므로
+   * 호스트가 알려 준 주소로 간다. 없으면 같은 출처(개발 서버·데모)
+   */
+  dashboardUrl?: string;
 };
 
 /** 상단 바: 호스트 연결 · 사이클 · 빌드 · 디바이스 선택 · 대시보드로 (F-DV-03, F-DV-04) */
@@ -62,13 +67,12 @@ export function TopBar({ session }: { session: TopBarInfo }) {
         ) : (
           <span className={`${textClass('label1')} qcc-muted`}>디바이스 연결 안 됨</span>
         )}
-        <Link
-          className={`qcc-link ${textClass('label1', 'medium')}`}
-          to={session.projectId && session.cycleId ? `/p/${session.projectId}/cycles/${session.cycleId}` : '/projects'}
-        >
-          대시보드에서 보기
-          <Icons.IconArrowUpRight aria-hidden style={{ width: 16, height: 16 }} />
-        </Link>
+        <DashboardLink
+          base={session.dashboardUrl}
+          path={
+            session.projectId && session.cycleId ? `/p/${session.projectId}/cycles/${session.cycleId}` : '/projects'
+          }
+        />
         <div className="qcc-top-theme">
           <ThemeSwitch />
         </div>
@@ -160,5 +164,24 @@ function DeviceMenu({ device, others }: { device: ConsoleDevice; others: Console
         </MenuList>
       </MenuContent>
     </Menu>
+  );
+}
+
+function DashboardLink({ base, path }: { base?: string; path: string }) {
+  const className = `qcc-link ${textClass('label1', 'medium')}`;
+  const body = (
+    <>
+      대시보드에서 보기
+      <Icons.IconArrowUpRight aria-hidden style={{ width: 16, height: 16 }} />
+    </>
+  );
+  return base ? (
+    <a className={className} href={new URL(path, base).href} target="_blank" rel="noreferrer">
+      {body}
+    </a>
+  ) : (
+    <Link className={className} to={path}>
+      {body}
+    </Link>
   );
 }

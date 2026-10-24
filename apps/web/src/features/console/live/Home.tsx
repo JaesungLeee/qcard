@@ -14,6 +14,7 @@ import type { HostLink, StartRun } from './useLiveConsole';
 export function Home({
   home,
   link,
+  dashboardUrl,
   error,
   starting,
   onDismissError,
@@ -23,6 +24,8 @@ export function Home({
 }: {
   home: ConsoleHome;
   link: HostLink;
+  /** 웹 대시보드 주소 (호스트가 알려 준다) */
+  dashboardUrl?: string;
   error?: string;
   /** [Run 시작]을 눌러 호스트가 준비하는 중 (빌드 설치 등) */
   starting: boolean;
@@ -40,6 +43,7 @@ export function Home({
       <TopBar
         session={{
           executor: home.executor,
+          dashboardUrl,
           device,
           claudeCode: home.claudeCode,
           host: { connected: link === 'open', label: location.host },
