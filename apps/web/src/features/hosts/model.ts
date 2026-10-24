@@ -1,12 +1,11 @@
 import { HOST_ONLINE_MS, type Host, type HostConnection } from '@qcard/shared';
 
+/** 호스트 에이전트 설치 (npm 패키지 `@qcard/host`, 명령 `qcard`) */
+export const INSTALL_COMMAND = 'npm i -g @qcard/host';
 /** 처음 쓰는 PC를 계정에 연결하는 명령 (그 PC의 터미널에서) */
-export const CONNECT_COMMAND = 'pnpm --filter @qcard/host-agent connect';
-/**
- * 화면에 보여 주는 호스트 명령(CONNECT_COMMAND·SERVE_COMMAND)은 저장소 안에서만 동작하는 개발용이다.
- * 패키징(설치형 CLI·앱) 뒤에는 명령과 함께 이 안내를 바꾼다
- */
-export const DEV_COMMAND_NOTE = '개발용 명령 — qcard 저장소 루트에서 실행합니다';
+export const CONNECT_COMMAND = 'qcard connect';
+/** 명령 아래에 붙이는 설치 안내 */
+export const INSTALL_NOTE = `처음 쓰는 PC라면 먼저 설치하세요: ${INSTALL_COMMAND} (Node.js 22 이상, macOS)`;
 
 /** 호스트가 연 연결 화면 주소 `/connect?port&nonce&name`. 형식이 맞지 않으면 undefined */
 export type ConnectRequest = { port: number; nonce: string; name: string };

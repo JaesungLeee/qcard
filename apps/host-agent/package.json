@@ -1,5 +1,6 @@
 {
-  "name": "@qcard/host-agent",
+  "name": "@qcard/host",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "exports": {
@@ -11,6 +12,8 @@
     "connect": "tsx src/pair.ts connect",
     "disconnect": "tsx src/pair.ts disconnect",
     "status": "tsx src/pair.ts status",
+    "qcard": "tsx src/main.ts",
+    "bundle": "pnpm --filter @qcard/web build && node scripts/bundle.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "test": "node ../functions/scripts/emulators.mjs test 'vitest run'"
   },
@@ -31,6 +34,7 @@
     "@firebase/rules-unit-testing": "6.0.0",
     "@types/node": "24.19.0",
     "@types/ws": "8.18.2",
+    "esbuild": "0.28.2",
     "tsx": "4.23.15",
     "typescript": "5.9.3",
     "vitest": "4.1.11"

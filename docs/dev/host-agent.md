@@ -2,21 +2,23 @@
 
 호스트 에이전트(`apps/host-agent`)는 사이클 케이스를 실기기에서 `runCase`로 실행하고 Run 진행·결과를 Firestore에, 스크린샷을 Storage에 올린다(`runCycle`·`firestoreSink`). 웹에서 요청한 QA 문서 생성 작업도 받아 처리한다(`jobs.ts`·`serve`). 플랜 한도·로그인 문제·디바이스 잠김이면 일시정지한다.
 
-두 명령 모두 `pnpm emu`가 떠 있어야 한다([emulators.md](emulators.md)).
+저장소의 pnpm 스크립트는 개발용 에뮬레이터에 붙으므로 `pnpm emu`가 떠 있어야 한다([emulators.md](emulators.md)). 사용자에게 배포하는 `qcard` 명령(npm `@qcard/host`, 진입점 `src/main.ts`)은 같은 코드를 운영 서비스로 실행한다 — 아래 [배포 패키지](#배포-패키지-qcardhost).
 
 ## connect — 이 PC를 계정에 연결 (F-TM-14)
 
 호스트는 GitHub로 따로 로그인하지 않는다. 웹에서 이 PC를 계정에 한 번 연결해 두면, 켤 때마다 그 자격으로 접속한다.
 
 ```sh
-pnpm --filter @qcard/host-agent connect      # 브라우저가 열리면 [이 PC 연결]
-pnpm --filter @qcard/host-agent status       # 연결된 계정 확인
-pnpm --filter @qcard/host-agent disconnect   # 이 PC의 연결 해제
+pnpm --filter @qcard/host connect      # 브라우저가 열리면 [이 PC 연결]
+pnpm --filter @qcard/host connect --force   # 이미 연결돼 있어도 다시 연결 (다른 계정으로 바꿀 때)
+pnpm --filter @qcard/host status       # 연결된 계정 확인
+pnpm --filter @qcard/host disconnect   # 이 PC의 연결 해제
 ```
 
 - `connect`는 127.0.0.1에 임시 서버를 열고 웹의 `/connect?port&nonce&name`을 연다. [이 PC 연결]을 누르면 Functions `pairHost`가 호스트 자격을 만들고, 웹이 그 자격을 임시 서버로 폼 POST한다(Origin·Host·nonce 확인). 자격은 macOS 키체인(`qcard-host`, 계정 = Firebase 프로젝트 id)에 둔다.
+- `pairHost`는 누를 때마다 새 연결을 만든다. 그래서 `connect`는 먼저 보관한 자격으로 로그인해 보고, 연결돼 있으면 그대로 끝낸다(`connectHost`). 웹에서 해제된 자격은 지우고 새로 연결한다. `--force`면 새로 연결해 자격을 저장한 뒤 예전 연결을 `revokeHost`로 해제한다(실패하면 웹에서 해제하라고 안내).
 - 켤 때마다 Functions `hostToken`으로 짧은 수명의 로그인 토큰(`host` 클레임)을 받는다. 보안 규칙은 `hostConnections/{hostId}`가 있을 때만 이 토큰을 통과시키므로, 웹의 [연결된 PC]에서 해제하면 바로 막힌다.
-- 붙을 곳: `QCARD_FIREBASE_CONFIG`(웹 설정 JSON) + `QCARD_WEB_URL`. 없으면 개발용 에뮬레이터와 `http://localhost:5173`(`pnpm dev:firebase`).
+- 붙을 곳(`targetFromEnv`): `QCARD_FIREBASE_CONFIG`(웹 설정 JSON) + `QCARD_WEB_URL` > `QCARD_TARGET=prod`(운영 `qcard-d2ade`, `qcard` 명령의 기본값) > 개발용 에뮬레이터와 `http://localhost:5173`(`pnpm dev:firebase`).
 - 운영에서 `hostToken`이 커스텀 토큰을 만들려면 Functions 서비스 계정에 "서비스 계정 토큰 생성자" 권한이 필요하다.
 
 **개발 단축**: 에뮬레이터에서는 `serve`·`run-cycle`에 `--user <시드 GitHub 사용자명>`을 주면 브라우저 없이 그 사용자로 연결한다(자격은 키체인 계정 `demo-qcard:<사용자명>`에 두고, 에뮬레이터를 다시 띄워 연결이 없어지면 자동으로 다시 연결).
@@ -24,8 +26,8 @@ pnpm --filter @qcard/host-agent disconnect   # 이 PC의 연결 해제
 ## serve — 상주 모드 (실행자가 쓰는 경로)
 
 ```sh
-pnpm --filter @qcard/host-agent serve                    # connect로 연결한 PC
-pnpm --filter @qcard/host-agent serve --user jaesung-lee # 개발: 에뮬레이터 시드 사용자
+pnpm --filter @qcard/host serve                    # connect로 연결한 PC
+pnpm --filter @qcard/host serve --user jaesung-lee # 개발: 에뮬레이터 시드 사용자
 ```
 
 - **로컬 콘솔**을 띄워 두고 한 번만 쓸 수 있는 주소를 출력한다. 열면 [로컬 콘솔 열기] 버튼이 나온다 — 링크 미리보기가 먼저 열어도 토큰이 남는다. 터미널에서 Enter = 새 주소.
@@ -39,7 +41,7 @@ pnpm --filter @qcard/host-agent serve --user jaesung-lee # 개발: 에뮬레이�
 같은 일을 `serve`의 로컬 콘솔에서 한다.
 
 ```sh
-pnpm --filter @qcard/host-agent run-cycle --project haru --cycle cycle-130-device --user jaesung-lee [TC-ID…] [--package <앱>]
+pnpm --filter @qcard/host run-cycle --project haru --cycle cycle-130-device --user jaesung-lee [TC-ID…] [--package <앱>]
 ```
 
 연결된 실기기에서 사이클 케이스를 실행해 에뮬레이터에 올린다(웹 QA 시트에 바로 보임, 플랜 사용량 차감).
@@ -60,3 +62,20 @@ pnpm --filter @qcard/host-agent run-cycle --project haru --cycle cycle-130-devic
 - 실시간 화면은 scrcpy 중계(`brew install scrcpy`). 서버 파일을 폰 `/data/local/tmp`에 올렸다가 지운다.
 - `pnpm dev`가 떠 있으면 그 주소(`/console/live`, Vite가 `/console-api`를 넘김)를 쓴다.
 - 웹의 `/console`은 fixture 재생, `/console/live?demo=<상태>`는 서버 없이 상태별 화면을 본다(ui:snap용).
+
+## 배포 패키지 `@qcard/host`
+
+사용자는 저장소 없이 `npm i -g @qcard/host`로 설치하고 `qcard <명령>`으로 쓴다(macOS, Node 22+).
+
+| 명령                                                    | 저장소 스크립트                                                             |
+| ------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `qcard connect [--force]` · `status` · `disconnect`     | `pair.ts`                                                                   |
+| `qcard serve [--serial] [--allow-network] [--headless]` | `serve.ts`                                                                  |
+| `qcard doctor`                                          | adb·Claude Code·scrcpy 점검 (`serve`도 시작할 때 확인, adb가 없으면 멈춘다) |
+
+- 저장소에서 같은 명령을 운영으로 돌려 보려면 `pnpm --filter @qcard/host qcard <명령>`.
+- `qcard`(`QCARD_CLI`)는 개발 서버(5173)를 찾지 않고, `qcard.local.json`의 devApp도 쓰지 않는다. `run-cycle`·`--user`는 저장소 전용.
+- 로컬 콘솔은 패키지에 넣은 운영 웹 빌드(`dist/web`)를 준다. `/console/live`는 웹 로그인 밖이라(일회용 주소·쿠키로 확인) 127.0.0.1에서도 열린다.
+- 만들기: `pnpm --filter @qcard/host bundle` → `apps/host-agent/pkg/`. npm 페이지 README는 `apps/host-agent/README.npm.md`. 웹을 `apps/web/.env.production`으로 빌드한 뒤 esbuild로 내부 패키지까지 묶는다(설치할 의존성 없음). 운영 웹 빌드가 아니면 멈춘다.
+- 시험: `npm pack apps/host-agent/pkg` → `npm i -g --prefix <임시 폴더> ./qcard-host-<버전>.tgz` → `<임시 폴더>/bin/qcard status`.
+- 올리기(사람이 직접): `apps/host-agent/package.json`의 `version`을 올리고 bundle → `npm publish apps/host-agent/pkg --access public`.

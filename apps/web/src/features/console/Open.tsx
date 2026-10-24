@@ -6,7 +6,7 @@ import { Link, NavLink, useParams } from 'react-router';
 import { PageHeader } from '../../components/PageHeader';
 import { isMemoryApi } from '../../data/memory';
 import { useApi, useMyHosts } from '../../data/hooks';
-import { DEV_COMMAND_NOTE } from '../hosts/model';
+import { INSTALL_NOTE } from '../hosts/model';
 import { isOnline, SERVE_COMMAND } from '../qa-doc/Jobs';
 
 /** 연결된 내 호스트의 콘솔 주소 (없으면 호스트가 꺼져 있거나 콘솔 없이 켠 것) */
@@ -96,7 +96,7 @@ export function ConsoleOpenPage() {
               >
                 {SERVE_COMMAND}
               </code>
-              <span className={textClass('caption1')}>{DEV_COMMAND_NOTE}</span>
+              <span className={textClass('caption1')}>{INSTALL_NOTE}</span>
               {!online && (
                 <span>
                   처음 쓰는 PC면 먼저 계정에 연결하세요 — <Link to="/hosts">연결된 PC</Link>

@@ -2,9 +2,9 @@
  * 호스트 에이전트 상주 모드: 로컬 콘솔을 띄워 두고(사이클을 골라 Run 시작), 웹에서 요청한 내 작업(QA 문서 생성)을
  * 이 PC의 Claude Code(본인 플랜)로 처리한다.
  *
- *   pnpm --filter @qcard/host-agent serve
+ *   pnpm --filter @qcard/host serve
  *     --user <시드 사용자>          개발용: 에뮬레이터에서 브라우저 없이 그 사용자 이름으로 연결
- *     --package <앱>               빌드 파일이 없는 사이클(개발 시드)에서 실행할 앱. 기본: qcard.local.json의 devApp
+ *     --package <앱>               빌드 파일이 없는 사이클(개발 시드)에서 실행할 앱. 에뮬레이터 기본: qcard.local.json의 devApp
  *     --serial <시리얼>            디바이스가 여러 대일 때 (기본: 처음 연결된 것, 1인 1대)
  *     --allow-network              set_network(네트워크 끄기) 허용
  *     --headless                   로컬 콘솔을 띄우지 않는다
@@ -27,7 +27,7 @@ import { parseArgs } from 'node:util';
 import { AdbDriver, devAppPackage, listDevices } from '@qcard/device/node';
 import { claudeCodeStatus, createCassetteLlm, createLiveLlm, type ClaudeCodeStatus } from '@qcard/llm';
 import { collectionGroup, onSnapshot, query, where } from 'firebase/firestore';
-import { HostDisconnectedError, openHostSession } from './connect';
+import { HostDisconnectedError, openHostSession, targetFromEnv } from './connect';
 import { attachScreen, ConsoleService, launchConsole } from './console';
 import { RESTORED, restoreAwake } from './awake';
 import { claimJob, heartbeat, pendingJobs, processJob, startRunJobs } from './jobs';
@@ -37,13 +37,14 @@ import { firestoreApply } from './sink';
 const { values } = parseArgs({
   options: {
     user: { type: 'string' },
-    package: { type: 'string', default: devAppPackage() },
+    package: { type: 'string' },
     serial: { type: 'string' },
     'allow-network': { type: 'boolean', default: false },
     headless: { type: 'boolean', default: false },
   },
 });
-const session = await openHostSession({ seedUser: values.user }).catch((e: unknown) => {
+const target = targetFromEnv();
+const session = await openHostSession({ seedUser: values.user, target }).catch((e: unknown) => {
   if (!(e instanceof HostDisconnectedError)) throw e;
   console.error(e.message);
   process.exit(1);
@@ -107,7 +108,8 @@ const service = new ConsoleService({
     ...(claude?.subscriptionType ? { plan: claude.subscriptionType } : {}),
   }),
   log,
-  fallbackPackage: values.package,
+  // 로컬 설정(qcard.local.json)은 저장소에서 개발할 때만 본다
+  fallbackPackage: values.package ?? (target.emulator ? devAppPackage() : undefined),
   allowNetworkToggle: values['allow-network'],
 });
 // 웹 사이드바의 [로컬 콘솔]로 들어오면 그 주소는 쓴 것이라, 연결 신호로 새 주소를 바로 올린다

@@ -7,21 +7,21 @@
 
 pnpm workspace + Turborepo, TypeScript 단일 언어.
 
-| 경로                | 내용                                                                                                                         |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web`          | 웹 대시보드(React 18 + Vite + react-router 7 + TanStack Query). `features/`: `qa-sheet`·`qa-doc`·`console`. `/__ui` 카탈로그 |
-| `apps/functions`    | Cloud Functions: 프로젝트·멤버·초대 쓰기(callable), 삭제 유예 지난 프로젝트 영구 삭제. 보안 규칙은 `firebase/`               |
-| `apps/host-agent`   | 실기기에서 사이클 실행 → Firestore·Storage 업로드, QA 문서 생성 작업 처리, 로컬 콘솔(`console/`)                             |
-| `packages/ui`       | 디자인 시스템 "Montage for qcard" — Montage 재수출, `--qc-*` 토큰, `VerdictBadge`                                            |
-| `packages/shared`   | 도메인 스키마(Zod, PRD §6.4)·표시용 라벨·membership 규칙. Agent 도구·Verifier 출력 스키마는 `src/agent.ts`                   |
-| `packages/data`     | 데이터 접근 인터페이스 `QcardApi`, 공용 계산 `logic.ts`, Firestore 구현, 에뮬레이터 시드                                     |
-| `packages/fixtures` | 가상 앱 하루콩의 온보딩 스펙(`spec/`)에서 만든 결정적 데이터와 목업 디바이스 화면(`screens.ts`)·합성 시나리오(`device.ts`)   |
-| `packages/device`   | `DeviceDriver`, 접근성 트리 파서, `AdbDriver`·녹화(`@qcard/device/node`), `FakeDevice`                                       |
-| `packages/llm`      | `LlmClient`, 실제 호출(본인 Claude Code `claude -p` = 기본 / API 키 = 개발용), 녹화·재생(cassette), 사용량·한도              |
-| `packages/agent`    | Executor 루프(`runSteps`), 검증 포인트 판정(`verifyPoints`·`settle`), 판정 집계(`judge`), 케이스 실행(`runCase`), `e2e/`     |
-| `packages/spec`     | 스펙 파서(`spec.md` → 요구사항·TS/EC 행)와 버전 매칭(출처 ID, TC ID 이어받기). LLM 없음                                      |
-| `packages/qadoc`    | QA Doc Generator: 스펙 묶음 + 이전 QA 문서 → 새 QA 문서. 결정적인 부분은 코드, 케이스 변환 등은 Opus(`prompts.ts`)           |
-| `packages/apk`      | APK 매니페스트(패키지·버전)·서명 인증서 지문 읽기(브라우저·Node 공용). 테스트 APK는 `scripts/make-fixtures.sh`               |
+| 경로                | 내용                                                                                                                              |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`          | 웹 대시보드(React 18 + Vite + react-router 7 + TanStack Query). `features/`: `qa-sheet`·`qa-doc`·`console`. `/__ui` 카탈로그      |
+| `apps/functions`    | Cloud Functions: 프로젝트·멤버·초대 쓰기(callable), 삭제 유예 지난 프로젝트 영구 삭제. 보안 규칙은 `firebase/`                    |
+| `apps/host-agent`   | 실기기에서 사이클 실행 → Firestore·Storage 업로드, QA 문서 생성 작업 처리, 로컬 콘솔(`console/`). npm `@qcard/host`(명령 `qcard`) |
+| `packages/ui`       | 디자인 시스템 "Montage for qcard" — Montage 재수출, `--qc-*` 토큰, `VerdictBadge`                                                 |
+| `packages/shared`   | 도메인 스키마(Zod, PRD §6.4)·표시용 라벨·membership 규칙. Agent 도구·Verifier 출력 스키마는 `src/agent.ts`                        |
+| `packages/data`     | 데이터 접근 인터페이스 `QcardApi`, 공용 계산 `logic.ts`, Firestore 구현, 에뮬레이터 시드                                          |
+| `packages/fixtures` | 가상 앱 하루콩의 온보딩 스펙(`spec/`)에서 만든 결정적 데이터와 목업 디바이스 화면(`screens.ts`)·합성 시나리오(`device.ts`)        |
+| `packages/device`   | `DeviceDriver`, 접근성 트리 파서, `AdbDriver`·녹화(`@qcard/device/node`), `FakeDevice`                                            |
+| `packages/llm`      | `LlmClient`, 실제 호출(본인 Claude Code `claude -p` = 기본 / API 키 = 개발용), 녹화·재생(cassette), 사용량·한도                   |
+| `packages/agent`    | Executor 루프(`runSteps`), 검증 포인트 판정(`verifyPoints`·`settle`), 판정 집계(`judge`), 케이스 실행(`runCase`), `e2e/`          |
+| `packages/spec`     | 스펙 파서(`spec.md` → 요구사항·TS/EC 행)와 버전 매칭(출처 ID, TC ID 이어받기). LLM 없음                                           |
+| `packages/qadoc`    | QA Doc Generator: 스펙 묶음 + 이전 QA 문서 → 새 QA 문서. 결정적인 부분은 코드, 케이스 변환 등은 Opus(`prompts.ts`)                |
+| `packages/apk`      | APK 매니페스트(패키지·버전)·서명 인증서 지문 읽기(브라우저·Node 공용). 테스트 APK는 `scripts/make-fixtures.sh`                    |
 
 ## 명령
 
@@ -35,7 +35,7 @@ pnpm이 전역에 없으면 `npx -y pnpm@10.34.6 <명령>`으로 실행한다.
 
 그 밖의 명령은 `docs/dev/`에 있다. 필요할 때 읽는다.
 
-- [host-agent.md](docs/dev/host-agent.md) — `connect`(PC 연결)·`serve`(상주 모드)·`run-cycle`, 로컬 콘솔
+- [host-agent.md](docs/dev/host-agent.md) — `connect`(PC 연결)·`serve`(상주 모드)·`run-cycle`, 로컬 콘솔, 배포 패키지 `qcard`
 - [device-llm.md](docs/dev/device-llm.md) — 실기기 점검·실행, `llm:smoke`, cassette 녹화, `sample-runs`
 - [spec-qadoc.md](docs/dev/spec-qadoc.md) — `spec check`, `qadoc generate`, `seed-generated`
 - [emulators.md](docs/dev/emulators.md) — 에뮬레이터 구성·시드·임시 폴더 분리

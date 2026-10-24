@@ -6,6 +6,7 @@ dist/
 
 # 로컬 산출물
 apps/web/.snap/
+apps/host-agent/pkg/
 apps/web/test-results/
 apps/web/playwright-report/
 

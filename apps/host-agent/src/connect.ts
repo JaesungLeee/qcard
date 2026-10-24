@@ -34,9 +34,27 @@ import { connectStorageEmulator, getStorage } from 'firebase/storage';
 
 export type { HostCredential };
 
-/** 붙을 Firebase와 웹 주소. QCARD_FIREBASE_CONFIG(웹 설정 JSON)가 없으면 개발용 에뮬레이터(`pnpm emu`) */
+/** 붙을 Firebase와 웹 주소 */
 export type FirebaseTarget = { config: FirebaseOptions; emulator: boolean; webUrl: string };
 
+/** 운영 서비스. 웹 설정은 브라우저에 그대로 노출되는 공개값이다 (보호는 보안 규칙·승인된 도메인이 한다) */
+export const PROD_TARGET: FirebaseTarget = {
+  config: {
+    apiKey: 'AIzaSyBn9Z9tJqfKiXPWYnNUX0flAFoP-OO4P6E',
+    authDomain: 'qcard-d2ade.firebaseapp.com',
+    projectId: 'qcard-d2ade',
+    storageBucket: 'qcard-d2ade.firebasestorage.app',
+    appId: '1:692024432834:web:bc0d61dc6eaa8676c2c35b',
+  },
+  emulator: false,
+  webUrl: 'https://qcard-d2ade.web.app',
+};
+
+/**
+ * 1. QCARD_FIREBASE_CONFIG(웹 설정 JSON) + QCARD_WEB_URL: 그 프로젝트
+ * 2. QCARD_TARGET=prod: 운영 서비스 (배포한 `qcard` 명령의 기본값, `main.ts`)
+ * 3. 그 밖: 개발용 에뮬레이터(`pnpm emu`)와 http://localhost:5173 — 저장소의 pnpm 스크립트
+ */
 export function targetFromEnv(env: NodeJS.ProcessEnv = process.env): FirebaseTarget {
   const raw = env.QCARD_FIREBASE_CONFIG;
   if (raw) {
@@ -45,12 +63,17 @@ export function targetFromEnv(env: NodeJS.ProcessEnv = process.env): FirebaseTar
     if (!env.QCARD_WEB_URL) throw new Error('QCARD_WEB_URL(웹 대시보드 주소)이 필요합니다');
     return { config, emulator: false, webUrl: env.QCARD_WEB_URL };
   }
+  if (env.QCARD_TARGET === 'prod') return PROD_TARGET;
   return {
     config: { projectId: 'demo-qcard', apiKey: 'demo-key', storageBucket: 'demo-qcard.appspot.com' },
     emulator: true,
     webUrl: env.QCARD_WEB_URL ?? 'http://localhost:5173',
   };
 }
+
+/** 안내 문구에 넣을 호스트 명령: 배포한 `qcard` 명령이면 `qcard <명령>`, 저장소에서 돌리면 pnpm 스크립트 */
+export const hostCommand = (sub: string) =>
+  process.env.QCARD_CLI ? `qcard ${sub}` : `pnpm --filter @qcard/host ${sub}`;
 
 // ---------------------------------------------------------------- 자격 보관
 
@@ -267,6 +290,43 @@ export async function signInHost(target: FirebaseTarget, cred: HostCredential) {
   };
 }
 
+/**
+ * connect: 이미 연결된 PC면 그대로 둔다 (연결할 때마다 웹에 쓸 수 없는 연결이 쌓이지 않게).
+ * `force`면 새로 연결해 자격을 저장한 뒤 예전 연결을 해제한다 — 브라우저에서 취소해도 예전 연결은 남는다
+ */
+export async function connectHost<S extends { host: { name: string }; disconnect(): Promise<void> }>(opts: {
+  store: CredentialStore;
+  pair: () => Promise<HostCredential>;
+  signIn: (c: HostCredential) => Promise<S>;
+  force?: boolean;
+}): Promise<
+  { status: 'already'; session: S } | { status: 'connected'; session: S; replaced?: { name: string; revoked: boolean } }
+> {
+  const saved = await opts.store.load();
+  let old: S | undefined;
+  if (saved) {
+    try {
+      old = await opts.signIn(saved);
+    } catch (e) {
+      if (!(e instanceof HostDisconnectedError)) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new Error(`이 PC의 연결 상태를 확인하지 못했습니다 (${msg}). 네트워크를 확인하고 다시 시도하세요.`);
+      }
+      await opts.store.clear(); // 웹에서 해제한 연결
+    }
+  }
+  if (old && !opts.force) return { status: 'already', session: old };
+  const cred = await opts.pair();
+  await opts.store.save(cred);
+  const session = await opts.signIn(cred);
+  if (!old) return { status: 'connected', session };
+  const revoked = await old.disconnect().then(
+    () => true,
+    () => false,
+  );
+  return { status: 'connected', session, replaced: { name: old.host.name, revoked } };
+}
+
 /** 개발용: 에뮬레이터 시드 사용자로 로그인해 그 이름으로 연결한다 (브라우저 없이) */
 export async function pairAsSeedUser(target: FirebaseTarget, github: string, name: string): Promise<HostCredential> {
   if (!target.emulator) throw new Error('--user는 에뮬레이터에서만 씁니다. 실제 서비스는 connect로 연결하세요.');
@@ -297,7 +357,7 @@ export async function openHostSession(opts: { seedUser?: string; target?: Fireba
   if (!cred) {
     if (!opts.seedUser) {
       throw new HostDisconnectedError(
-        '이 PC가 qcard 계정에 연결되지 않았습니다. 먼저 연결하세요: pnpm --filter @qcard/host-agent connect',
+        `이 PC가 qcard 계정에 연결되지 않았습니다. 먼저 연결하세요: ${hostCommand('connect')}`,
       );
     }
     cred = await pairSeed();
@@ -308,8 +368,6 @@ export async function openHostSession(opts: { seedUser?: string; target?: Fireba
     if (!(e instanceof HostDisconnectedError)) throw e;
     await store.clear();
     if (opts.seedUser) return signInHost(target, await pairSeed());
-    throw new HostDisconnectedError(
-      '이 PC의 연결이 해제되었습니다. 다시 연결하세요: pnpm --filter @qcard/host-agent connect',
-    );
+    throw new HostDisconnectedError(`이 PC의 연결이 해제되었습니다. 다시 연결하세요: ${hostCommand('connect')}`);
   }
 }

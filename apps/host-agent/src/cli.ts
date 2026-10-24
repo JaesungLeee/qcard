@@ -4,7 +4,7 @@
  *
  * 개발·자동화용 명령. 사용자는 상주 모드(serve)의 로컬 콘솔에서 사이클을 골라 Run을 시작한다.
  *
- *   pnpm --filter @qcard/host-agent run-cycle --project haru --cycle cycle-130-1 [TC-ID…]
+ *   pnpm --filter @qcard/host run-cycle --project haru --cycle cycle-130-1 [TC-ID…]
  *     --user <시드 사용자>          개발용: 에뮬레이터에서 브라우저 없이 그 사용자 이름으로 연결
  *     --package <앱>               빌드 파일이 없는 사이클(개발 시드)에서 실행할 앱 (앱 데이터 초기화는 이 앱에만). 기본: qcard.local.json의 devApp
  *     --serial <시리얼>            디바이스가 여러 대일 때

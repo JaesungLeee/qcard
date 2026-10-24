@@ -7,7 +7,7 @@ import { useDisconnectHost, useHostConnections, useMyHosts } from '../../data/ho
 import { PlainShell } from '../../shell/PlainShell';
 import { ErrorMessage } from '../projects/parts';
 import '../projects/projects.css';
-import { CONNECT_COMMAND, connectedPcs, DEV_COMMAND_NOTE, type ConnectedPc } from './model';
+import { CONNECT_COMMAND, connectedPcs, INSTALL_NOTE, type ConnectedPc } from './model';
 import './hosts.css';
 
 /**
@@ -32,7 +32,7 @@ export function HostsPage() {
             연결할 PC의 터미널에서 실행하면 브라우저가 열립니다. 그 화면에서 [이 PC 연결]을 누르세요.
           </span>
           <code className={`qh-code ${textClass('label2')}`}>{CONNECT_COMMAND}</code>
-          <span className={`${textClass('caption1')} qp-faint`}>{DEV_COMMAND_NOTE}</span>
+          <span className={`${textClass('caption1')} qp-faint`}>{INSTALL_NOTE}</span>
         </div>
       </div>
       <QueryState query={connections}>

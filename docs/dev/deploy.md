@@ -26,12 +26,13 @@ callable 함수의 공개 호출 권한(Cloud Run Invoker `allUsers`)은 CLI가 
 
 웹 주소는 `https://qcard-d2ade.web.app`. Hosting은 모든 경로를 `index.html`로 보낸다(SPA).
 
-## 호스트 에이전트
+## 호스트 에이전트 (npm `@qcard/host`)
 
-실제 프로젝트에 붙이려면 웹 설정과 웹 주소를 환경변수로 준다(없으면 에뮬레이터). 패키징하면 기본값으로 넣는다.
+운영 설정은 `apps/host-agent/src/connect.ts`의 `PROD_TARGET`에 들어 있다. 웹 주소·Firebase 프로젝트를 바꾸면 여기도 바꾸고 새 버전을 올린다.
 
 ```sh
-QCARD_FIREBASE_CONFIG='{"apiKey":"…","authDomain":"qcard-d2ade.firebaseapp.com","projectId":"qcard-d2ade","storageBucket":"qcard-d2ade.firebasestorage.app","appId":"…"}' \
-QCARD_WEB_URL=https://qcard-d2ade.web.app \
-pnpm --filter @qcard/host-agent connect
+pnpm --filter @qcard/host bundle                 # apps/host-agent/pkg/ (운영 웹 빌드 포함)
+npm publish apps/host-agent/pkg --access public  # npm 조직 qcard, 사람이 직접
 ```
+
+자세한 내용은 [host-agent.md](host-agent.md#배포-패키지-qcardhost).

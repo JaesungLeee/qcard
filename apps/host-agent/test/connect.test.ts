@@ -3,7 +3,15 @@ import { mkdtemp, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { fileStore, pairInBrowser, targetFromEnv } from '../src/connect';
+import type { HostCredential } from '@qcard/shared';
+import {
+  connectHost,
+  fileStore,
+  HostDisconnectedError,
+  pairInBrowser,
+  targetFromEnv,
+  type CredentialStore,
+} from '../src/connect';
 
 /*
  * 호스트 연결 (F-TM-14): 웹의 연결 화면이 127.0.0.1의 임시 서버로 호스트 자격을 POST한다.
@@ -88,15 +96,103 @@ describe('자격 보관·연결 대상', () => {
     expect(await store.load()).toBeUndefined();
   });
 
-  it('설정이 없으면 개발용 에뮬레이터, 있으면 그 프로젝트와 웹 주소', () => {
+  it('설정이 없으면 개발용 에뮬레이터, 있으면 그 프로젝트와 웹 주소, QCARD_TARGET=prod면 운영', () => {
     expect(targetFromEnv({})).toMatchObject({ emulator: true, webUrl: 'http://localhost:5173' });
     const real = targetFromEnv({
       QCARD_FIREBASE_CONFIG: JSON.stringify({ projectId: 'qcard-prod', apiKey: 'k' }),
       QCARD_WEB_URL: 'https://qcard.example',
     });
     expect(real).toMatchObject({ emulator: false, webUrl: 'https://qcard.example' });
+    expect(targetFromEnv({ QCARD_TARGET: 'prod' })).toMatchObject({
+      emulator: false,
+      config: { projectId: 'qcard-d2ade' },
+      webUrl: 'https://qcard-d2ade.web.app',
+    });
     expect(() => targetFromEnv({ QCARD_FIREBASE_CONFIG: JSON.stringify({ projectId: 'p', apiKey: 'k' }) })).toThrow(
       'QCARD_WEB_URL',
     );
+  });
+});
+
+describe('connectHost', () => {
+  const OLD = { uid: 'u', hostId: 'h-old', secret: 's-old' };
+  const NEW = { uid: 'u', hostId: 'h-new', secret: 's-new' };
+
+  /** 메모리 보관소 + 가짜 로그인(해제됐거나 네트워크가 끊긴 자격을 고른다)·브라우저 연결 */
+  function setup(opts: { saved?: HostCredential; gone?: string[]; offline?: boolean; revokeFails?: boolean } = {}) {
+    let saved = opts.saved;
+    const store: CredentialStore = {
+      load: async () => saved,
+      save: async (c) => void (saved = c),
+      clear: async () => void (saved = undefined),
+    };
+    const revoked: string[] = [];
+    let paired = 0;
+    const signIn = async (c: HostCredential) => {
+      if (opts.offline) throw new Error('network-request-failed');
+      if (opts.gone?.includes(c.hostId)) throw new HostDisconnectedError('해제됨');
+      return {
+        host: { name: `PC ${c.hostId}` },
+        disconnect: async () => {
+          if (opts.revokeFails) throw new Error('unavailable');
+          revoked.push(c.hostId);
+        },
+      };
+    };
+    const pair = async () => (paired++, NEW);
+    return { store, signIn, pair, revoked, paired: () => paired, saved: () => saved };
+  }
+
+  it('자격이 없으면 브라우저로 연결해 저장한다', async () => {
+    const t = setup();
+    const r = await connectHost(t);
+    expect(r.status).toBe('connected');
+    expect(t.saved()).toEqual(NEW);
+  });
+
+  it('이미 연결돼 있으면 새로 연결하지 않는다', async () => {
+    const t = setup({ saved: OLD });
+    const r = await connectHost(t);
+    expect(r).toMatchObject({ status: 'already', session: { host: { name: 'PC h-old' } } });
+    expect(t.paired()).toBe(0);
+    expect(t.saved()).toEqual(OLD);
+  });
+
+  it('웹에서 해제된 자격이면 지우고 새로 연결한다', async () => {
+    const t = setup({ saved: OLD, gone: ['h-old'] });
+    const r = await connectHost(t);
+    expect(r).toMatchObject({ status: 'connected' });
+    expect(r.status === 'connected' && r.replaced).toBeFalsy();
+    expect(t.saved()).toEqual(NEW);
+  });
+
+  it('연결 상태를 확인하지 못하면 새로 연결하지 않고 실패한다', async () => {
+    const t = setup({ saved: OLD, offline: true });
+    await expect(connectHost(t)).rejects.toThrow('연결 상태를 확인하지 못했습니다');
+    expect(t.paired()).toBe(0);
+    expect(t.saved()).toEqual(OLD);
+  });
+
+  it('--force면 새로 연결해 저장한 뒤 예전 연결을 해제한다', async () => {
+    const t = setup({ saved: OLD });
+    const r = await connectHost({ ...t, force: true });
+    expect(r).toMatchObject({ status: 'connected', replaced: { name: 'PC h-old', revoked: true } });
+    expect(t.revoked).toEqual(['h-old']);
+    expect(t.saved()).toEqual(NEW);
+  });
+
+  it('--force에서 브라우저 연결이 실패하면 예전 연결을 그대로 둔다', async () => {
+    const t = setup({ saved: OLD });
+    const pair = () => Promise.reject(new Error('연결 시간이 지났습니다'));
+    await expect(connectHost({ ...t, pair, force: true })).rejects.toThrow('연결 시간이 지났습니다');
+    expect(t.revoked).toEqual([]);
+    expect(t.saved()).toEqual(OLD);
+  });
+
+  it('예전 연결을 해제하지 못해도 새 연결은 유지한다', async () => {
+    const t = setup({ saved: OLD, revokeFails: true });
+    const r = await connectHost({ ...t, force: true });
+    expect(r).toMatchObject({ status: 'connected', replaced: { revoked: false } });
+    expect(t.saved()).toEqual(NEW);
   });
 });

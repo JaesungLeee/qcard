@@ -6,7 +6,7 @@ import { useApi, useConnectHost } from '../../data/hooks';
 import { PlainShell } from '../../shell/PlainShell';
 import { ErrorMessage } from '../projects/parts';
 import '../projects/projects.css';
-import { CONNECT_COMMAND, DEV_COMMAND_NOTE, pairEndpoint, parseConnectRequest } from './model';
+import { CONNECT_COMMAND, INSTALL_NOTE, pairEndpoint, parseConnectRequest } from './model';
 import './hosts.css';
 
 /**
@@ -46,7 +46,7 @@ export function ConnectHostPage() {
               <span className="qp-stack" style={{ gap: 6 }}>
                 <span>연결할 PC의 터미널에서 다시 시작하세요.</span>
                 <code className={`qh-code ${textClass('label2')}`}>{CONNECT_COMMAND}</code>
-                <span className={textClass('caption1')}>{DEV_COMMAND_NOTE}</span>
+                <span className={textClass('caption1')}>{INSTALL_NOTE}</span>
               </span>
             }
           >

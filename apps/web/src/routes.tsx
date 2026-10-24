@@ -16,9 +16,12 @@ import { LoginPage } from './shell/LoginPage';
  * - QA 시트: `?tab=summary|cases|defects|traceability|env`
  * - QA 문서 검토: `?tab=cases|questions|suggestions|traceability&case=<TC ID>`
  * - 로그인: `/login?next=<돌아갈 주소>`. 나머지 화면은 모두 RequireAuth 아래에 둔다 (F-TM-01)
+ * - 로컬 콘솔 `/console/live`는 예외: 호스트의 콘솔 서버(127.0.0.1)가 웹 빌드를 직접 주고 일회용 주소·쿠키로 확인한다.
+ *   웹 로그인을 쓰지 않는다 (127.0.0.1은 Firebase 승인된 도메인이 아니고, 로그인 세션도 따로다)
  */
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  { path: '/console/live', element: <LiveConsolePage /> },
   {
     element: <RequireAuth />,
     children: [
@@ -46,7 +49,6 @@ export const router = createBrowserRouter([
         ],
       },
       { path: '/console', element: <ConsolePage /> },
-      { path: '/console/live', element: <LiveConsolePage /> },
       { path: '/__ui', element: <UiCatalog /> },
     ],
   },
