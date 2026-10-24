@@ -357,7 +357,7 @@ function Rows({
             ))}
           </ul>
           {page.pages > 1 && (
-            <div className={`${textClass('label2')} qd-pager`}>
+            <div className={`${textClass('label2')} qd-jobpager`}>
               <span className="qd-faint qd-num">
                 {page.from}–{page.to} / {visible.length}
               </span>
@@ -535,7 +535,7 @@ function Timeline({ events }: { events: { id: string; at: string; kind: JobEvent
         </ol>
       )}
       {page.pages > 1 && (
-        <div className={`${textClass('label2')} qd-pager`} style={{ padding: 0 }}>
+        <div className={`${textClass('label2')} qd-jobpager`} style={{ padding: 0 }}>
           <span className="qd-faint qd-num">
             {page.from}–{page.to} / {events.length}
           </span>

@@ -125,7 +125,7 @@
   flex: none;
   width: 56px;
 }
-.qd-pager {
+.qd-jobpager {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
