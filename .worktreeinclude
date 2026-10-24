@@ -1,0 +1,3 @@
+# Claude Code가 워크트리를 만들 때 본 저장소에서 복사할 gitignore 파일 (docs/dev/worktree.md)
+# .env는 복사하지 않는다 — 필요하면 직접 복사한다
+qcard.local.json

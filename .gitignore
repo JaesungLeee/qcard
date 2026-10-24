@@ -23,3 +23,6 @@ packages/agent/runs/
 .firebase/
 # 실기기 개발용 로컬 설정 (본인 폰의 QA 앱 등, packages/device/src/devApp.ts)
 qcard.local.json
+
+# Claude Code 워크트리 (docs/dev/worktree.md)
+.claude/worktrees/

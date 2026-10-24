@@ -11,8 +11,9 @@
  *
  * 실제 팀 스펙과 결과·녹화는 저장소 밖(../qcard-specs/)에 둔다.
  */
+import { existsSync } from 'node:fs';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
-import { join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
   assertClaudeCodeReady,
@@ -64,6 +65,14 @@ const load = async (dir: string) => {
   return only ? { ...b, specs: b.specs.filter((s) => only.includes(s.name)) } : b;
 };
 
+/** 저장소 밖 qcard-specs: 위로 올라가며 찾는다 (워크트리 .claude/worktrees/<이름>/에서 돌려도 본 저장소 옆 폴더를 찾는다) */
+function specsDir(): string {
+  for (let dir = import.meta.dirname; dirname(dir) !== dir; dir = dirname(dir)) {
+    if (existsSync(join(dir, 'qcard-specs'))) return join(dir, 'qcard-specs');
+  }
+  return resolve(import.meta.dirname, '../../../../qcard-specs');
+}
+
 type Saved = { doc: QADocument; prepFlows: PrepFlow[] };
 const prevSaved = values['prev-doc'] ? (JSON.parse(await readFile(values['prev-doc'], 'utf8')) as Saved) : undefined;
 
@@ -77,7 +86,7 @@ if (llmProviderFromEnv() === 'claude-cli') {
 // 녹화가 있으면 재생, 없으면 실제로 부르고 녹화한다
 // 스펙 계획은 행이 많으면 응답이 2~3분 걸린다 (실측 place-detail 76행 143초)
 const live = createLiveLlm(undefined, { turnTimeoutMs: 600_000 });
-const cassetteDir = resolve(values.cassettes ?? join(import.meta.dirname, '../../../../qcard-specs/cassettes/qadoc'));
+const cassetteDir = resolve(values.cassettes ?? join(specsDir(), 'cassettes/qadoc'));
 // 녹화가 있으면 재생, 없으면 실제로 부르고 녹화한다 (실제 호출 수를 세어 재생 수를 보인다)
 let liveCalls = 0;
 const counted: LlmClient = { create: (req, meta) => (liveCalls++, live.create(req, meta)) };

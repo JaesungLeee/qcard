@@ -7,8 +7,9 @@
  * 평가 세트는 실기기 관찰이라 저장소 밖에 둔다: ../qcard-specs/eval/locator/set.json · obs/<TC>/obs-NN.txt
  * (QCARD_EVAL_DIR로 바꿀 수 있다). 대상 앱은 qcard.local.json의 devApp
  */
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { formatTree, type DeviceDriver, type UiElement } from '@qcard/device';
 import { requireDevApp } from '@qcard/device/node';
@@ -29,7 +30,15 @@ type Item = {
   why: string;
 };
 
-const root = process.env.QCARD_EVAL_DIR ?? resolve(import.meta.dirname, '../../../../qcard-specs/eval/locator');
+/** 저장소 밖 qcard-specs: 위로 올라가며 찾는다 (워크트리 .claude/worktrees/<이름>/에서 돌려도 본 저장소 옆 폴더를 찾는다) */
+function specsDir(): string {
+  for (let dir = import.meta.dirname; dirname(dir) !== dir; dir = dirname(dir)) {
+    if (existsSync(join(dir, 'qcard-specs'))) return join(dir, 'qcard-specs');
+  }
+  return resolve(import.meta.dirname, '../../../../qcard-specs');
+}
+
+const root = process.env.QCARD_EVAL_DIR ?? join(specsDir(), 'eval/locator');
 const { values } = parseArgs({ options: { only: { type: 'string' } } });
 const items = (JSON.parse(await readFile(join(root, 'set.json'), 'utf8')) as Item[]).filter(
   (x) => !values.only || x.tc === values.only,

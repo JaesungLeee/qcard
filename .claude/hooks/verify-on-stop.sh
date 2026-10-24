@@ -8,6 +8,8 @@ cd "$CLAUDE_PROJECT_DIR" || exit 0
 [ -n "$(git status --porcelain -- apps packages scripts package.json pnpm-workspace.yaml 2>/dev/null)" ] || exit 0
 
 if command -v pnpm >/dev/null 2>&1; then PNPM=(pnpm); else PNPM=(npx -y pnpm@10.34.6); fi
+# 새 워크트리는 의존성이 없다 (docs/dev/worktree.md)
+[ -d node_modules ] || "${PNPM[@]}" install --frozen-lockfile >/dev/null 2>&1
 if ! out=$("${PNPM[@]}" verify 2>&1); then
   echo "pnpm verify 실패 — 고친 뒤 끝내세요:" >&2
   echo "$out" | tail -40 >&2

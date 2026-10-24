@@ -16,7 +16,7 @@ pnpm emu
 
 ## 테스트용
 
-`firebase.test.json`(프로젝트 `demo-qcard-test`, 개발용과 다른 포트)으로 Firestore·Storage만 띄운다.
+`firebase.test.json`(프로젝트 `demo-qcard-test`)으로 Firestore·Storage만 띄운다. 포트는 실행마다 빈 포트를 골라 임시 폴더의 설정 사본에 넣는다(`emulators.mjs`의 `testConfig`). 그래서 개발용 에뮬레이터가 떠 있거나 다른 워크트리에서 `pnpm verify`가 돌고 있어도 충돌하지 않는다. 테스트는 CLI가 넣어 주는 `FIRESTORE_EMULATOR_HOST`·`FIREBASE_STORAGE_EMULATOR_HOST`로 에뮬레이터를 찾으므로 포트를 코드에 적지 않는다.
 
 ## 임시 폴더 분리
 
