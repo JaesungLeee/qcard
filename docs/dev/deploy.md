@@ -25,7 +25,7 @@ Functions는 빌드가 만든 `apps/functions/dist/`(번들 + `workspace:*` 없�
 
 callable 함수의 공개 호출 권한(Cloud Run Invoker `allUsers`)은 CLI가 **처음 만들 때만** 붙인다. 첫 배포가 중간에 실패해 함수가 403을 돌려주면, Cloud Run 서비스 목록에서 함수를 모두 골라 권한 → `allUsers`에 Cloud Run 호출자 역할을 준다.
 
-웹 주소는 `https://qcard.dev`(Hosting 커스텀 도메인, 가비아 DNS). 기본 주소 `https://qcard-d2ade.web.app`도 같은 사이트로 계속 열린다 — 그 주소가 박힌 이전 버전 `qcard`가 연결 화면을 그리로 열기 때문에 리디렉트하거나 막지 않는다. Hosting은 모든 경로를 `index.html`로 보낸다(SPA).
+웹 주소는 `https://qcard.dev`(Hosting 커스텀 도메인, 가비아 DNS). 기본 주소 `qcard-d2ade.web.app`·`qcard-d2ade.firebaseapp.com`으로 들어오면 `apps/web/index.html`의 스크립트가 같은 경로의 `qcard.dev`로 보낸다(로그인 핸들러 `/__/auth/*`는 그대로). Hosting은 모든 경로를 `index.html`로 보낸다(SPA).
 
 ## 호스트 에이전트 (npm `@qcard/host`)
 
