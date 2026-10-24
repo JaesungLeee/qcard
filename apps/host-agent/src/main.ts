@@ -37,7 +37,7 @@ const HELP = `qcard — 스펙 기반 QA 자동화 호스트 에이전트
   -v, --version   버전
   -h, --help      도움말
 
-웹: https://qcard-d2ade.web.app`;
+웹: https://qcard.dev`;
 
 /** 번들(dist/qcard.js)과 소스(src/main.ts) 모두 한 단계 위에 package.json이 있다 */
 const version = () =>

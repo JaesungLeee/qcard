@@ -47,7 +47,7 @@ export const PROD_TARGET: FirebaseTarget = {
     appId: '1:692024432834:web:bc0d61dc6eaa8676c2c35b',
   },
   emulator: false,
-  webUrl: 'https://qcard-d2ade.web.app',
+  webUrl: 'https://qcard.dev',
 };
 
 /**

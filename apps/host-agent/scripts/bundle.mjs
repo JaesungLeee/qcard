@@ -42,7 +42,7 @@ writeFileSync(
       name: src.name,
       version: src.version,
       description: 'qcard 호스트 에이전트 — 스펙 기반 QA를 내 PC의 Android 기기와 Claude Code로 실행합니다',
-      homepage: 'https://qcard-d2ade.web.app',
+      homepage: 'https://qcard.dev',
       // npm Trusted Publishing의 출처 증명(provenance)이 이 저장소와 맞아야 한다
       repository: { type: 'git', url: 'git+https://github.com/JaesungLeee/qcard.git', directory: 'apps/host-agent' },
       keywords: ['qa', 'android', 'adb', 'claude-code', 'test-automation'],

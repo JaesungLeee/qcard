@@ -1,6 +1,6 @@
 # @qcard/host
 
-[qcard](https://qcard-d2ade.web.app)의 호스트 에이전트입니다. qcard는 스펙 문서로 앱 버전별 QA 문서를 만들고, Agent가 Android 기기에서 테스트 케이스를 직접 수행하는 QA 자동화 서비스입니다.
+[qcard](https://qcard.dev)의 호스트 에이전트입니다. qcard는 스펙 문서로 앱 버전별 QA 문서를 만들고, Agent가 Android 기기에서 테스트 케이스를 직접 수행하는 QA 자동화 서비스입니다.
 
 이 패키지를 설치한 PC가 실제 실행을 맡습니다.
 
@@ -29,7 +29,7 @@ qcard connect    # 브라우저가 열리면 [이 PC 연결]을 누릅니다
 qcard serve      # 호스트 에이전트를 켭니다
 ```
 
-1. 먼저 [qcard 웹](https://qcard-d2ade.web.app)에 GitHub로 로그인합니다.
+1. 먼저 [qcard 웹](https://qcard.dev)에 GitHub로 로그인합니다.
 2. `qcard connect`를 실행하면 브라우저에 연결 화면이 열립니다. **이 PC의 터미널에서 직접 시작한 경우에만** [이 PC 연결]을 누르세요. 연결 정보는 macOS 키체인에 저장됩니다.
 3. `qcard serve`를 켜 두면 로컬 콘솔 주소가 출력됩니다. 콘솔에서 기기 화면을 보고, 사이클을 골라 Run을 시작합니다. 웹에서 요청한 Run과 QA 문서 생성도 이 PC가 받아 처리합니다.
 

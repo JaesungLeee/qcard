@@ -106,7 +106,7 @@ describe('자격 보관·연결 대상', () => {
     expect(targetFromEnv({ QCARD_TARGET: 'prod' })).toMatchObject({
       emulator: false,
       config: { projectId: 'qcard-d2ade' },
-      webUrl: 'https://qcard-d2ade.web.app',
+      webUrl: 'https://qcard.dev',
     });
     expect(() => targetFromEnv({ QCARD_FIREBASE_CONFIG: JSON.stringify({ projectId: 'p', apiKey: 'k' }) })).toThrow(
       'QCARD_WEB_URL',
