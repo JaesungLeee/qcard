@@ -359,6 +359,27 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     expect(service.running).toBe(false);
   });
 
+  it('디바이스가 없어도 Claude Code 상태가 바뀌면 홈에 알린다', async () => {
+    const { api, storage, queue, target } = await host(PEOPLE.lead, 'unused');
+    let loggedIn = false;
+    const msgs: ConsoleServerMessage[] = [];
+    const service = new ConsoleService({
+      api,
+      storage,
+      queue,
+      executor: PEOPLE.lead,
+      account: { uid: target.executorUid, hostId: target.hostId },
+      claudeCode: () => ({ installed: true, loggedIn }),
+      log: () => {},
+    });
+    service.subscribe((m) => msgs.push(m));
+    loggedIn = true;
+    service.claudeCodeChanged();
+    service.claudeCodeChanged(); // 그대로면 다시 보내지 않는다
+    const homes = msgs.filter((m) => m.type === 'home').map((m) => (m as { home: ConsoleHome }).home);
+    expect(homes.map((h) => h.claudeCode?.loggedIn)).toEqual([false, true]);
+  });
+
   it('이어서 실행하면 그 Run의 큐를 다시 돌린다 — 이전 결과가 있어 다시 실행하려고 고른 칸도', async () => {
     // TC-004(시드에 이전 결과 있음)를 다시 실행하려고 골랐다가 연결이 끊겨 멈춘 Run
     const { queue } = await host(PEOPLE.lead, 'unused');

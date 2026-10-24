@@ -78,6 +78,8 @@ let claude: ClaudeCodeStatus | undefined;
 async function beat() {
   const s = await claudeCodeStatus();
   claude = s;
+  // 콘솔 홈은 디바이스가 바뀔 때만 다시 읽으므로, 디바이스가 없어도 Claude Code 상태는 따로 알린다
+  service.claudeCodeChanged();
   const list = await devices();
   await useDevice(list.map((d) => d.serial));
   await service.checkDevice();

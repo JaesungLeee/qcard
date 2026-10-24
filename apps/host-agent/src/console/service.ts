@@ -94,6 +94,12 @@ export class ConsoleService implements ConsoleBackend {
     this.setHome({ busy });
   }
 
+  /** Claude Code 상태를 다시 읽었다 (연결 신호마다) — 로그인·한도가 바뀌었으면 홈에 알린다 */
+  claudeCodeChanged() {
+    const claudeCode = this.deps.claudeCode();
+    if (JSON.stringify(claudeCode) !== JSON.stringify(this.home.claudeCode)) this.setHome({ claudeCode });
+  }
+
   /** 연결된 디바이스가 바뀌었다 (없으면 undefined) */
   setDevice(device: { driver: DeviceDriver; info: DeviceInfo } | undefined) {
     const same = device?.info.serial === this.device?.info.serial;
