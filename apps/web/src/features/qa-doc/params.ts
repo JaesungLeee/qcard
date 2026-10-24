@@ -11,7 +11,7 @@ export const PREP_KIND_LABEL: Record<PrepFlow['kind'], string> = {
   env: '환경',
 };
 
-type Patch = Partial<Record<'tab' | 'case' | 'edit' | 'question', string | null>>;
+type Patch = Partial<Record<'tab' | 'case' | 'edit' | 'question' | 'feature' | 'flow' | 'page', string | null>>;
 
 /** 검토 화면 쿼리 파라미터. 다른 파라미터(예: `theme`)는 그대로 둔다. */
 export function useDocParams() {
@@ -38,6 +38,10 @@ export function useDocParams() {
     caseId: params.get('case'),
     edit: params.get('edit') === '1',
     question: params.get('question'),
+    /** 케이스 탭 분류 범위(기능 › 세부 기능)와 페이지(1부터) */
+    feature: params.get('feature'),
+    flow: params.get('flow'),
+    page: Number(params.get('page') ?? '1') || 1,
     set,
   };
 }

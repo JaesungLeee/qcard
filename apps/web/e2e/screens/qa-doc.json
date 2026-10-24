@@ -2,6 +2,12 @@
   { "name": "qa-doc-list", "path": "/p/haru/docs", "waitFor": "QA 문서 1.3.0" },
   { "name": "qa-doc-new", "path": "/p/haru/docs/new", "waitFor": "1. 스펙 폴더" },
   { "name": "qa-doc-cases", "path": "/p/haru/docs/doc-130", "waitFor": "TC-ONBOARDING-001" },
+  { "name": "qa-doc-cases-page2", "path": "/p/haru/docs/doc-130?page=2", "waitFor": "21–40 / 62" },
+  {
+    "name": "qa-doc-cases-flow",
+    "path": "/p/haru/docs/doc-130?feature=%5BSCR-001%5D%20%EC%B2%AB%20%EC%8B%A4%ED%96%89%20%EC%98%A8%EB%B3%B4%EB%94%A9&flow=%EC%B2%AB%20%EC%8A%B5%EA%B4%80%20%EB%A7%8C%EB%93%A4%EA%B8%B0%EB%A5%BC%20%EA%B1%B4%EB%84%88%EB%9B%B4%EB%8B%A4",
+    "waitFor": "유저 플로우"
+  },
   { "name": "qa-doc-case-changed", "path": "/p/haru/docs/doc-130?tab=cases&case=TC-ONBOARDING-008", "waitFor": "이전 버전 대비 변경" },
   { "name": "qa-doc-case-held", "path": "/p/haru/docs/doc-130?case=TC-ONBOARDING-030", "waitFor": "승인 보류" },
   { "name": "qa-doc-case-removed", "path": "/p/haru/docs/doc-130?case=TC-ONBOARDING-062", "waitFor": "삭제됨 — 다음 사이클에서 제외" },
