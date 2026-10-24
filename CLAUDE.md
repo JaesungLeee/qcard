@@ -39,6 +39,7 @@ pnpm이 전역에 없으면 `npx -y pnpm@10.34.6 <명령>`으로 실행한다.
 - [device-llm.md](docs/dev/device-llm.md) — 실기기 점검·실행, `llm:smoke`, cassette 녹화, `sample-runs`
 - [spec-qadoc.md](docs/dev/spec-qadoc.md) — `spec check`, `qadoc generate`, `seed-generated`
 - [emulators.md](docs/dev/emulators.md) — 에뮬레이터 구성·시드·임시 폴더 분리
+- [deploy.md](docs/dev/deploy.md) — 실제 Firebase 프로젝트(`qcard-d2ade`) 설정, 웹·규칙·Functions 배포, 호스트 환경변수
 
 ## 하네스
 

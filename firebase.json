@@ -5,11 +5,21 @@
   },
   "functions": [
     {
-      "source": "apps/functions",
+      "source": "apps/functions/dist",
       "codebase": "default",
-      "ignore": ["node_modules", "src", "test", "*.log"]
+      "ignore": ["node_modules", "*.log"]
     }
   ],
+  "hosting": {
+    "public": "apps/web/dist",
+    "ignore": ["firebase.json", "**/.*"],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
   "emulators": {
     "singleProjectMode": true,
     "auth": {

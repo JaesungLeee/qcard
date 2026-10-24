@@ -19,7 +19,6 @@ packages/device/recordings/
 packages/agent/runs/
 
 # Firebase (함수 번들·에뮬레이터 산출물)
-apps/functions/lib/
 .firebase/
 # 실기기 개발용 로컬 설정 (본인 폰의 QA 앱 등, packages/device/src/devApp.ts)
 qcard.local.json

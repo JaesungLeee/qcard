@@ -2,12 +2,12 @@
   "name": "@qcard/functions",
   "private": true,
   "type": "module",
-  "main": "lib/index.js",
+  "main": "dist/index.js",
   "engines": {
     "node": "22"
   },
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=esm --outfile=lib/index.js --external:firebase-admin --external:firebase-functions",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/index.js --external:firebase-admin --external:firebase-functions && node scripts/pack-dist.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "test": "node scripts/emulators.mjs test 'vitest run'",
     "emulators": "pnpm build && node scripts/emulators.mjs dev 'tsx scripts/seed.ts --wait'",
