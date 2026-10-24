@@ -22,7 +22,14 @@ export function ConnectHostPage() {
   const [cred, setCred] = useState<HostCredential>();
   const form = useRef<HTMLFormElement>(null);
   useEffect(() => {
-    if (cred) form.current?.submit();
+    if (!cred) return;
+    // https 웹 → http://127.0.0.1 폼 전송은 기본 정책(strict-origin-when-cross-origin)에서 Origin이 "null"로 간다.
+    // 호스트가 Origin으로 웹 주소를 확인하므로 origin만 보내게 한다(주소·nonce는 보내지 않는다)
+    const meta = document.createElement('meta');
+    meta.name = 'referrer';
+    meta.content = 'origin';
+    document.head.appendChild(meta);
+    form.current?.submit();
   }, [cred]);
 
   return (
