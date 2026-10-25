@@ -319,10 +319,10 @@ export function CaseBodyBlocks({
           </dd>
           <dt>클린 상태</dt>
           <dd>{body.cleanState ? '필요 — 시작 전 앱 데이터 초기화' : '필요 없음 — 앱 재시작만'}</dd>
-          {body.accountRole && (
+          {body.accountKind && (
             <>
-              <dt>계정 역할</dt>
-              <dd>{body.accountRole}</dd>
+              <dt>필요 계정 종류</dt>
+              <dd>{body.accountKind}</dd>
             </>
           )}
           <dt>테스트 데이터</dt>

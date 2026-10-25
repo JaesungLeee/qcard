@@ -24,6 +24,7 @@ import {
   type Project,
 } from '@qcard/shared';
 import { z } from 'zod';
+import type { SecretBox } from './secretBox';
 
 /*
  * 프로젝트·멤버·초대 쓰기 (F-TM-09~13). 클라이언트는 이 문서들을 직접 쓰지 못하고(보안 규칙),
@@ -37,20 +38,26 @@ import { z } from 'zod';
  *   invitationTokens/{token}                 { projectId, invitationId } — 토큰으로 초대를 찾는 색인
  *   hostConnections/{hostId}                 HostConnection + secretHash — 호스트 연결 (F-TM-14)
  *   users/{uid}/hosts/{hostId}               호스트 연결 신호 (호스트가 씀, 연결 해제 때 여기서 지움)
+ *   projects/{p}/accounts/{id}               테스트 계정 (accounts.ts)
+ *   projects/{p}/accountSecrets/{id}         테스트 계정 비밀값 (암호화, Functions만 읽는다)
+ *   projects/{p}/secretAccessLog/{id}        비밀값 전달 기록 (감사 로그)
  */
 
-/** `host`: 호스트 토큰으로 부른 경우 그 호스트 id (사람이 부르면 없음) */
-export type Ctx = { db: Firestore; uid: string; host?: string; now?: () => string };
+/**
+ * `host`: 호스트 토큰으로 부른 경우 그 호스트 id (사람이 부르면 없음).
+ * `box`: 테스트 계정 비밀값 암호화 (계정 함수만 쓴다)
+ */
+export type Ctx = { db: Firestore; uid: string; host?: string; now?: () => string; box?: SecretBox };
 
-const nowOf = (ctx: Ctx) => (ctx.now ?? (() => new Date().toISOString()))();
-const fail = (kind: MembershipError['kind'], message: string) => new MembershipError(kind, message);
+export const nowOf = (ctx: Ctx) => (ctx.now ?? (() => new Date().toISOString()))();
+export const fail = (kind: MembershipError['kind'], message: string) => new MembershipError(kind, message);
 
 const projectRef = (db: Firestore, p: string) => db.doc(`projects/${p}`);
 const membersCol = (db: Firestore, p: string) => db.collection(`projects/${p}/members`);
 const invitationsCol = (db: Firestore, p: string) => db.collection(`projects/${p}/invitations`);
 const tokenRef = (db: Firestore, token: string) => db.doc(`invitationTokens/${token}`);
 
-async function actorOf(ctx: Ctx, tx?: Transaction): Promise<Actor> {
+export async function actorOf(ctx: Ctx, tx?: Transaction): Promise<Actor> {
   const ref = ctx.db.doc(`users/${ctx.uid}`);
   const snap = tx ? await tx.get(ref) : await ref.get();
   const u = snap.data() as { name?: string; github?: string } | undefined;
@@ -58,23 +65,23 @@ async function actorOf(ctx: Ctx, tx?: Transaction): Promise<Actor> {
   return { uid: ctx.uid, name: u.name ?? u.github, github: u.github };
 }
 
-async function read<T>(tx: Transaction, ref: DocumentReference, what: string): Promise<T> {
+export async function read<T>(tx: Transaction, ref: DocumentReference, what: string): Promise<T> {
   const snap = await tx.get(ref);
   if (!snap.exists) throw fail('not_found', `${what}을(를) 찾을 수 없습니다.`);
   return snap.data() as T;
 }
 
-const membersIn = async (tx: Transaction, db: Firestore, p: string) =>
+export const membersIn = async (tx: Transaction, db: Firestore, p: string) =>
   (await tx.get(membersCol(db, p))).docs.map((d) => d.data() as Member);
 
 /** 입력 검증 실패는 규칙 위반으로 돌려준다 */
-function parse<S extends z.ZodType>(schema: S, data: unknown): z.infer<S> {
+export function parse<S extends z.ZodType>(schema: S, data: unknown): z.infer<S> {
   const r = schema.safeParse(data);
   if (!r.success) throw fail('rule', `요청 형식이 잘못되었습니다: ${r.error.issues.map((i) => i.message).join(', ')}`);
   return r.data;
 }
 
-const ProjectId = z.object({ projectId: z.string().min(1) });
+export const ProjectId = z.object({ projectId: z.string().min(1) });
 
 // ------------------------------------------------------------------ 프로필
 

@@ -58,7 +58,6 @@ export function localRunCycle(run: LocalRun, doc: QADocument): { cycle: TestCycl
     period: { start: run.startedAt, end: run.finishedAt ?? run.startedAt },
     serverEnv: 'dev',
     snapshot: run.results.map((r) => ({ tcId: r.tcId, contentHash: hashOf.get(r.tcId) ?? '' })),
-    accounts: [],
     createdBy: 'host-agent',
     origin: 'local_run',
   };

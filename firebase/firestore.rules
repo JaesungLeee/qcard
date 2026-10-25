@@ -180,6 +180,20 @@ service cloud.firestore {
         allow create: if canEdit(p);
         allow update, delete: if false;
       }
+      // 테스트 계정 (F-PF-04·08·09): 쓰기는 Functions만(배정·반납 규칙, 비밀값 봉인). 멤버는 목록·상태를 읽는다
+      match /accounts/{id} {
+        allow read: if isMember(p);
+        allow write: if false;
+      }
+      // 테스트 계정 비밀값 (F-EX-09): 아무도 직접 읽지 못한다. 배정 응답으로 실행 중인 호스트에만 나간다
+      match /accountSecrets/{id} {
+        allow read, write: if false;
+      }
+      // 비밀값 전달 기록: Functions가 배정할 때 남긴다. Admin·QA가 읽는다
+      match /secretAccessLog/{id} {
+        allow read: if canEdit(p);
+        allow write: if false;
+      }
       // QA 문서 생성 등 호스트 에이전트가 처리할 작업 (PRD §6.2). 요청자 본인 것만 만든다
       match /jobs/{id} {
         allow read: if isMember(p);

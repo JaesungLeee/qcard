@@ -19,7 +19,7 @@ export const BODY_KEYS = [
   'preconditions',
   'prepFlowIds',
   'cleanState',
-  'accountRole',
+  'accountKind',
   'data',
   'steps',
   'verificationPoints',
@@ -35,7 +35,7 @@ export const BODY_LABEL: Record<BodyKey, string> = {
   preconditions: '사전 조건',
   prepFlowIds: '준비 플로우',
   cleanState: '클린 상태',
-  accountRole: '필요 계정 역할',
+  accountKind: '필요 계정 종류',
   data: '테스트 데이터',
   steps: '단계',
   verificationPoints: '검증 포인트',
@@ -60,7 +60,7 @@ export function cleanBody(body: CaseBody): CaseBody {
   const out = toBody(body);
   out.title = out.title.trim();
   out.preconditions = out.preconditions.map((p) => p.trim()).filter(Boolean);
-  if (!out.accountRole?.trim()) delete out.accountRole;
+  if (!out.accountKind?.trim()) delete out.accountKind;
   if (!out.data?.trim()) delete out.data;
   return out;
 }
@@ -270,8 +270,8 @@ export function fieldLines(body: CaseBody, key: BodyKey, prepName: (id: string) 
       return body.prepFlowIds.map(prepName);
     case 'cleanState':
       return [body.cleanState ? '필요 (앱 데이터 초기화)' : '필요 없음'];
-    case 'accountRole':
-      return body.accountRole ? [body.accountRole] : [];
+    case 'accountKind':
+      return body.accountKind ? [body.accountKind] : [];
     case 'data':
       return body.data ? [body.data] : [];
     case 'steps':

@@ -302,12 +302,12 @@ export function CaseEditForm({
             placeholder="예: 닉네임 `콩콩이`"
           />
         </Field>
-        <Field label="필요 계정 역할">
+        <Field label="필요 계정 종류">
           <TextField
-            aria-label="필요 계정 역할"
-            value={draft.accountRole ?? ''}
-            onChange={(e) => patch({ accountRole: e.target.value })}
-            placeholder="로그인이 없는 앱은 비워 둡니다"
+            aria-label="필요 계정 종류"
+            value={draft.accountKind ?? ''}
+            onChange={(e) => patch({ accountKind: e.target.value })}
+            placeholder="로그인이 필요하면 기본, 로그인이 없으면 비워 둡니다"
           />
         </Field>
       </div>

@@ -1,0 +1,267 @@
+/* 테스트 계정 화면. 색은 --qc-* 토큰만 쓴다. */
+.qac-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-12);
+  min-width: 0;
+}
+.qac-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--qc-space-8);
+  min-width: 0;
+}
+.qac-push {
+  margin-left: auto;
+}
+.qac-muted {
+  color: var(--qc-foreground-neutral-secondary);
+}
+.qac-faint {
+  color: var(--qc-foreground-neutral-tertiary);
+}
+.qac-strong {
+  color: var(--qc-foreground-neutral-primary);
+}
+
+.qac-card {
+  background: var(--qc-surface-neutral-primary);
+  border: 1px solid var(--qc-line-neutral-secondary);
+  border-radius: var(--qc-radius-12);
+  padding: var(--qc-space-20);
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-16);
+  min-width: 0;
+}
+.qac-card-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--qc-space-8);
+}
+
+/* 계정이 필요한 케이스가 없을 때 */
+.qac-empty {
+  border: 1px dashed var(--qc-line-neutral-primary);
+  border-radius: var(--qc-radius-12);
+  padding: var(--qc-space-40) var(--qc-space-24);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--qc-space-12);
+  text-align: center;
+}
+.qac-empty p {
+  margin: 0;
+  max-width: 560px;
+}
+.qac-empty-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--qc-foreground-neutral-tertiary);
+}
+
+/* 계정 종류 */
+.qac-kinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--qc-space-12);
+}
+.qac-kind {
+  border: 1px solid var(--qc-line-neutral-secondary);
+  border-radius: var(--qc-radius-12);
+  padding: var(--qc-space-16);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--qc-space-8);
+}
+.qac-kind > .qac-row {
+  width: 100%;
+}
+.qac-kind[data-missing] {
+  border-color: var(--qc-line-cautionary-primary);
+  background: var(--qc-qcard-verdict-blocked-bg);
+}
+.qac-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--qc-space-6);
+  color: var(--qc-qcard-verdict-blocked-fg);
+}
+.qac-warn svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+/* 계정 목록 */
+.qac-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--qc-line-neutral-secondary);
+  border-radius: var(--qc-radius-12);
+}
+.qac-item {
+  border-top: 1px solid var(--qc-line-neutral-tertiary);
+}
+.qac-item:first-child {
+  border-top: 0;
+}
+.qac-item-main {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) auto minmax(0, 1.3fr) minmax(0, 2fr) auto;
+  align-items: start;
+  gap: var(--qc-space-12);
+  padding: var(--qc-space-14) var(--qc-space-16);
+}
+.qac-item-main:has(> :nth-child(5)) {
+  grid-template-columns: minmax(0, 2fr) 96px minmax(0, 1.3fr) minmax(0, 2fr) 80px;
+}
+.qac-item-main:not(:has(> :nth-child(5))) {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 2fr) 80px;
+}
+.qac-id {
+  overflow-wrap: anywhere;
+}
+.qac-item-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.qac-none {
+  padding: var(--qc-space-16);
+}
+.qac-kind-badge {
+  display: inline-flex;
+  padding: var(--qc-space-2) var(--qc-space-8);
+  border: 1px solid var(--qc-line-neutral-primary);
+  border-radius: var(--qc-radius-4);
+  white-space: nowrap;
+}
+
+/* 상태 배지: 판정 배지와 같은 대비의 토큰을 빌려 쓰고 아이콘·글자를 함께 둔다 */
+.qac-state {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: var(--qc-space-4);
+  padding: var(--qc-space-2) var(--qc-space-8);
+  border-radius: var(--qc-radius-full);
+  white-space: nowrap;
+}
+.qac-state svg {
+  width: 14px;
+  height: 14px;
+}
+.qac-state[data-state='free'] {
+  color: var(--qc-qcard-verdict-pass-fg);
+  background: var(--qc-qcard-verdict-pass-bg);
+}
+.qac-state[data-state='busy'] {
+  color: var(--qc-foreground-brand-primary);
+  background: var(--qc-surface-brand-subtle);
+}
+.qac-state[data-state='login_failed'] {
+  color: var(--qc-qcard-verdict-check-fg);
+  background: var(--qc-qcard-verdict-check-bg);
+}
+.qac-state[data-state='quarantined'] {
+  color: var(--qc-qcard-verdict-fail-fg);
+  background: var(--qc-qcard-verdict-fail-bg);
+}
+
+/* 펼친 수정·상세 */
+.qac-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-16);
+  margin: 0 var(--qc-space-16) var(--qc-space-16);
+  padding: var(--qc-space-16);
+  border-radius: var(--qc-radius-12);
+  background: var(--qc-background-neutral-secondary);
+}
+.qac-panel h3 {
+  margin: 0;
+}
+.qac-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-16);
+  max-width: 720px;
+}
+.qac-panel.qac-form {
+  max-width: none;
+}
+.qac-form-foot {
+  justify-content: space-between;
+}
+.qac-grid2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--qc-space-12);
+}
+.qac-secrets {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--qc-line-neutral-secondary);
+  border-radius: var(--qc-radius-12);
+  background: var(--qc-surface-neutral-primary);
+}
+.qac-secret {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--qc-space-12);
+  padding: var(--qc-space-12) var(--qc-space-16);
+}
+.qac-secret + .qac-secret {
+  border-top: 1px solid var(--qc-line-neutral-tertiary);
+}
+.qac-facts {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: var(--qc-space-8) var(--qc-space-12);
+  margin: 0;
+}
+.qac-facts dt {
+  color: var(--qc-foreground-neutral-tertiary);
+}
+.qac-facts dd {
+  margin: 0;
+}
+.qac-howto {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-6);
+}
+.qac-howto ol {
+  margin: 0;
+  padding-left: var(--qc-space-20);
+  list-style: decimal;
+}
+.qac-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--qc-space-6);
+  cursor: pointer;
+}
+
+/* 좁은 화면: 행을 쌓는다 */
+@media (max-width: 760px) {
+  .qac-item-main,
+  .qac-item-main:has(> :nth-child(5)),
+  .qac-item-main:not(:has(> :nth-child(5))) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .qac-item-main > * {
+    grid-column: 1;
+  }
+  .qac-item-main > .qac-item-actions {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}

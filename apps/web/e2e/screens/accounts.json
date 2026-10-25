@@ -1,0 +1,12 @@
+[
+  { "name": "accounts-none", "path": "/p/haru/accounts", "waitFor": "계정이 필요한 케이스가 없습니다" },
+  { "name": "accounts-list", "path": "/p/moabook/accounts", "waitFor": "qa.sub02@moabook.test" },
+  { "name": "accounts-new", "path": "/p/moabook/accounts?new=1", "waitFor": "테스트 전용 계정만 등록하세요" },
+  { "name": "accounts-edit", "path": "/p/moabook/accounts?account=qa.basic01", "waitFor": "새 비밀번호로 바꾸기" },
+  { "name": "accounts-quarantine", "path": "/p/moabook/accounts?account=qa.sub01", "waitFor": "해제하기 전에" },
+  {
+    "name": "accounts-login-failed",
+    "path": "/p/moabook/accounts?account=qa.basic03",
+    "waitFor": "로그인 준비 플로우가 실패했습니다"
+  }
+]

@@ -362,7 +362,6 @@ export function newCycle(
     period: { start: now },
     serverEnv: input.serverEnv,
     snapshot: approved.map((c) => ({ tcId: c.tcId, contentHash: c.contentHash })),
-    accounts: [],
     createdBy: user.name,
   };
   const results: CaseResult[] = targets.flatMap((t) =>

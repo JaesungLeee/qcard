@@ -152,7 +152,7 @@ describe('diff', () => {
   it('빈 문자열과 undefined는 같은 값으로 본다', async () => {
     const d = await doc130();
     const body = toBody(d.cases[0]!);
-    expect(isDirty(body, { ...body, accountRole: '' })).toBe(false);
+    expect(isDirty(body, { ...body, accountKind: '' })).toBe(false);
     expect(isDirty(body, { ...body, title: body.title + '!' })).toBe(true);
   });
 });

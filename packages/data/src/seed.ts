@@ -17,6 +17,7 @@ export function seedDocs(opts: { deviceCycle?: boolean } = {}): [string, Record<
     put(`projects/${inv.projectId}/invitations/${inv.id}`, inv);
     put(`invitationTokens/${inv.token}`, { projectId: inv.projectId, invitationId: inv.id });
   }
+  for (const a of db.accounts) put(`projects/${a.projectId}/accounts/${a.id}`, a);
   for (const { cases, ...meta } of db.qaDocs) {
     const base = `projects/${meta.projectId}/qaDocs/${meta.id}`;
     put(base, meta);

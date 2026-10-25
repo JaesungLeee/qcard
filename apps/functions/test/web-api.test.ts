@@ -11,7 +11,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { ConflictError, PermissionError, RuleError } from '@qcard/data';
 import { createFirebaseApi, writeAll } from '@qcard/data/firebase';
 import { createMemoryApi } from '../../web/src/data/memory';
+import * as acc from '../src/accounts';
 import * as h from '../src/handlers';
+import { localBox } from '../src/secretBox';
 import { seedDocs, SEED_USERS } from '@qcard/data/seed';
 
 /*
@@ -39,6 +41,9 @@ beforeEach(async () => {
 
 const CODE = { permission: 'permission-denied', rule: 'failed-precondition', not_found: 'not-found' } as const;
 
+const handlers = { ...h, ...acc };
+const box = localBox('test');
+
 /** 사람 이름(PEOPLE)으로 로그인한 Firestore 구현 */
 function apiAs(name: string) {
   const uid = GITHUB[name]!;
@@ -47,8 +52,8 @@ function apiAs(name: string) {
     user: () => ({ uid, name }),
     call: async <T>(fn: string, data: unknown) => {
       try {
-        const handler = h[fn as keyof typeof h] as (ctx: h.Ctx, data: unknown) => Promise<T>;
-        return await handler({ db: admin, uid }, data);
+        const handler = handlers[fn as keyof typeof handlers] as (ctx: h.Ctx, data: unknown) => Promise<T>;
+        return await handler({ db: admin, uid, box }, data);
       } catch (e) {
         if (e instanceof MembershipError) throw new FirebaseError(`functions/${CODE[e.kind]}`, e.message);
         throw e;
@@ -101,6 +106,39 @@ describe('메모리 구현과 같은 결과', () => {
     await expect(
       setDoc(doc(other, 'projects/haru/jobs/job-140/events/x'), { id: 'x', at: 'now', kind: 'warning', text: '' }),
     ).rejects.toThrow();
+  });
+});
+
+describe('테스트 계정 (F-PF-08)', () => {
+  it('등록·수정·표시 해제·삭제가 메모리 구현과 같고, 목록에 비밀값이 없다', async () => {
+    const steps = async (api: ReturnType<typeof memory>) => {
+      const a = await api.createAccount('haru', { loginId: 'qa02@haru.test', password: 'pw-2', note: '빈 계정' });
+      const b = await api.createAccount('haru', { kind: '구독자', loginId: 'qa01@haru.test', password: 'pw-1' });
+      await api.updateAccount('haru', a.id, { kind: '구독자', note: '' });
+      await expect(api.clearAccountFlag('haru', b.id, 'quarantine')).rejects.toBeInstanceOf(RuleError);
+      await api.deleteAccount('haru', b.id);
+      return (await api.listAccounts('haru')).map(({ account: x, state }) => ({
+        state,
+        kind: x.kind,
+        loginId: x.loginId,
+        note: x.note,
+        usesTotp: x.usesTotp,
+        by: x.secretUpdated.by,
+      }));
+    };
+    const fb = apiAs(PEOPLE.lead);
+    const got = await steps(fb as unknown as ReturnType<typeof memory>);
+    expect(got).toEqual(await steps(memory()));
+    expect(got).toEqual([{ state: 'free', kind: '구독자', loginId: 'qa02@haru.test', note: undefined, usesTotp: false, by: PEOPLE.lead }]);
+    expect(JSON.stringify(await fb.listAccounts('haru'))).not.toContain('pw-2');
+  });
+
+  it('Viewer는 계정을 등록할 수 없다', async () => {
+    const input = { loginId: 'x@haru.test', password: 'pw' };
+    await expect(apiAs(PEOPLE.planner).createAccount('haru', input)).rejects.toBeInstanceOf(PermissionError);
+    await expect(createMemoryApi({ currentUser: PEOPLE.planner }).createAccount('haru', input)).rejects.toBeInstanceOf(
+      PermissionError,
+    );
   });
 });
 

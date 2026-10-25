@@ -324,3 +324,32 @@ describe('Agent 기록은 그 Run을 실행한 사용자의 호스트만 (PRD §
     await assertFails(setDoc(doc(as('u-qa'), `${C}/results/TC-1__d`), { ...agent, steps: [] }));
   });
 });
+
+describe('테스트 계정 (F-PF-08, F-EX-09)', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore();
+      await setDoc(doc(db, 'projects/haru/accounts/a1'), { id: 'a1', loginId: 'qa01@haru.test', kind: '기본' });
+      await setDoc(doc(db, 'projects/haru/accountSecrets/a1'), { sealed: 'local:xxx' });
+      await setDoc(doc(db, 'projects/haru/secretAccessLog/l1'), { accountId: 'a1', uid: 'u-qa' });
+    });
+  });
+
+  it('계정 목록은 멤버가 읽고, 아무도 직접 쓰지 못한다', async () => {
+    await assertSucceeds(getDoc(doc(as('u-viewer'), 'projects/haru/accounts/a1')));
+    await assertFails(getDoc(doc(as('u-outsider'), 'projects/haru/accounts/a1')));
+    await assertFails(setDoc(doc(as('u-admin'), 'projects/haru/accounts/a2'), { loginId: 'x', kind: '기본' }));
+    await assertFails(updateDoc(doc(as('u-qa'), 'projects/haru/accounts/a1'), { quarantine: null }));
+  });
+
+  it('비밀값은 Admin도 읽거나 쓰지 못한다', async () => {
+    await assertFails(getDoc(doc(as('u-admin'), 'projects/haru/accountSecrets/a1')));
+    await assertFails(setDoc(doc(as('u-admin'), 'projects/haru/accountSecrets/a1'), { sealed: 'x' }));
+  });
+
+  it('비밀값 전달 기록은 Admin·QA가 읽고 Viewer는 못 읽는다', async () => {
+    await assertSucceeds(getDoc(doc(as('u-qa'), 'projects/haru/secretAccessLog/l1')));
+    await assertFails(getDoc(doc(as('u-viewer'), 'projects/haru/secretAccessLog/l1')));
+    await assertFails(setDoc(doc(as('u-qa'), 'projects/haru/secretAccessLog/l2'), { accountId: 'a1' }));
+  });
+});

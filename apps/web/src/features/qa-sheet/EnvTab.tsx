@@ -11,11 +11,13 @@ import {
   token,
 } from '@qcard/ui';
 import { fmtDateTime } from '../../components/format';
-import { maskAccount } from './model';
 import { Card, KV, Mono, SERVER_ENV_LABEL, TabBody } from './parts';
 import type { SheetProps } from './QaSheetPage';
 
 export function EnvTab({ d }: SheetProps) {
+  const kindCounts = new Map<string, number>();
+  for (const c of d.cases) if (c.accountKind) kindCounts.set(c.accountKind, (kindCounts.get(c.accountKind) ?? 0) + 1);
+  const accountKinds = [...kindCounts];
   const devices = d.cycle.targets.map((t) => {
     const rs = d.results.filter((r) => r.deviceId === t.id && r.verdict !== 'nt');
     return {
@@ -107,22 +109,22 @@ export function EnvTab({ d }: SheetProps) {
             </div>
           </Card>
           <Card title="테스트 계정">
-            {d.cycle.accounts.length === 0 ? (
-              <span className={`${textClass('label1')} qs-muted`}>없음</span>
+            {accountKinds.length === 0 ? (
+              <span className={`${textClass('label1')} qs-muted`}>계정이 필요한 케이스 없음</span>
             ) : (
               <ul className="qs-list">
-                {d.cycle.accounts.map((a) => (
-                  <li key={a.role}>
+                {accountKinds.map(([kind, n]) => (
+                  <li key={kind}>
                     <span className={textClass('label1', 'medium')} style={{ minWidth: 96 }}>
-                      {a.role}
+                      {kind}
                     </span>
-                    <Mono className="qs-muted">{maskAccount(a.id)}</Mono>
+                    <span className="qs-muted">케이스 {n}건</span>
                   </li>
                 ))}
               </ul>
             )}
             <span className={`${textClass('caption1')} qs-faint`}>
-              계정 ID는 마스킹해 표시합니다. 비밀번호는 저장하지 않습니다.
+              계정은 사이클에 고정하지 않고, 케이스를 실행할 때 테스트 계정에서 하나씩 배정합니다.
             </span>
           </Card>
         </div>

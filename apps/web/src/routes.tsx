@@ -1,5 +1,6 @@
 import { Navigate, createBrowserRouter } from 'react-router';
 import { UiCatalog } from './dev/UiCatalog';
+import { AccountsPage } from './features/accounts';
 import { ConsolePage } from './features/console';
 import { LiveConsolePage } from './features/console/live';
 import { ConsoleOpenPage } from './features/console/Open';
@@ -46,6 +47,7 @@ export const router = createBrowserRouter([
           { path: 'docs/jobs/:jobId', element: <JobProgressPage /> },
           { path: 'docs/:docId', element: <QaDocReviewPage /> },
           { path: 'prep-flows', element: <PrepFlowPage /> },
+          { path: 'accounts', element: <AccountsPage /> },
           { path: 'settings', element: <ProjectSettingsPage /> },
           { path: 'console', element: <ConsoleOpenPage /> },
         ],
