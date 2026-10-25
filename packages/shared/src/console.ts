@@ -130,6 +130,8 @@ export type ConsoleCycleOption = {
   /** 내가 이 디바이스로 돌리다 일시정지된 Run (이어서 실행) */
   /** total: 그 Run의 큐 크기 (예전 Run이면 없음), left: 이어서 실행할 케이스 수 */
   pausedRun?: { id: string; reason?: string; total?: number; left: number };
+  /** 남은 케이스에 필요한데 지금 배정할 수 있는 테스트 계정이 없는 종류 (F-PF-08). 그대로 실행하면 Blocked("계정 없음") */
+  accountShortage?: { kind: string; cases: number }[];
 };
 
 /** Run이 없을 때 콘솔: 연결된 디바이스, 고를 수 있는 사이클, 지난 Run 결과 */

@@ -3,12 +3,13 @@ import { join } from 'node:path';
 import type { AgentEnv } from '@qcard/agent';
 import type { QcardApi } from '@qcard/data';
 import type { DeviceDriver, DeviceInfo } from '@qcard/device';
-import { createLlm, TURN_TIMEOUT_MS, UsageMeter, type LlmClient } from '@qcard/llm';
+import { createLlm, SecretVault, TURN_TIMEOUT_MS, UsageMeter, withSecretGuard, type LlmClient } from '@qcard/llm';
 import type { ClaudeCodeState } from '@qcard/shared';
 import type { FirebaseStorage } from 'firebase/storage';
 import { holdAwake } from './awake';
 import { BuildInstallError, ensureBuild } from './build';
 import { ConsoleHub } from './console/hub';
+import type { AccountLeaser } from './accounts';
 import type { UploadQueue } from './queue';
 import { runCycle, type RunCycleOutcome } from './runCycle';
 import { runSink } from './sink';
@@ -41,6 +42,8 @@ export type CycleRunDeps = {
   awakeDir?: string;
   /** Agent 환경 덮어쓰기 (테스트: 시계·비전) */
   env?: Partial<Pick<AgentEnv, 'clock' | 'vision' | 'settleMs'>>;
+  /** 테스트 계정 배정·반납 (F-PF-04). 없으면 계정이 필요한 케이스는 Blocked */
+  accounts?: AccountLeaser;
 };
 
 export type RunAccount = { uid: string; hostId: string };
@@ -147,17 +150,20 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
   }
 
   async function start(): Promise<CycleRunOutcome> {
-    const inner =
-      deps.llm?.(meter) ??
-      createLlm({
-        mode: 'live',
-        cassetteDir: '',
-        meter,
-        onRetry: (r) => {
-          log(`  Claude Code 재시도 ${r.attempt}/${r.maxRetries} — ${r.reason}`);
-          hub.llmRetry(r);
-        },
-      });
+    // 이 Run에 배정된 테스트 계정 비밀값 (메모리에만, 반납·Run 종료 때 비운다). LLM 요청에 섞이면 보내지 않는다 (F-EX-09)
+    const vault = new SecretVault();
+    const inner = deps.llm
+      ? withSecretGuard(deps.llm(meter), vault)
+      : createLlm({
+          mode: 'live',
+          cassetteDir: '',
+          meter,
+          vault,
+          onRetry: (r) => {
+            log(`  Claude Code 재시도 ${r.attempt}/${r.maxRetries} — ${r.reason}`);
+            hub.llmRetry(r);
+          },
+        });
     // 모델 응답을 기다리는 동안을 콘솔에 알린다 (오래 걸리면 실행자가 알 수 있게)
     const llm: LlmClient = {
       create: async (r, m) => {
@@ -185,6 +191,7 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
         ...deps.env,
         device: deps.device,
         llm,
+        vault,
         appPackage,
         allowNetworkToggle: req.allowNetworkToggle,
         onThought: (t) => {
@@ -218,6 +225,8 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
       onQueue: (cases) => hub.setQueue(cases),
       onCaseStart: (tc) => hub.caseStarted(tc),
       onPhase: (p) => hub.phase(p),
+      accounts: deps.accounts,
+      log,
     }).finally(async () => {
       await release();
       hub.setStayAwake(false);

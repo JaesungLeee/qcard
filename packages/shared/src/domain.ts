@@ -149,10 +149,14 @@ export const VerificationPoint = z.object({
 export type VerificationPoint = z.infer<typeof VerificationPoint>;
 
 /** 준비 플로우 (F-PF-01): 공통 사전조건. env는 코드가 수행(앱 데이터 초기화 + 실행), 나머지는 Agent가 UI로 수행 */
+/**
+ * 준비 플로우 (F-PF-01). `login`: 테스트 계정으로 로그인 — 실패하면 계정에 로그인 실패 표시 (F-PF-08).
+ * `restore`: 케이스가 바꾼 계정 상태를 되돌리는 원복 플로우 — 케이스가 끝난 뒤 수행하고, 실패하면 계정을 격리 (F-PF-09)
+ */
 export const PrepFlow = z.object({
   id: z.string(),
   name: z.string(),
-  kind: z.enum(['login', 'data_state', 'env']),
+  kind: z.enum(['login', 'data_state', 'env', 'restore']),
   check: z.string(),
   steps: z.array(z.string()),
 });
@@ -187,6 +191,8 @@ export const CaseBody = z.object({
    * 로그인이 필요한 케이스의 기본값은 DEFAULT_ACCOUNT_KIND. 로그인 상태로 시작할지는 준비 플로우가 정한다
    */
   accountKind: z.string().optional(),
+  /** 계정 상태를 바꾸는 케이스의 원복 플로우 (F-PF-09, `kind: 'restore'`). 케이스가 끝나면 판정과 상관없이 수행한다 */
+  restoreFlowId: z.string().optional(),
   data: z.string().optional(),
   steps: z.array(CaseStep),
   verificationPoints: z.array(VerificationPoint),

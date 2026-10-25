@@ -9,6 +9,7 @@ export const PREP_KIND_LABEL: Record<PrepFlow['kind'], string> = {
   login: '로그인',
   data_state: '데이터 상태',
   env: '환경',
+  restore: '원복',
 };
 
 type Patch = Partial<Record<'tab' | 'case' | 'edit' | 'question' | 'feature' | 'flow' | 'page', string | null>>;

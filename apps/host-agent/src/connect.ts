@@ -19,6 +19,7 @@ import {
 import { connectFirestoreEmulator, doc, getDoc, initializeFirestore } from 'firebase/firestore';
 import { connectFunctionsEmulator, getFunctions, httpsCallable, type Functions } from 'firebase/functions';
 import { connectStorageEmulator, getStorage } from 'firebase/storage';
+import { callableLeaser } from './accounts';
 
 /*
  * 호스트 에이전트의 Firebase 연결 (F-TM-14). 호스트는 GitHub로 따로 로그인하지 않는다.
@@ -287,6 +288,8 @@ export async function signInHost(target: FirebaseTarget, cred: HostCredential) {
     queueDir: join(homedir(), '.qcard', 'upload-queue', target.config.projectId ?? 'default', user.uid),
     /** 이 PC의 연결을 해제한다 (호스트 토큰으로 자기 연결만) */
     disconnect: () => call<void>('revokeHost', { hostId: cred.hostId }),
+    /** 테스트 계정 배정·반납 (F-PF-04) */
+    accounts: callableLeaser(call),
   };
 }
 

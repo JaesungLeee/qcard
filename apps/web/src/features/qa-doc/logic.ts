@@ -20,6 +20,7 @@ export const BODY_KEYS = [
   'prepFlowIds',
   'cleanState',
   'accountKind',
+  'restoreFlowId',
   'data',
   'steps',
   'verificationPoints',
@@ -36,6 +37,7 @@ export const BODY_LABEL: Record<BodyKey, string> = {
   prepFlowIds: '준비 플로우',
   cleanState: '클린 상태',
   accountKind: '필요 계정 종류',
+  restoreFlowId: '원복 플로우',
   data: '테스트 데이터',
   steps: '단계',
   verificationPoints: '검증 포인트',
@@ -61,6 +63,7 @@ export function cleanBody(body: CaseBody): CaseBody {
   out.title = out.title.trim();
   out.preconditions = out.preconditions.map((p) => p.trim()).filter(Boolean);
   if (!out.accountKind?.trim()) delete out.accountKind;
+  if (!out.restoreFlowId) delete out.restoreFlowId;
   if (!out.data?.trim()) delete out.data;
   return out;
 }
@@ -272,6 +275,8 @@ export function fieldLines(body: CaseBody, key: BodyKey, prepName: (id: string) 
       return [body.cleanState ? '필요 (앱 데이터 초기화)' : '필요 없음'];
     case 'accountKind':
       return body.accountKind ? [body.accountKind] : [];
+    case 'restoreFlowId':
+      return body.restoreFlowId ? [prepName(body.restoreFlowId)] : [];
     case 'data':
       return body.data ? [body.data] : [];
     case 'steps':
@@ -371,7 +376,7 @@ export function prepFlowUsage(cases: TestCase[]): Map<string, TestCase[]> {
   const out = new Map<string, TestCase[]>();
   for (const c of cases) {
     if (!isActive(c)) continue;
-    for (const id of c.prepFlowIds) {
+    for (const id of [...c.prepFlowIds, ...(c.restoreFlowId ? [c.restoreFlowId] : [])]) {
       const list = out.get(id) ?? [];
       list.push(c);
       out.set(id, list);
