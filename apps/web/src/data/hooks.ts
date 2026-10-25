@@ -1,4 +1,4 @@
-import type { CaseBody } from '@qcard/shared';
+import type { AccountInput, AccountPatch, CaseBody } from '@qcard/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useRef } from 'react';
 import type {
@@ -41,6 +41,7 @@ export const keys = {
   hosts: ['hosts'] as const,
   hostConnections: ['hostConnections'] as const,
   builds: (projectId: string) => ['builds', projectId] as const,
+  accounts: (projectId: string) => ['accounts', projectId] as const,
 };
 
 export function useProject(projectId: string) {
@@ -346,3 +347,35 @@ export function useCreateCycle(projectId: string) {
     onSettled: () => void qc.invalidateQueries({ queryKey: keys.cycles(projectId) }),
   });
 }
+
+/** 테스트 계정 (F-PF-04·08). 배정 상태가 실행 중에 바뀌므로 30초마다 다시 읽는다 */
+export function useAccounts(projectId: string) {
+  const api = useApi();
+  return useQuery({
+    queryKey: keys.accounts(projectId),
+    queryFn: () => api.listAccounts(projectId),
+    refetchInterval: 30_000,
+  });
+}
+
+function useAccountMutation<T, R = unknown>(projectId: string, fn: (api: QcardApi, input: T) => Promise<R>) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: T) => fn(api, input),
+    onSettled: () => void qc.invalidateQueries({ queryKey: keys.accounts(projectId) }),
+  });
+}
+
+export const useCreateAccount = (projectId: string) =>
+  useAccountMutation(projectId, (api, v: AccountInput) => api.createAccount(projectId, v));
+export const useUpdateAccount = (projectId: string) =>
+  useAccountMutation(projectId, (api, v: { id: string; patch: AccountPatch }) =>
+    api.updateAccount(projectId, v.id, v.patch),
+  );
+export const useDeleteAccount = (projectId: string) =>
+  useAccountMutation(projectId, (api, id: string) => api.deleteAccount(projectId, id));
+export const useClearAccountFlag = (projectId: string) =>
+  useAccountMutation(projectId, (api, v: { id: string; flag: 'loginFailed' | 'quarantine' }) =>
+    api.clearAccountFlag(projectId, v.id, v.flag),
+  );

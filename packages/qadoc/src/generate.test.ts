@@ -122,7 +122,7 @@ const BODY = [
   'preconditions',
   'prepFlowIds',
   'cleanState',
-  'accountRole',
+  'accountKind',
   'data',
   'steps',
   'verificationPoints',

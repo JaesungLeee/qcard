@@ -2,10 +2,17 @@ import { ApkError, inspectApk } from '@qcard/apk';
 import { createFixtureDb, GITHUB, PEOPLE, type FixtureDb } from '@qcard/fixtures';
 import {
   accepting,
+  accountChange,
+  accountDeletion,
+  accountState,
   changeRole,
   deletion,
+  flagClearing,
   invitationState,
+  leaseLive,
   leaving,
+  mergeSecret,
+  newAccount,
   newInvitation,
   newProject,
   projectIdFor,
@@ -14,9 +21,11 @@ import {
   requireEditor,
   requireMember,
   restoration,
+  type AccountSecret,
   type Actor,
   type HostConnection,
   type Member,
+  type TestAccount,
 } from '@qcard/shared';
 import {
   ConflictError,
@@ -134,6 +143,24 @@ export function createMemoryApi(
   let connections: HostConnection[] = [
     { id: DEMO_HOST, uid: GITHUB[PEOPLE.lead]!, name: 'MacBook Pro', connectedAt: '2026-10-20T09:00:00.000Z' },
   ];
+
+  // 테스트 계정 (F-PF-04·08·09). 비밀값은 봉인하지 않고 따로 둔다 (Functions는 Cloud KMS로 봉인)
+  let accounts: TestAccount[] = db.accounts;
+  const secrets = new Map<string, AccountSecret>();
+  const accountsOf = (projectId: string) => accounts.filter((a) => a.projectId === projectId);
+  const account = (projectId: string, id: string) => {
+    const a = accountsOf(projectId).find((x) => x.id === id);
+    if (!a) throw new NotFoundError('테스트 계정을 찾을 수 없습니다.');
+    return a;
+  };
+  const leaseIsLive = (a: TestAccount) => {
+    const run = a.lease && db.runs[a.lease.cycleId]?.find((r) => r.id === a.lease!.runId);
+    return leaseLive(run, now());
+  };
+  const putAccount = (a: TestAccount) => {
+    accounts = accounts.map((x) => (x.id === a.id ? a : x));
+    return a;
+  };
 
   // 사이클 구독 (watchCycle): 쓰기가 일어나면 그 사이클을 다시 읽어 알린다
   const watchers = new Map<string, Set<(d: CycleDetail) => void>>();
@@ -292,6 +319,40 @@ export function createMemoryApi(
     async listPrepFlows() {
       return wait(db.prepFlows);
     },
+
+    // ------------------------------------------------------------ 테스트 계정 (F-PF-04·08·09)
+    // 규칙은 @qcard/shared accounts — Cloud Functions도 같은 함수를 쓴다
+    async listAccounts(projectId) {
+      project(projectId);
+      const views = accountsOf(projectId)
+        .map((a) => ({ account: a, state: accountState(a, leaseIsLive(a)) }))
+        .sort((a, b) => a.account.loginId.localeCompare(b.account.loginId));
+      return wait(views);
+    },
+    createAccount: (projectId, input) =>
+      rules(() => {
+        const id = `acct-${accounts.length + 1}-${Date.now().toString(36)}`;
+        const r = newAccount(membersOf(projectId), accountsOf(projectId), actor(), input, id, now());
+        accounts.push(r.account);
+        secrets.set(id, r.secret);
+        return r.account;
+      }),
+    updateAccount: (projectId, accountId, patch) =>
+      rules(() => {
+        const a = account(projectId, accountId);
+        const r = accountChange(membersOf(projectId), accountsOf(projectId), actor(), a, patch, now());
+        if (r.secret) secrets.set(accountId, mergeSecret(secrets.get(accountId)!, r.secret));
+        return putAccount(r.account);
+      }),
+    deleteAccount: (projectId, accountId) =>
+      rules(() => {
+        const a = account(projectId, accountId);
+        accountDeletion(membersOf(projectId), actor(), a, leaseIsLive(a));
+        accounts = accounts.filter((x) => x.id !== accountId);
+        secrets.delete(accountId);
+      }),
+    clearAccountFlag: (projectId, accountId, flag) =>
+      rules(() => putAccount(flagClearing(membersOf(projectId), actor(), account(projectId, accountId), flag))),
 
     // ------------------------------------------------------------ 빌드·사이클 만들기
     // fixture 빌드는 저장 경로가 없고 하루콩 프로젝트 것이다

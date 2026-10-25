@@ -361,7 +361,7 @@ function bodyOf(g: GenCase, tcId: string, start: { prepFlowIds: string[]; cleanS
     preconditions: g.preconditions,
     prepFlowIds: start.prepFlowIds,
     cleanState: start.cleanState,
-    ...(g.account_role ? { accountRole: g.account_role } : {}),
+    ...(g.account_role ? { accountKind: g.account_role } : {}),
     ...(g.data ? { data: g.data } : {}),
     // 사람 전용 단계는 실행자가 직접 하는 수동 스텝이다
     steps: g.steps.map((s) => ({

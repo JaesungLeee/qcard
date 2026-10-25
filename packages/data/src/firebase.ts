@@ -1,24 +1,27 @@
 import { createFixtureDb, type ConsoleSession } from '@qcard/fixtures';
-import type {
-  Build,
-  CaseResult,
-  Defect,
-  Host,
-  HostConnection,
-  HostCredential,
-  Invitation,
-  Job,
-  Member,
-  PrepFlow,
-  Project,
-  QADocument,
-  QaDocJobDraft,
-  QaDocJobEvent,
-  QaDocJobSpec,
-  Run,
-  TestCase,
-  TestCycle,
-  VerdictChange,
+import {
+  accountState,
+  leaseLive,
+  type Build,
+  type CaseResult,
+  type Defect,
+  type Host,
+  type HostConnection,
+  type HostCredential,
+  type Invitation,
+  type Job,
+  type Member,
+  type PrepFlow,
+  type Project,
+  type QADocument,
+  type QaDocJobDraft,
+  type QaDocJobEvent,
+  type QaDocJobSpec,
+  type Run,
+  type TestAccount,
+  type TestCase,
+  type TestCycle,
+  type VerdictChange,
 } from '@qcard/shared';
 import { ApkError, inspectApk } from '@qcard/apk';
 import { FirebaseError } from 'firebase/app';
@@ -47,6 +50,7 @@ import {
   NotFoundError,
   PermissionError,
   RuleError,
+  type AccountView,
   type CycleDetail,
   type InvitationView,
   type ProjectSummary,
@@ -350,6 +354,30 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       ),
     listPrepFlows: (projectId) =>
       guard(async () => ordered<PrepFlow>((await getDocs(collection(db, P(projectId), 'prepFlows'))).docs)),
+
+    // ------------------------------------------------------------ 테스트 계정 (F-PF-04·08·09)
+    // 쓰기는 Functions만 (비밀값 봉인·배정 규칙). 배정이 살아 있는지는 그 Run의 연결 신호로 본다
+    listAccounts: (projectId) =>
+      guard(async () => {
+        const accounts = (await getDocs(collection(db, P(projectId), 'accounts'))).docs.map(
+          (d) => d.data() as TestAccount,
+        );
+        const t = now();
+        const views: AccountView[] = await Promise.all(
+          accounts.map(async (account) => {
+            const l = account.lease;
+            const run = l && (await getDoc(doc(db, P(projectId), 'cycles', l.cycleId, 'runs', l.runId))).data();
+            return { account, state: accountState(account, leaseLive(run as Run | undefined, t)) };
+          }),
+        );
+        return views.sort((a, b) => a.account.loginId.localeCompare(b.account.loginId));
+      }),
+    createAccount: (projectId, input) => call<TestAccount>('createAccount', { projectId, ...input }),
+    updateAccount: (projectId, accountId, patch) =>
+      call<TestAccount>('updateAccount', { projectId, accountId, ...patch }),
+    deleteAccount: (projectId, accountId) => call<void>('deleteAccount', { projectId, accountId }),
+    clearAccountFlag: (projectId, accountId, flag) =>
+      call<TestAccount>('clearAccountFlag', { projectId, accountId, flag }),
 
     // ------------------------------------------------------------ 테스트 사이클
     // ------------------------------------------------------------ 빌드·사이클 만들기 (F-DV-05, F-CY-01·02)

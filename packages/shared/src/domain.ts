@@ -182,7 +182,11 @@ export const CaseBody = z.object({
   preconditions: z.array(z.string()),
   prepFlowIds: z.array(z.string()),
   cleanState: z.boolean(),
-  accountRole: z.string().optional(),
+  /**
+   * 필요 계정 종류 (F-QD-04, F-PF-04). 값이 있으면 실행할 때 이 종류의 테스트 계정을 배정받는다.
+   * 로그인이 필요한 케이스의 기본값은 DEFAULT_ACCOUNT_KIND. 로그인 상태로 시작할지는 준비 플로우가 정한다
+   */
+  accountKind: z.string().optional(),
   data: z.string().optional(),
   steps: z.array(CaseStep),
   verificationPoints: z.array(VerificationPoint),
@@ -556,7 +560,6 @@ export const TestCycle = z.object({
   serverEnv: z.enum(['dev', 'stage', 'prod']),
   /** 케이스 스냅샷 (F-CY-02) */
   snapshot: z.array(z.object({ tcId: z.string(), contentHash: z.string() })),
-  accounts: z.array(z.object({ role: z.string(), id: z.string() })),
   createdBy: z.string(),
   /** local_run: 호스트에서 돌린 실행 결과를 사이클로 묶어 보여 주는 것 (개발용) */
   origin: z.enum(['cycle', 'local_run']).optional(),
@@ -814,3 +817,60 @@ export type HostConnection = z.infer<typeof HostConnection>;
 
 /** 웹이 [이 PC 연결]로 받아 호스트에 넘기는 자격. 비밀값은 이때 한 번만 보인다 */
 export type HostCredential = { uid: string; hostId: string; secret: string };
+
+/** 계정 종류를 따로 정하지 않은 로그인 케이스·계정의 종류 (F-QD-04) */
+export const DEFAULT_ACCOUNT_KIND = '기본';
+
+/**
+ * 테스트 계정 (F-PF-04·08·09). `projects/{p}/accounts/{id}` — Functions만 쓰고 멤버가 읽는다.
+ * 비밀번호·TOTP 시드는 여기 없다: `accountSecrets/{id}`에 암호화해 두고 배정받은 호스트에만 준다 (F-EX-09)
+ */
+export const TestAccount = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  /** 계정 종류. 같은 종류의 계정은 서로 바꿔 쓸 수 있다 */
+  kind: z.string(),
+  loginId: z.string(),
+  /** TOTP 시드가 있는지 (값은 비밀값 쪽에) */
+  usesTotp: z.boolean(),
+  /** 기준 상태 메모 — 격리됐을 때 원복하는 기준 */
+  note: z.string().optional(),
+  createdAt: z.string(),
+  createdBy: z.string(),
+  /** 비밀값을 마지막으로 바꾼 사람·시각 (값은 다시 보여 주지 않는다) */
+  secretUpdated: z.object({ by: z.string(), at: z.string() }),
+  /**
+   * 배정(리스). 그 Run이 실행 중이고 연결 신호가 살아 있는 동안만 유효하다 — 끊기면 다음 배정 때 풀린다.
+   * `restoring`: 원복 플로우가 있는 케이스 중이다. 이 상태로 끊기면 계정 상태를 알 수 없어 격리한다 (F-PF-09)
+   */
+  lease: z
+    .object({
+      cycleId: z.string(),
+      runId: z.string(),
+      tcId: z.string(),
+      uid: z.string(),
+      executor: z.string(),
+      hostId: z.string(),
+      at: z.string(),
+      restoring: z.boolean(),
+    })
+    .optional(),
+  /** 로그인 준비 플로우가 실패했다. 비밀번호를 고치거나 표시를 지우기 전까지 배정하지 않는다 */
+  loginFailed: z.object({ at: z.string(), cycleId: z.string(), runId: z.string(), tcId: z.string(), detail: z.string().optional() }).optional(),
+  /** 격리: 원복 실패 또는 원복 중 끊김. 사람이 원복하고 해제하기 전까지 배정하지 않는다 */
+  quarantine: z
+    .object({
+      reason: z.enum(['restore_failed', 'interrupted']),
+      at: z.string(),
+      cycleId: z.string(),
+      runId: z.string(),
+      tcId: z.string(),
+      detail: z.string().optional(),
+    })
+    .optional(),
+});
+export type TestAccount = z.infer<typeof TestAccount>;
+
+/** 배정 응답으로 호스트에 넘기는 비밀값. 호스트는 메모리에만 두고 반납·Run 종료 때 버린다 */
+export const AccountSecret = z.object({ password: z.string(), totpSeed: z.string().optional() });
+export type AccountSecret = z.infer<typeof AccountSecret>;

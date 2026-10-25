@@ -22,6 +22,7 @@ import type {
   SpecQuestion,
   SpecSuggestion,
   TargetDevice,
+  TestAccount,
   TestCase,
   TestCycle,
   ThoughtEntry,
@@ -244,8 +245,8 @@ export const GITHUB: Record<string, string> = {
 };
 
 /**
- * 하루콩 외의 프로젝트: 빈 프로젝트(Admin), 내가 Viewer인 프로젝트, 삭제 예정 프로젝트, 아직 멤버가 아닌 프로젝트(초대 대기).
- * 데이터(QA 문서·사이클)는 하루콩에만 있다. 모두 가상의 앱이다.
+ * 하루콩 외의 프로젝트: 빈 프로젝트(Admin), 내가 Viewer인 프로젝트, 삭제 예정 프로젝트, 아직 멤버가 아닌 프로젝트(초대 대기),
+ * 로그인이 있는 앱(모아북 — 테스트 계정 화면용). QA 문서·사이클은 하루콩에만 있다. 모두 가상의 앱이다.
  */
 export const otherProjects: Project[] = [
   {
@@ -282,6 +283,14 @@ export const otherProjects: Project[] = [
     createdBy: PEOPLE.dev,
     createdAt: T(8, 9),
   },
+  {
+    id: 'moabook',
+    name: '모아북',
+    appName: '모아북',
+    packageName: 'com.example.moabook',
+    createdBy: PEOPLE.lead,
+    createdAt: T(19, 10),
+  },
 ];
 
 const member = (projectId: string, user: string, role: Role, joinedAt: string): Member => ({
@@ -304,6 +313,51 @@ export const members: Member[] = [
   member('roomie', PEOPLE.lead, 'viewer', T(6, 10)),
   member('old-poc', PEOPLE.lead, 'admin', T(2, 10)),
   member('atlas', PEOPLE.dev, 'admin', T(8, 9)),
+  member('moabook', PEOPLE.lead, 'admin', T(19, 10)),
+  member('moabook', PEOPLE.qa, 'qa', T(19, 11)),
+];
+
+/**
+ * 테스트 계정 (F-PF-04·08·09). 하루콩은 로그인이 없어 계정이 없고, 모아북(가상 앱)에 종류 두 가지 계정을 둔다.
+ * 비밀값은 fixture에 없다 — 화면은 비밀값을 다시 보여 주지 않는다
+ */
+const account = (id: string, kind: string, extra: Partial<TestAccount> = {}): TestAccount => ({
+  id,
+  projectId: 'moabook',
+  kind,
+  loginId: `${id}@moabook.test`,
+  usesTotp: false,
+  createdAt: T(19, 11),
+  createdBy: PEOPLE.lead,
+  secretUpdated: { by: PEOPLE.lead, at: T(19, 11) },
+  ...extra,
+});
+export const accounts: TestAccount[] = [
+  account('qa.basic01', '기본', { note: '기본 프로필, 책 0권' }),
+  account('qa.basic02', '기본', { note: '책 12권 보유', secretUpdated: { by: PEOPLE.qa, at: T(20, 9) } }),
+  account('qa.basic03', '기본', {
+    note: '책 3권, 알림 끔',
+    loginFailed: {
+      at: T(24, 14, 2),
+      cycleId: 'cycle-moa-1',
+      runId: 'run-moa-1',
+      tcId: 'TC-LIB-021',
+      detail: '아이디 또는 비밀번호가 올바르지 않습니다',
+    },
+  }),
+  account('qa.sub01', '구독자', {
+    note: '연간 구독',
+    usesTotp: true,
+    quarantine: {
+      reason: 'restore_failed',
+      at: T(25, 11, 40),
+      cycleId: 'cycle-moa-1',
+      runId: 'run-moa-1',
+      tcId: 'TC-SUB-007',
+      detail: '구독 관리 화면에 [해지 예약 취소]가 보이지 않음',
+    },
+  }),
+  account('qa.sub02', '구독자', { note: '월간 구독', usesTotp: true }),
 ];
 
 /** 초대 링크는 `/invite/<token>`. 만료 판단은 지금 시각과 expiresAt 비교 */
@@ -1057,7 +1111,6 @@ export const cycle130: TestCycle = {
   period: { start: T(16, 10) },
   serverEnv: 'stage',
   snapshot: snapshotCases.map((c) => ({ tcId: c.tcId, contentHash: c.contentHash })),
-  accounts: [{ role: '익명 사용자', id: '(설치마다 새로 생성)' }],
   createdBy: PEOPLE.lead,
 };
 
@@ -1153,7 +1206,6 @@ export const cycle121: TestCycle = {
   period: { start: T(3, 10), end: T(4, 18) },
   serverEnv: 'stage',
   snapshot: snapshot120.map((c) => ({ tcId: c.tcId, contentHash: c.contentHash })),
-  accounts: [{ role: '익명 사용자', id: '(설치마다 새로 생성)' }],
   createdBy: PEOPLE.lead,
 };
 
@@ -1511,6 +1563,7 @@ export type FixtureDb = {
   projects: Project[];
   members: Member[];
   invitations: Invitation[];
+  accounts: TestAccount[];
   qaDocs: QADocument[];
   builds: Build[];
   cycles: TestCycle[];
@@ -1532,6 +1585,7 @@ export function createFixtureDb(): FixtureDb {
     projects: [project, ...otherProjects],
     members,
     invitations,
+    accounts,
     qaDocs: [qaDocV130, qaDocV120],
     builds,
     cycles: [cycle130, cycle121],

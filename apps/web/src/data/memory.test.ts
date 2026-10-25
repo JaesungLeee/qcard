@@ -188,7 +188,7 @@ describe('프로젝트·멤버·초대 (F-TM-09~13)', () => {
   it('내 프로젝트만 보이고, 멤버가 아니면 열 수 없다', async () => {
     const api = createMemoryApi();
     const mine = (await api.listMyProjects()).map((s) => `${s.project.id}:${s.role}`);
-    expect(mine).toEqual(['haru:admin', 'widget:admin', 'roomie:viewer', 'old-poc:admin']);
+    expect(mine).toEqual(['haru:admin', 'widget:admin', 'roomie:viewer', 'old-poc:admin', 'moabook:admin']);
     await expect(api.getProject('atlas')).rejects.toBeInstanceOf(PermissionError);
   });
 

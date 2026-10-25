@@ -1,11 +1,14 @@
-import { initializeApp } from 'firebase-admin/app';
+import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { setGlobalOptions } from 'firebase-functions/v2';
+import { defineString } from 'firebase-functions/params';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { MembershipError } from '@qcard/shared';
+import * as acc from './accounts';
 import * as h from './handlers';
+import { kmsBox, localBox, type SecretBox } from './secretBox';
 
 /*
  * qcard Cloud Functions. LLM을 부르는 함수는 없다 — LLM 작업은 요청자의 호스트 에이전트가 한다 (PRD §6.2).
@@ -13,6 +16,17 @@ import * as h from './handlers';
 
 initializeApp();
 setGlobalOptions({ region: 'asia-northeast3' });
+
+/** 테스트 계정 비밀값을 봉인하는 Cloud KMS 키. 키 이름은 비밀이 아니다 — 만드는 법은 docs/dev/deploy.md */
+const ACCOUNT_KMS_KEY = defineString('ACCOUNT_KMS_KEY', {
+  default: 'projects/qcard-d2ade/locations/asia-northeast3/keyRings/qcard/cryptoKeys/test-accounts',
+});
+const emulator = process.env.FUNCTIONS_EMULATOR === 'true';
+let box: SecretBox | undefined;
+const secretBox = () =>
+  (box ??= emulator
+    ? localBox('qcard-emulator')
+    : kmsBox(ACCOUNT_KMS_KEY.value(), async () => (await applicationDefault().getAccessToken()).access_token));
 
 const CODE = { permission: 'permission-denied', rule: 'failed-precondition', not_found: 'not-found' } as const;
 
@@ -32,16 +46,18 @@ function call<T>(
     if (host && !opts.allowHost)
       throw new HttpsError('permission-denied', '호스트 에이전트는 이 작업을 할 수 없습니다.');
     try {
-      return await fn({ db: getFirestore(), uid: req.auth.uid, ...(host ? { host } : {}) }, req.data, req);
+      return await fn(
+        { db: getFirestore(), uid: req.auth.uid, ...(host ? { host } : {}), box: secretBox() },
+        req.data,
+        req,
+      );
     } catch (e) {
       throw toHttps(e);
     }
   });
 }
 
-export const registerProfile = call((ctx, data) =>
-  h.registerProfile(ctx, data, { emulator: process.env.FUNCTIONS_EMULATOR === 'true' }),
-);
+export const registerProfile = call((ctx, data) => h.registerProfile(ctx, data, { emulator }));
 export const createProject = call(h.createProject);
 export const deleteProject = call(h.deleteProject);
 export const restoreProject = call(h.restoreProject);
@@ -63,6 +79,14 @@ export const hostToken = onCall(async (req) => {
     throw toHttps(e);
   }
 });
+
+// 테스트 계정 (F-PF-04·08·09). 배정·반납은 실행 중인 호스트만 (handlers가 host를 확인한다)
+export const createAccount = call(acc.createAccount);
+export const updateAccount = call(acc.updateAccount);
+export const deleteAccount = call(acc.deleteAccount);
+export const clearAccountFlag = call(acc.clearAccountFlag);
+export const claimAccount = call(acc.claimAccount, { allowHost: true });
+export const releaseAccount = call(acc.releaseAccount, { allowHost: true });
 
 /** 삭제 유예(30일)가 지난 프로젝트 영구 삭제 (F-TM-12) */
 export const purgeDeletedProjects = onSchedule({ schedule: 'every day 04:00', timeZone: 'Asia/Seoul' }, async () => {

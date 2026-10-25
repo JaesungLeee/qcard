@@ -1,5 +1,8 @@
 import type { ConsoleSession } from '@qcard/fixtures';
 import type {
+  AccountInput,
+  AccountPatch,
+  AccountState,
   Build,
   CaseBody,
   PrepFlow,
@@ -23,6 +26,7 @@ import type {
   QADocument,
   Run,
   TestCase,
+  TestAccount,
   TestCycle,
   Verdict,
 } from '@qcard/shared';
@@ -79,6 +83,17 @@ export interface QcardApi {
   resolveQuestion(ref: DocRef, questionId: string, resolution: QuestionResolution): Promise<void>;
   commentQuestion(ref: DocRef, questionId: string, text: string): Promise<void>;
   listPrepFlows(projectId: string): Promise<PrepFlow[]>;
+
+  /** 테스트 계정 (F-PF-04·08). 상태(사용 중·로그인 실패·격리)와 함께, 로그인 ID 순. 비밀값은 없다 */
+  listAccounts(projectId: string): Promise<AccountView[]>;
+  /** 계정 등록 (F-PF-08). Admin·QA만. 비밀번호·TOTP 시드는 저장한 뒤 다시 볼 수 없다 */
+  createAccount(projectId: string, input: AccountInput): Promise<TestAccount>;
+  /** 없는 필드는 그대로, `totp: null`은 TOTP 시드를 지운다. 비밀값을 바꾸면 로그인 실패 표시가 지워진다 */
+  updateAccount(projectId: string, accountId: string, patch: AccountPatch): Promise<TestAccount>;
+  /** 실행 중인 Run이 쓰고 있으면 `RuleError` */
+  deleteAccount(projectId: string, accountId: string): Promise<void>;
+  /** 로그인 실패 표시 지우기·격리 해제 (F-PF-08·09). Admin·QA만 */
+  clearAccountFlag(projectId: string, accountId: string, flag: 'loginFailed' | 'quarantine'): Promise<TestAccount>;
 
   /**
    * QA 문서 생성 요청 (PRD §5.2): 스펙 묶음(`<스펙>/spec.md`만)을 변경 불가 스냅샷으로 올리고 Job을 만든다.
@@ -138,6 +153,8 @@ export interface QcardApi {
   /** 로컬 콘솔 (호스트 에이전트가 제공할 데이터) */
   getConsoleSession(): Promise<ConsoleSession>;
 }
+
+export type AccountView = { account: TestAccount; state: AccountState };
 
 /** 웹에서 내 호스트로 Run 시작 요청 */
 export type RequestRunInput = RunCycleJob['input'];

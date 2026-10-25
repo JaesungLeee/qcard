@@ -20,6 +20,7 @@ const NAV: { to: string; label: string; icon: ReactNode }[] = [
   { to: 'cycles', label: '테스트 사이클', icon: <Icons.IconListOrdered /> },
   { to: 'docs', label: 'QA 문서', icon: <Icons.IconDocumentText /> },
   { to: 'prep-flows', label: '준비 플로우', icon: <Icons.IconFlag /> },
+  { to: 'accounts', label: '테스트 계정', icon: <Icons.IconLock /> },
   { to: 'settings', label: '프로젝트 설정', icon: <Icons.IconSetting /> },
 ];
 
