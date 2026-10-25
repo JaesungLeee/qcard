@@ -9,6 +9,7 @@ import {
   type CaseChange,
   type QADocument,
   type Requirement,
+  type SpecQuestion,
   type TestCase,
 } from '@qcard/shared';
 
@@ -216,6 +217,82 @@ export function caseTree(cases: TestCase[]): FeatureNode[] {
     if (c.change === 'new') f.hasNew = true;
   }
   return [...features.values()];
+}
+
+// ---------------------------------------------------------------- 스펙 확인 질문
+
+/** 질문 카테고리: 연결된 첫 케이스의 기능 › 세부 기능. 케이스 탭 분류 목록과 같은 순서 */
+export type QuestionCategory = {
+  feature: string;
+  subFeature: string;
+  open: number;
+  questions: SpecQuestion[];
+};
+
+/** 연결 케이스가 문서에 없는 질문의 카테고리 */
+export const NO_CASE_FEATURE = '(연결 케이스 없음)';
+
+export function questionCategories(doc: Pick<QADocument, 'cases' | 'questions'>): QuestionCategory[] {
+  const byId = new Map(doc.cases.map((c) => [c.tcId, c]));
+  const rank = new Map<string, number>();
+  for (const f of caseTree(doc.cases)) for (const fl of f.flows) rank.set(`${f.feature}\0${fl.subFeature}`, rank.size);
+  const cats = new Map<string, QuestionCategory>();
+  for (const q of doc.questions) {
+    const c = q.caseIds.map((id) => byId.get(id)).find((x) => x !== undefined);
+    const feature = c ? c.feature : NO_CASE_FEATURE;
+    const subFeature = c ? c.subFeature : '';
+    const key = `${feature}\0${subFeature}`;
+    let cat = cats.get(key);
+    if (!cat) {
+      cat = { feature, subFeature, open: 0, questions: [] };
+      cats.set(key, cat);
+    }
+    cat.questions.push(q);
+    if (q.status === 'open') cat.open++;
+  }
+  return [...cats.entries()]
+    .sort(([a], [b]) => (rank.get(a) ?? Infinity) - (rank.get(b) ?? Infinity))
+    .map(([, cat]) => cat);
+}
+
+/** 보여 줄 카테고리: 주소의 질문 → 주소의 분류 → 미답변이 있는 첫 카테고리 → 첫 카테고리 */
+export function pickCategory(
+  cats: QuestionCategory[],
+  want: { question: string | null; feature: string | null; flow: string | null },
+): QuestionCategory | undefined {
+  return (
+    cats.find((c) => c.questions.some((q) => q.id === want.question)) ??
+    cats.find((c) => c.feature === want.feature && c.subFeature === (want.flow ?? '')) ??
+    cats.find((c) => c.open > 0) ??
+    cats[0]
+  );
+}
+
+/** 현재 카테고리 다음으로 미답변이 남은 카테고리(끝에 가면 처음부터) */
+export function nextOpenCategory(cats: QuestionCategory[], current: QuestionCategory): QuestionCategory | undefined {
+  const i = cats.indexOf(current);
+  return [...cats.slice(i + 1), ...cats.slice(0, i)].find((c) => c.open > 0);
+}
+
+export type QuestionGroup = { caseId: string | null; case?: TestCase; held: boolean; questions: SpecQuestion[] };
+
+/** 카테고리 안을 연결된 첫 케이스별로 묶는다. 보류 케이스 먼저, 묶음 안에서는 미답변 먼저 */
+export function groupByCase(questions: SpecQuestion[], cases: TestCase[]): QuestionGroup[] {
+  const groups = new Map<string | null, QuestionGroup>();
+  for (const q of questions) {
+    const caseId = q.caseIds[0] ?? null;
+    let g = groups.get(caseId);
+    if (!g) {
+      g = { caseId, case: cases.find((c) => c.tcId === caseId), held: false, questions: [] };
+      groups.set(caseId, g);
+    }
+    g.questions.push(q);
+    if (q.status === 'open') g.held = true;
+  }
+  const openFirst = (a: SpecQuestion, b: SpecQuestion) => Number(b.status === 'open') - Number(a.status === 'open');
+  return [...groups.values()]
+    .map((g) => ({ ...g, questions: [...g.questions].sort(openFirst) }))
+    .sort((a, b) => Number(b.held) - Number(a.held));
 }
 
 export const PAGE_SIZES = [10, 20, 50] as const;

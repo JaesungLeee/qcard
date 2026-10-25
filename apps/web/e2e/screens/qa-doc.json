@@ -18,6 +18,7 @@
   { "name": "qa-doc-case-removed", "path": "/p/haru/docs/doc-130?case=TC-ONBOARDING-062", "waitFor": "삭제됨 — 다음 사이클에서 제외" },
   { "name": "qa-doc-case-edit", "path": "/p/haru/docs/doc-130?case=TC-ONBOARDING-021&edit=1", "waitFor": "검증 포인트 추가" },
   { "name": "qa-doc-questions", "path": "/p/haru/docs/doc-130?tab=questions", "waitFor": "Q-1" },
+  { "name": "qa-doc-questions-done", "path": "/p/haru/docs/doc-130?tab=questions&question=Q-3", "waitFor": "이 카테고리의 질문을 모두 처리했습니다" },
   { "name": "qa-doc-suggestions", "path": "/p/haru/docs/doc-130?tab=suggestions", "waitFor": "보강 제안은 케이스가 아닙니다" },
   { "name": "qa-doc-traceability", "path": "/p/haru/docs/doc-130?tab=traceability", "waitFor": "커버리지" },
   { "name": "qa-doc-v120", "path": "/p/haru/docs/doc-120", "waitFor": "QA 문서 1.2.0" },

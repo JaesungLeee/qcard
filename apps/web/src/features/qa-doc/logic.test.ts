@@ -1,4 +1,4 @@
-import type { CaseBody } from '@qcard/shared';
+import type { CaseBody, SpecQuestion } from '@qcard/shared';
 import { describe, expect, it } from 'vitest';
 import { ConflictError } from '../../data/api';
 import { createMemoryApi } from '../../data/memory';
@@ -9,7 +9,12 @@ import {
   diffLines,
   filterCases,
   caseTree,
+  groupByCase,
   groupRows,
+  nextOpenCategory,
+  NO_CASE_FEATURE,
+  pickCategory,
+  questionCategories,
   inScope,
   isDirty,
   orderByGroup,
@@ -125,6 +130,59 @@ describe('caseTree · inScope', () => {
       flow.count,
     );
     expect(d.cases.filter((c) => inScope(c, { feature: '없는 기능', subFeature: null }))).toHaveLength(0);
+  });
+});
+
+describe('스펙 확인 질문 카테고리', () => {
+  const q = (id: string, caseIds: string[], status: SpecQuestion['status'] = 'open'): SpecQuestion => ({
+    id,
+    requirementId: 'R',
+    caseIds,
+    text: id,
+    assignee: '',
+    status,
+    comments: [],
+  });
+
+  it('연결된 첫 케이스의 기능 › 유저 플로우로 묶고 케이스 분류 순서를 따른다', async () => {
+    const d = await doc130();
+    const [f] = caseTree(d.cases);
+    const [a, b] = [f!.flows[0]!, f!.flows[1]!].map((fl) => d.cases.find((c) => c.subFeature === fl.subFeature)!);
+    const cats = questionCategories({
+      cases: d.cases,
+      questions: [q('Q-1', [b!.tcId]), q('Q-2', [a!.tcId], 'answered'), q('Q-3', ['없는 케이스']), q('Q-4', [b!.tcId])],
+    });
+    expect(cats.map((c) => [c.subFeature, c.questions.map((x) => x.id), c.open])).toEqual([
+      [a!.subFeature, ['Q-2'], 0],
+      [b!.subFeature, ['Q-1', 'Q-4'], 2],
+      ['', ['Q-3'], 1],
+    ]);
+    expect(cats[2]!.feature).toBe(NO_CASE_FEATURE);
+  });
+
+  it('주소의 질문 → 주소의 분류 → 미답변 있는 첫 카테고리 순으로 고르고, 다음은 미답변 남은 곳', () => {
+    const cats = [
+      { feature: 'F', subFeature: 'a', open: 0, questions: [q('Q-1', [], 'answered')] },
+      { feature: 'F', subFeature: 'b', open: 1, questions: [q('Q-2', [])] },
+      { feature: 'F', subFeature: 'c', open: 1, questions: [q('Q-3', [])] },
+    ];
+    const none = { question: null, feature: null, flow: null };
+    expect(pickCategory(cats, none)).toBe(cats[1]);
+    expect(pickCategory(cats, { ...none, feature: 'F', flow: 'a' })).toBe(cats[0]);
+    expect(pickCategory(cats, { question: 'Q-3', feature: 'F', flow: 'a' })).toBe(cats[2]);
+    expect(pickCategory([], none)).toBeUndefined();
+    expect(nextOpenCategory(cats, cats[1]!)).toBe(cats[2]);
+    expect(nextOpenCategory(cats, cats[2]!)).toBe(cats[1]);
+    expect(nextOpenCategory([cats[0]!, cats[1]!], cats[1]!)).toBeUndefined();
+  });
+
+  it('케이스별로 묶어 보류 케이스와 미답변 질문을 먼저 둔다', () => {
+    const groups = groupByCase([q('Q-1', ['TC-1'], 'answered'), q('Q-2', ['TC-2']), q('Q-3', ['TC-1'])], []);
+    expect(groups.map((g) => [g.caseId, g.held, g.questions.map((x) => x.id)])).toEqual([
+      ['TC-1', true, ['Q-3', 'Q-1']],
+      ['TC-2', true, ['Q-2']],
+    ]);
+    expect(groupByCase([q('Q-1', ['TC-1'], 'proceed'), q('Q-2', ['TC-2'])], [])[0]!.caseId).toBe('TC-2');
   });
 });
 

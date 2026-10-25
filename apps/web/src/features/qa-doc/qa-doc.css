@@ -438,6 +438,52 @@
 }
 
 /* 질문 · 제안 */
+.qd-nav-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--qc-space-4);
+  padding: var(--qc-space-8) var(--qc-space-10);
+}
+.qd-nav-heading {
+  padding: var(--qc-space-12) var(--qc-space-10) var(--qc-space-4);
+  color: var(--qc-foreground-neutral-tertiary);
+  overflow-wrap: anywhere;
+}
+.qd-nav-done {
+  width: 16px;
+  height: 16px;
+}
+.qd-progress {
+  height: 6px;
+  border-radius: var(--qc-radius-full);
+  background: var(--qc-line-neutral-tertiary);
+  overflow: hidden;
+}
+.qd-progress > div {
+  height: 100%;
+  background: var(--qc-foreground-brand-primary);
+  transition: width 0.2s;
+}
+.qd-qgroup {
+  padding: 0;
+  overflow: hidden;
+}
+.qd-qgroup-head {
+  padding: var(--qc-space-12) var(--qc-space-20);
+  background: var(--qc-surface-neutral-secondary);
+  border-bottom: 1px solid var(--qc-line-neutral-tertiary);
+}
+.qd-question {
+  padding: var(--qc-space-20);
+  scroll-margin-top: var(--qc-space-16);
+}
+.qd-question + .qd-question {
+  border-top: 1px solid var(--qc-line-neutral-tertiary);
+}
+/* 카드가 넘침을 자르므로 주소로 연 질문 표시는 안쪽에 그린다 */
+.qd-question.qd-card-current {
+  box-shadow: inset 0 0 0 2px var(--qc-line-brand-focus);
+}
 .qd-card-current {
   border-color: var(--qc-line-brand-strong);
   box-shadow: 0 0 0 2px var(--qc-line-brand-focus);
