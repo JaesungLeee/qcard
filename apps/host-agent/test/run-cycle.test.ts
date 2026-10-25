@@ -6,7 +6,7 @@ import { createFirebaseApi, writeAll } from '@qcard/data/firebase';
 import { seedDocs } from '@qcard/data/seed';
 import { DeviceDisconnectedError, FakeDevice } from '@qcard/device';
 import { APP_PACKAGE, GITHUB, onboardingScenario, PEOPLE } from '@qcard/fixtures';
-import { createLlm, PlanLimitError, UsageMeter, type LlmClient } from '@qcard/llm';
+import { createLlm, PlanLimitError, SecretVault, UsageMeter, type LlmClient } from '@qcard/llm';
 import { deleteDoc, doc, getDoc, setDoc, setLogLevel, updateDoc, type Firestore } from 'firebase/firestore';
 import { getBytes, ref, uploadBytes, type FirebaseStorage } from 'firebase/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -188,6 +188,36 @@ describe('runCycle → Firestore·Storage', () => {
     expect(runs.find((r) => r.id === 'run-host-2')).toMatchObject({ status: 'paused', pauseReason: 'plan_limit' });
   });
 
+  it('배정할 테스트 계정이 없으면 LLM을 부르지 않고 Blocked("계정 없음")로 올리고, 다음 케이스로 간다 (F-PF-04)', async () => {
+    const { api, sink } = await host(PEOPLE.lead, 'run-host-acct');
+    await env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore() as unknown as Firestore;
+      await updateDoc(doc(db, 'projects/haru/cycles/cycle-130-1/cases/TC-ONBOARDING-004'), { accountKind: '구독자' });
+    });
+    const claims: string[] = [];
+    const noLlm: LlmClient = { create: () => Promise.reject(new Error('LLM을 부르면 안 된다')) };
+    const out = await runCycle({
+      api,
+      sink,
+      env: { ...agentEnv(noLlm), vault: new SecretVault() },
+      ...REF,
+      deviceId: DEVICE,
+      runId: 'run-host-acct',
+      tcIds: ['TC-ONBOARDING-004'],
+      accounts: {
+        claim: async (input) => {
+          claims.push(`${input.tcId}:${input.kind}`);
+          return { account: null };
+        },
+        release: async () => {},
+      },
+    });
+    expect(claims).toEqual(['TC-ONBOARDING-004:구독자']);
+    expect(out.status).toBe('done');
+    const r = (await api.getCycle(REF)).results.find((x) => x.tcId === 'TC-ONBOARDING-004' && x.deviceId === DEVICE)!;
+    expect(r).toMatchObject({ verdict: 'blocked', blockedReason: '계정 없음: 구독자 종류의 빈 계정이 없습니다' });
+  });
+
   it('디바이스가 잠겨 있으면 LLM을 부르지 않고 Run을 일시정지한다', async () => {
     const { db, api, sink } = await host(PEOPLE.lead, 'run-host-4');
     const device = new FakeDevice(onboardingScenario());
@@ -363,6 +393,37 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     // Run 동안만 화면 켜짐 유지를 켰다가 되돌렸다
     expect(device.log.filter((l) => l.startsWith('stay-on'))).toEqual(['stay-on 7', 'stay-on 0']);
     expect(service.running).toBe(false);
+  });
+
+  it('남은 케이스에 필요한데 배정할 계정이 없는 종류를 홈에 알린다 (F-PF-08)', async () => {
+    const C = 'projects/haru/cycles/cycle-130-1';
+    const tc = 'TC-ONBOARDING-004';
+    const write = (fn: (db: Firestore) => Promise<void>) =>
+      env.withSecurityRulesDisabled((c) => fn(c.firestore() as unknown as Firestore));
+    await write(async (db) => {
+      // 남은 칸으로 만든다 (N/T)
+      await updateDoc(doc(db, `${C}/results/${tc}__${DEVICE}`), { verdict: 'nt' });
+      await updateDoc(doc(db, `${C}/cases/${tc}`), { accountKind: '기본' });
+      // 기본 계정은 하나 있고 비어 있다. 구독자 계정은 격리돼 배정할 수 없다
+      const base = { projectId: 'haru', usesTotp: false, createdAt: 'x', createdBy: 'x', secretUpdated: { by: 'x', at: 'x' } };
+      await setDoc(doc(db, 'projects/haru/accounts/a1'), { ...base, id: 'a1', kind: '기본', loginId: 'a1' });
+      await setDoc(doc(db, 'projects/haru/accounts/s1'), {
+        ...base,
+        id: 's1',
+        kind: '구독자',
+        loginId: 's1',
+        quarantine: { reason: 'restore_failed', at: 'x', cycleId: 'c', runId: 'r', tcId: 't' },
+      });
+    });
+    const { home } = await serviceFor(galaxy());
+    const option = () => home().cycles.find((c) => c.cycleId === 'cycle-130-1')!;
+    expect(option().accountShortage).toBeUndefined();
+
+    await write((db) => updateDoc(doc(db, `${C}/cases/${tc}`), { accountKind: '구독자' }));
+    const again = await serviceFor(galaxy());
+    expect(again.home().cycles.find((c) => c.cycleId === 'cycle-130-1')!.accountShortage).toEqual([
+      { kind: '구독자', cases: 1 },
+    ]);
   });
 
   it('디바이스가 없어도 Claude Code 상태가 바뀌면 홈에 알린다', async () => {

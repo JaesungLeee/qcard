@@ -65,7 +65,7 @@ function FlowCards({ flows, doc, projectId }: { flows: PrepFlow[]; doc?: QADocum
           <article key={f.id} className="qc-card qd-stack" style={{ gap: token('space-16') }}>
             <div className="qd-stack" style={{ gap: token('space-6') }}>
               <div className="qd-row" style={{ justifyContent: 'space-between' }}>
-                <Tag tone={f.kind === 'env' ? 'neutral' : f.kind === 'login' ? 'blue' : 'violet'}>
+                <Tag tone={f.kind === 'env' ? 'neutral' : f.kind === 'login' || f.kind === 'restore' ? 'blue' : 'violet'}>
                   {PREP_KIND_LABEL[f.kind]}
                 </Tag>
                 <span className={`${textClass('caption1')} qc-mono qd-faint`}>{f.id}</span>

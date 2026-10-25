@@ -38,6 +38,8 @@ export type ConsoleServiceDeps = {
   llm?: CycleRunDeps['llm'];
   env?: CycleRunDeps['env'];
   awakeDir?: string;
+  /** 테스트 계정 배정·반납 (F-PF-04) */
+  accounts?: CycleRunDeps['accounts'];
 };
 
 export class ConsoleService implements ConsoleBackend {
@@ -150,6 +152,18 @@ export class ConsoleService implements ConsoleBackend {
     if (problem !== this.home.deviceProblem) this.setHome({ deviceProblem: problem });
   }
 
+  /** 남은 케이스에 필요한 계정 종류 중 지금 배정할 수 있는 계정이 없는 것 (F-PF-08). 계정을 읽지 못하면 알리지 않는다 */
+  private async accountShortage(projectId: string, cases: { accountKind?: string }[]) {
+    const need = new Map<string, number>();
+    for (const c of cases) if (c.accountKind) need.set(c.accountKind, (need.get(c.accountKind) ?? 0) + 1);
+    if (!need.size) return [];
+    const views = await this.deps.api.listAccounts(projectId).catch(() => undefined);
+    if (!views) return [];
+    return [...need]
+      .filter(([kind]) => !views.some((v) => v.account.kind === kind && v.state === 'free'))
+      .map(([kind, n]) => ({ kind, cases: n }));
+  }
+
   private async cyclesFor(info: DeviceInfo): Promise<ConsoleCycleOption[]> {
     const { api, executor, account } = this.deps;
     // 내 Run: 예전 Run(executorUid 없음)은 이름으로 본다
@@ -175,6 +189,10 @@ export class ConsoleService implements ConsoleBackend {
           });
           return { ...r, status: 'paused' as const, pauseReason: 'host_lost' as const };
         });
+        const accountShortage = await this.accountShortage(
+          project.id,
+          d.cases.filter((c) => c.mode === 'auto' && !done.has(c.tcId)),
+        );
         const paused = runs
           .filter((r) => r.status === 'paused' && mine(r) && r.deviceId === target.id)
           .sort((a, b) => a.startedAt.localeCompare(b.startedAt))
@@ -190,6 +208,7 @@ export class ConsoleService implements ConsoleBackend {
           cases: d.cases
             .filter((c) => c.mode === 'auto')
             .map((c) => ({ tcId: c.tcId, title: c.title, done: done.has(c.tcId) })),
+          ...(accountShortage.length ? { accountShortage } : {}),
           ...(paused
             ? {
                 pausedRun: {
@@ -252,6 +271,7 @@ export class ConsoleService implements ConsoleBackend {
           llm: this.deps.llm,
           env: this.deps.env,
           awakeDir: this.deps.awakeDir,
+          accounts: this.deps.accounts,
         },
         {
           projectId: m.projectId,

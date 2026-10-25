@@ -1,8 +1,9 @@
-import { runCase, RunAbortedError, type AgentEnv } from '@qcard/agent';
+import { blockedCase, runCase, RunAbortedError, type AccountIssue, type AgentEnv } from '@qcard/agent';
 import type { QcardApi } from '@qcard/data';
 import { ClaudeCodeSetupError, PlanLimitError, type UsageMeter } from '@qcard/llm';
 import { DeviceDisconnectedError } from '@qcard/device';
 import { RUN_HEARTBEAT_MS, type CaseResult, type PauseReason, type TestCase } from '@qcard/shared';
+import { RunAccounts, type AccountLeaser } from './accounts';
 import type { RunSink } from './sink';
 
 /*
@@ -39,6 +40,9 @@ export type RunCycleInput = {
   onPhase?: (phase: 'prep' | 'steps' | 'verify') => void;
   /** 끝날 때 남은 업로드를 기다릴 시간 (기본 무한). 지나면 큐에 남겨 두고 돌아온다 */
   drainTimeoutMs?: number;
+  /** 테스트 계정 배정·반납 (F-PF-04). 없으면 계정이 필요한 케이스는 Blocked. 비밀값은 env.vault에 둔다 */
+  accounts?: AccountLeaser;
+  log?: (line: string) => void;
 };
 
 export type RunCycleOutcome = (
@@ -48,10 +52,11 @@ export type RunCycleOutcome = (
   /** 아직 보내지 못한 업로드 (로컬 큐에 남아 다음 실행이 보낸다) */ pendingUploads: number;
 };
 
-/** 준비 상태가 같은 케이스끼리 묶고, 묶음 안에서는 문서 순서 (F-EX-11) */
+/** 계정 종류·준비 상태가 같은 케이스끼리 묶고, 묶음 안에서는 문서 순서 (F-EX-11). 같은 계정을 이어 쓰게 한다 */
 export function runOrder(cases: TestCase[]): TestCase[] {
-  const groups = [...new Set(cases.map((c) => c.prepFlowIds.join('+')))];
-  return [...cases].sort((a, b) => groups.indexOf(a.prepFlowIds.join('+')) - groups.indexOf(b.prepFlowIds.join('+')));
+  const key = (c: TestCase) => `${c.accountKind ?? ''}|${c.prepFlowIds.join('+')}`;
+  const groups = [...new Set(cases.map(key))];
+  return [...cases].sort((a, b) => groups.indexOf(key(a)) - groups.indexOf(key(b)));
 }
 
 export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
@@ -93,6 +98,14 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
       throw e;
     }
   };
+  const accounts = new RunAccounts({
+    leaser: input.accounts,
+    vault: input.env.vault,
+    projectId,
+    cycleId,
+    runId: input.runId,
+    log: input.log,
+  });
   await sink.start(cases.map((c) => c.tcId));
   // 호스트가 살아 있다는 신호 (F-DV-04): 끊기면 웹은 "호스트 연결 끊김"으로 보이고, 다시 켠 호스트가 일시정지로 정리한다
   const beat = setInterval(() => void sink.heartbeat().catch(() => {}), RUN_HEARTBEAT_MS);
@@ -103,15 +116,35 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
       if (before) return paused(before.reason, before.message);
       await sink.progress(testCase.tcId);
       input.onCaseStart?.(testCase);
+      const env = { ...input.env, saveScreenshot: sink.saveScreenshot };
+      // 테스트 계정 (F-PF-04): 받지 못하면 실행하지 않고 Blocked("계정 없음")
+      const acc = await accounts.forCase(testCase);
+      if ('blocked' in acc) {
+        const result = await blockedCase(env, { testCase, deviceId, runId: input.runId }, acc.blocked);
+        await sink.result(result);
+        results.push(result);
+        input.onCase?.(testCase, result);
+        continue;
+      }
       try {
-        const result = await runCase(
-          { ...input.env, saveScreenshot: sink.saveScreenshot },
-          { testCase, prepFlows, deviceId, runId: input.runId, meter: input.meter, onPhase: input.onPhase },
-        );
+        const issues: [AccountIssue, string][] = [];
+        const result = await runCase(env, {
+          testCase,
+          prepFlows,
+          deviceId,
+          runId: input.runId,
+          meter: input.meter,
+          onPhase: input.onPhase,
+          account: acc.account,
+          onAccountIssue: (issue, detail) => issues.push([issue, detail]),
+        });
         if (result.verdict === 'blocked') {
           const during = await deviceProblem();
           if (during) return paused(during.reason, `${testCase.tcId} 실행 중 ${during.message}`);
         }
+        // 디바이스 문제가 아닐 때만 계정 탓으로 본다 (잠긴 화면에서 로그인 실패로 표시하지 않게)
+        for (const [issue, detail] of issues) await accounts.issue(issue, detail);
+        accounts.caseEnded();
         await sink.result(result);
         results.push(result);
         input.onCase?.(testCase, result);
@@ -142,5 +175,6 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
     return { status: 'done', results, pendingUploads };
   } finally {
     clearInterval(beat);
+    await accounts.finish();
   }
 }

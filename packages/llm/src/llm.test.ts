@@ -8,6 +8,7 @@ import { CassetteMissError, createCassetteLlm, requestKey } from './cassette';
 import { createLlm, llmModeFromEnv } from './client';
 import { LlmOutputError, LlmRefusalError, parseOutput, parseToolUse, toolUses } from './messages';
 import { assertNoSecrets, SecretLeakError, SecretVault, withSecretGuard } from './secrets';
+import { totpCode } from './totp';
 import { EXECUTOR_TOOLS, jsonSchema, outputFormat } from './tools';
 import type { LlmClient, LlmRequest, LlmResponse } from './types';
 import { costUsd, LimitExceededError, UsageMeter, withUsage } from './usage';
@@ -174,6 +175,25 @@ describe('비밀값 (F-EX-09)', () => {
     expect(() => v.resolve('{{secret.otp}}')).toThrow(/otp/);
     v.clear();
     expect(v.findLeak('pa55word!')).toBeUndefined();
+  });
+
+  it('TOTP 코드는 입력할 때 만들고, 만든 코드는 가리고 유출 검사에도 쓴다', () => {
+    // RFC 6238 부록 B (SHA-1 시드 "12345678901234567890"의 base32, 59초 → 94287082의 뒤 6자리)
+    const seed = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+    expect(totpCode(seed, 59_000, 8)).toBe('94287082');
+    expect(totpCode(seed, 59_000)).toBe('287082');
+    let now = 59_000;
+    const v = new SecretVault();
+    v.setDynamic('totp', () => totpCode(seed, now));
+    expect(v.has('totp')).toBe(true);
+    expect(v.resolve('{{secret.totp}}')).toBe('287082');
+    expect(v.mask('코드 287082 입력됨')).toBe('코드 {{secret.totp}} 입력됨');
+    expect(v.findLeak('287082')).toBe('totp');
+    now = 1_111_111_109_000;
+    expect(v.resolve('{{secret.totp}}')).toBe('081804');
+    v.clear();
+    expect(v.has('totp')).toBe(false);
+    expect(v.findLeak('287082')).toBeUndefined();
   });
 
   it('LLM 요청에 실제 비밀값이 있으면 보내지 않는다', async () => {

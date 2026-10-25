@@ -57,6 +57,7 @@ const {
   user: seed,
   account,
   queueDir,
+  accounts,
 } = await openHostSession({ seedUser: values.user }).catch((e: unknown) => {
   if (!(e instanceof HostDisconnectedError)) throw e;
   console.error(e.message);
@@ -88,7 +89,7 @@ if (leftover) log(`지난 실행에서 남은 업로드 ${leftover}건을 보냅
 let prepared: Awaited<ReturnType<typeof prepareCycleRun>>;
 try {
   prepared = await prepareCycleRun(
-    { api, storage, queue, device, info, executor: seed.name, account, claudeCode, log },
+    { api, storage, queue, device, info, executor: seed.name, account, claudeCode, log, accounts },
     {
       projectId: values.project,
       cycleId: values.cycle,

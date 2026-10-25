@@ -158,6 +158,18 @@ export function demoHome(session: ConsoleSession): ConsoleHome {
         deviceId: 'pixel-8-16',
         cases: cases.map((c) => ({ ...c, done: false })),
       },
+      // 로그인이 있는 가상 앱: 구독자 계정이 모두 격리돼 배정할 수 없다 (F-PF-08)
+      {
+        projectId: 'moabook',
+        projectName: '모아북',
+        cycleId: 'cycle-moa-1',
+        cycleName: '2.1.0 (210) 1차',
+        build: { version: '2.1.0', buildNumber: 210 },
+        docVersion: '2.1.0',
+        deviceId: 'pixel-8-16',
+        cases: cases.map((c) => ({ ...c, done: false })),
+        accountShortage: [{ kind: '구독자', cases: 3 }],
+      },
     ],
     loading: false,
     claudeCode: session.claudeCode,

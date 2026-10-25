@@ -7,8 +7,22 @@ import { judge } from './judge';
 import { settle, verifyPoints } from './verify';
 
 /*
- * 케이스 하나 실행: 준비(F-PF-02·03) → 단계 수행 → 검증 포인트 판정 → 집계 → CaseResult.
+ * 케이스 하나 실행: 준비(F-PF-02·03) → 단계 수행 → 검증 포인트 판정 → 집계 → CaseResult → 원복(F-PF-09).
  */
+
+/** 테스트 계정 비밀값의 플레이스홀더 이름 (호스트가 vault에 이 이름으로 넣는다, F-EX-09) */
+export const ACCOUNT_SECRET = { password: 'password', totp: 'totp' } as const;
+
+/** 배정받은 테스트 계정 (F-PF-04). 로그인 ID는 화면에 보이는 값이라 그대로 알려 준다 */
+export type CaseAccount = { kind: string; loginId: string; totp: boolean };
+
+export type AccountIssue = 'login_failed' | 'restore_failed';
+
+/** Agent에 알려 줄 계정 안내. 비밀값은 플레이스홀더만 */
+export function accountContext(a: CaseAccount): string {
+  const totp = a.totp ? `, 인증 앱(OTP) 코드 {{secret.${ACCOUNT_SECRET.totp}}}` : '';
+  return `테스트 계정(${a.kind}): 로그인 ID ${a.loginId}, 비밀번호 {{secret.${ACCOUNT_SECRET.password}}}${totp}. 비밀값은 플레이스홀더 그대로 input_text에 넣는다.`;
+}
 
 export type RunCaseInput = {
   testCase: TestCase;
@@ -19,6 +33,10 @@ export type RunCaseInput = {
   meter?: UsageMeter;
   /** 단계가 바뀔 때 (단계별 시간·비용 측정용) */
   onPhase?: (phase: 'prep' | 'steps' | 'verify') => void;
+  /** 배정받은 테스트 계정. 비밀값은 env.vault에 ACCOUNT_SECRET 이름으로 들어 있어야 한다 */
+  account?: CaseAccount;
+  /** 로그인 준비 플로우 실패·원복 실패 (F-PF-08·09). 호스트가 계정에 표시하거나 격리해 반납한다 */
+  onAccountIssue?: (issue: AccountIssue, detail: string) => void;
 };
 
 /**
@@ -29,7 +47,8 @@ export async function prepare(
   env: AgentEnv,
   tc: TestCase,
   flows: PrepFlow[],
-): Promise<{ failed: string } | { nextIndex: number }> {
+  account?: CaseAccount,
+): Promise<{ failed: string; flow?: PrepFlow } | { nextIndex: number }> {
   const start = clockOf(env).now();
   const used = tc.prepFlowIds.map((id) => flows.find((f) => f.id === id));
   const missing = tc.prepFlowIds.find((_, i) => !used[i]);
@@ -46,18 +65,51 @@ export async function prepare(
 
   let nextIndex = 0;
   for (const f of used) {
-    if (!f || f.kind === 'env') continue;
+    if (!f || f.kind === 'env' || f.kind === 'restore') continue;
     thought(env, start, 'system', `준비 플로우: ${f.name}`);
     const r = await runSteps(env, {
       caseId: tc.tcId,
       steps: f.steps.map((text) => ({ text, manual: false })),
-      context: `준비 플로우 "${f.name}"를 수행한다. 끝나면 이 상태여야 한다: ${f.check}`,
+      context: withAccount(`준비 플로우 "${f.name}"를 수행한다. 끝나면 이 상태여야 한다: ${f.check}`, account),
       firstIndex: nextIndex,
     });
-    if (r.status !== 'done') return { failed: `준비 플로우 실패: ${f.name} (${r.reason ?? r.status})` };
+    if (r.status !== 'done') return { failed: `준비 플로우 실패: ${f.name} (${r.reason ?? r.status})`, flow: f };
     nextIndex = r.nextIndex;
   }
   return { nextIndex };
+}
+
+const withAccount = (context: string, a?: CaseAccount) => (a ? `${context}\n${accountContext(a)}` : context);
+
+/** 원복 관찰 번호는 검증 대기(settle) 관찰과 겹치지 않게 띄운다 */
+const RESTORE_INDEX_GAP = 100;
+
+/**
+ * 원복 플로우 (F-PF-09): 케이스가 바꾼 계정 상태를 되돌린다. 판정과 상관없이 준비가 끝난 케이스면 수행한다.
+ * 실패하면 사유를 돌려준다 (호스트가 계정을 격리한다). 원복 결과는 판정에 영향을 주지 않는다
+ */
+async function restore(
+  env: AgentEnv,
+  tc: TestCase,
+  flows: PrepFlow[],
+  account: CaseAccount | undefined,
+  firstIndex: number,
+): Promise<string | undefined> {
+  const start = clockOf(env).now();
+  const f = flows.find((x) => x.id === tc.restoreFlowId);
+  if (!f) return `원복 플로우 없음: ${tc.restoreFlowId}`;
+  thought(env, start, 'system', `원복 플로우: ${f.name}`);
+  const r = await runSteps(env, {
+    caseId: tc.tcId,
+    steps: f.steps.map((text) => ({ text, manual: false })),
+    context: withAccount(
+      `원복 플로우 "${f.name}": 케이스가 바꾼 계정 상태를 되돌린다. 끝나면 이 상태여야 한다: ${f.check}`,
+      account,
+    ),
+    firstIndex,
+  });
+  if (r.status === 'done') return undefined;
+  return `${f.name}: ${r.reason ?? r.status}`;
 }
 
 /**
@@ -90,12 +142,14 @@ export async function runCase(env: AgentEnv, input: RunCaseInput): Promise<CaseR
   }
 }
 
-async function runCaseInner(env: AgentEnv, input: RunCaseInput): Promise<CaseResult> {
+type ResultOf = (r: Partial<CaseResult> & Pick<CaseResult, 'verdict'>) => CaseResult;
+
+/** 이 케이스의 결과를 만드는 함수 (시작 시각·디바이스 OS·사용량을 채운다) */
+async function resultOf(env: AgentEnv, input: Pick<RunCaseInput, 'testCase' | 'deviceId' | 'runId' | 'meter'>) {
   const { testCase: tc, meter } = input;
-  const clock = clockOf(env);
-  const startedAt = new Date(clock.now()).toISOString();
+  const startedAt = new Date(clockOf(env).now()).toISOString();
   const info = await env.device.info();
-  const result = (r: Partial<CaseResult> & Pick<CaseResult, 'verdict'>): CaseResult => {
+  const result: ResultOf = (r) => {
     const usage = meter?.forCase(tc.tcId);
     return {
       tcId: tc.tcId,
@@ -115,56 +169,47 @@ async function runCaseInner(env: AgentEnv, input: RunCaseInput): Promise<CaseRes
       ...r,
     };
   };
+  return result;
+}
+
+/** 실행하지 않고 Blocked로 끝내는 케이스 (예: 배정할 테스트 계정이 없음, F-PF-04) */
+export async function blockedCase(
+  env: AgentEnv,
+  input: Pick<RunCaseInput, 'testCase' | 'deviceId' | 'runId'>,
+  reason: string,
+): Promise<CaseResult> {
+  return (await resultOf(env, input))({ verdict: 'blocked', agentVerdict: 'blocked', blockedReason: reason });
+}
+
+async function runCaseInner(env: AgentEnv, input: RunCaseInput): Promise<CaseResult> {
+  const { testCase: tc, meter } = input;
+  const clock = clockOf(env);
+  const result = await resultOf(env, input);
 
   try {
     input.onPhase?.('prep');
-    const prep = await prepare(env, tc, input.prepFlows);
-    if ('failed' in prep) return result({ verdict: 'blocked', agentVerdict: 'blocked', blockedReason: prep.failed });
-
-    input.onPhase?.('steps');
-    const exec = await runSteps(env, {
-      caseId: tc.tcId,
-      steps: tc.steps,
-      firstIndex: prep.nextIndex,
-      context: [
-        `케이스: ${tc.title}`,
-        tc.preconditions.length ? `사전조건: ${tc.preconditions.join(' / ')}` : '',
-        tc.data ? `데이터: ${tc.data}` : '',
-        tc.verificationPoints.length
-          ? `기대 결과(무엇을 확인하는 케이스인지 참고. 판정은 따로 한다):\n${tc.verificationPoints.map((p) => `- ${p.expected}`).join('\n')}`
-          : '',
-      ]
-        .filter(Boolean)
-        .join('\n'),
-    });
-    if (exec.status !== 'done') {
-      const j = judge(exec, []);
-      return result({
-        verdict: j.verdict,
-        agentVerdict: j.agentVerdict,
-        unmetConditions: j.unmet,
-        blockedReason: exec.status === 'blocked' ? exec.reason : undefined,
-        actualSummary: exec.status === 'fail' ? exec.reason : undefined,
-        steps: exec.steps,
-      });
+    const prep = await prepare(env, tc, input.prepFlows, input.account);
+    if ('failed' in prep) {
+      // 계정으로 로그인하지 못했다: 비밀번호가 틀렸을 수 있어 그 계정을 다시 배정하지 않게 알린다 (F-PF-08)
+      if (input.account && prep.flow?.kind === 'login') {
+        input.onAccountIssue?.('login_failed', prep.failed);
+        return result({ verdict: 'blocked', agentVerdict: 'blocked', blockedReason: `로그인 실패: ${prep.failed}` });
+      }
+      return result({ verdict: 'blocked', agentVerdict: 'blocked', blockedReason: prep.failed });
     }
 
-    input.onPhase?.('verify');
-    const evidence = await settle(env, { caseId: tc.tcId, evidence: exec.evidence, nextIndex: exec.nextIndex });
-    const points = await verifyPoints(env, { caseId: tc.tcId, points: tc.verificationPoints, evidence });
-    const start = clock.now();
-    for (const p of points) thought(env, start, 'verify', `${p.pointId} ${p.result} · ${p.reason}`);
-    const j = judge(exec, points);
-    const misses = points.filter((p) => p.result !== 'match');
-    return result({
-      verdict: j.verdict,
-      agentVerdict: j.agentVerdict,
-      autoConfirmed: j.autoConfirmed,
-      unmetConditions: j.unmet,
-      actualSummary: misses.length ? misses.map((p) => `${p.expected} → ${p.observed}`).join(' / ') : undefined,
-      steps: exec.steps,
-      points,
-    });
+    const out = await afterPrep(env, input, prep.nextIndex, result);
+    if (tc.restoreFlowId) {
+      const failed = await restore(env, tc, input.prepFlows, input.account, out.nextIndex + RESTORE_INDEX_GAP);
+      if (failed) {
+        thought(env, clock.now(), 'system', `원복 실패 — 계정을 격리합니다: ${failed}`);
+        input.onAccountIssue?.('restore_failed', failed);
+      }
+      // 원복에 쓴 사용량도 이 케이스 몫이다
+      const usage = meter?.forCase(tc.tcId);
+      if (usage) return { ...out.result, tokens: usage.tokens, costUsd: usage.costUsd };
+    }
+    return out.result;
   } catch (e) {
     // 플랜 한도·Claude Code 로그인은 케이스 결함이 아니다. 판정하지 않고 Run을 일시정지하게 던진다 (F-EX-17)
     if (
@@ -176,5 +221,65 @@ async function runCaseInner(env: AgentEnv, input: RunCaseInput): Promise<CaseRes
       throw e;
     // 서버 무응답·디바이스 연결 끊김 등 환경 오류 (F-EX-05)
     return result({ verdict: 'blocked', agentVerdict: 'blocked', blockedReason: `환경 오류: ${(e as Error).message}` });
+  }
+}
+
+/** 준비가 끝난 뒤: 단계 수행 → 검증 → 집계. 원복이 이어 쓸 관찰 번호를 함께 돌려준다 */
+async function afterPrep(
+  env: AgentEnv,
+  input: RunCaseInput,
+  firstIndex: number,
+  result: ResultOf,
+): Promise<{ result: CaseResult; nextIndex: number }> {
+  const { testCase: tc } = input;
+  const clock = clockOf(env);
+  {
+    input.onPhase?.('steps');
+    const exec = await runSteps(env, {
+      caseId: tc.tcId,
+      steps: tc.steps,
+      firstIndex,
+      context: [
+        `케이스: ${tc.title}`,
+        tc.preconditions.length ? `사전조건: ${tc.preconditions.join(' / ')}` : '',
+        tc.data ? `데이터: ${tc.data}` : '',
+        tc.verificationPoints.length
+          ? `기대 결과(무엇을 확인하는 케이스인지 참고. 판정은 따로 한다):\n${tc.verificationPoints.map((p) => `- ${p.expected}`).join('\n')}`
+          : '',
+        input.account ? accountContext(input.account) : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    });
+    if (exec.status !== 'done') {
+      const j = judge(exec, []);
+      const r = result({
+        verdict: j.verdict,
+        agentVerdict: j.agentVerdict,
+        unmetConditions: j.unmet,
+        blockedReason: exec.status === 'blocked' ? exec.reason : undefined,
+        actualSummary: exec.status === 'fail' ? exec.reason : undefined,
+        steps: exec.steps,
+      });
+      return { result: r, nextIndex: exec.nextIndex };
+    }
+
+    input.onPhase?.('verify');
+    const evidence = await settle(env, { caseId: tc.tcId, evidence: exec.evidence, nextIndex: exec.nextIndex });
+    const points = await verifyPoints(env, { caseId: tc.tcId, points: tc.verificationPoints, evidence });
+    const start = clock.now();
+    for (const p of points) thought(env, start, 'verify', `${p.pointId} ${p.result} · ${p.reason}`);
+    const j = judge(exec, points);
+    const misses = points.filter((p) => p.result !== 'match');
+    const r = result({
+      verdict: j.verdict,
+      agentVerdict: j.agentVerdict,
+      autoConfirmed: j.autoConfirmed,
+      unmetConditions: j.unmet,
+      actualSummary: misses.length ? misses.map((p) => `${p.expected} → ${p.observed}`).join(' / ') : undefined,
+      steps: exec.steps,
+      points,
+    });
+    return { result: r, nextIndex: exec.nextIndex };
   }
 }

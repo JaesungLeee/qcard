@@ -4,6 +4,7 @@ export * from './claude-cli';
 export * from './cassette';
 export * from './usage';
 export * from './secrets';
+export * from './totp';
 export * from './tools';
 export * from './messages';
 export { canonicalJson, redactImages } from './canonical';

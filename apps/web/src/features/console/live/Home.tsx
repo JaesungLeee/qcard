@@ -257,6 +257,14 @@ function CycleCard({
           일시정지된 Run이 있습니다
         </SectionMessage>
       )}
+      {c.accountShortage && (
+        <SectionMessage
+          variant="cautionary"
+          description={`${c.accountShortage.map((s) => `${s.kind} ${s.cases}건`).join(' · ')}은 지금 배정할 수 있는 계정이 없어 Blocked(계정 없음)가 됩니다. 웹의 테스트 계정에서 계정을 추가하거나 로그인 실패·격리를 확인하세요.`}
+        >
+          테스트 계정이 부족합니다
+        </SectionMessage>
+      )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {c.pausedRun && (
           <Button
