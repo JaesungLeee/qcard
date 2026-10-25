@@ -4,6 +4,7 @@ import {
   leaseLive,
   type Build,
   type CaseResult,
+  type CaseReviseJob,
   type Defect,
   type Host,
   type HostConnection,
@@ -58,6 +59,8 @@ import {
 } from './api';
 import {
   approvalFor,
+  caseReviseRequest,
+  closedRevision,
   confirmedResult,
   cycleSummary,
   isActiveCycle,
@@ -188,6 +191,17 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
     if (!meta.exists()) throw new NotFoundError(`QA 문서 없음: ${d}`);
     const cases = await getDocs(collection(db, P(p), 'qaDocs', d, 'cases'));
     return { ...strip<Omit<QADocument, 'cases'>>(meta.data()), cases: ordered<TestCase>(cases.docs) };
+  }
+  /** 한 QA 문서의 케이스 수정안 작업 (새것 먼저) */
+  async function revisionsOf({ projectId, docId }: { projectId: string; docId: string }) {
+    const snap = await getDocs(
+      query(
+        collection(db, P(projectId), 'jobs'),
+        where('kind', '==', 'case_revise'),
+        where('input.docId', '==', docId),
+      ),
+    );
+    return snap.docs.map((d) => d.data() as CaseReviseJob).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   }
   async function loadCycle(p: string, c: string) {
     const snap = await getDoc(doc(db, P(p), 'cycles', c));
@@ -616,6 +630,24 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
           const snap = await tx.get(r);
           if (!snap.exists()) throw new NotFoundError(`작업 없음: ${jobId}`);
           tx.set(r, clean(retriedJob(snap.data() as Job, me().uid)));
+        }),
+      ),
+    requestCaseRevision: (ref, tcId) =>
+      guard(async () => {
+        const d = await loadQaDoc(ref.projectId, ref.docId);
+        const r = doc(collection(db, P(ref.projectId), 'jobs'));
+        const job = caseReviseRequest(d, tcId, await revisionsOf(ref), me(), now(), r.id);
+        await setDoc(r, clean(job));
+        return job;
+      }),
+    listCaseRevisions: (ref) => guard(() => revisionsOf(ref)),
+    closeCaseRevision: (projectId, jobId, outcome) =>
+      guard(() =>
+        runTransaction(db, async (tx) => {
+          const r = doc(db, P(projectId), 'jobs', jobId);
+          const snap = await tx.get(r);
+          if (!snap.exists()) throw new NotFoundError(`작업 없음: ${jobId}`);
+          tx.set(r, clean(closedRevision(snap.data() as Job, outcome, me(), now())));
         }),
       ),
     myHosts: () =>

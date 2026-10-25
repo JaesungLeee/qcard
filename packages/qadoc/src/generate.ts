@@ -11,8 +11,9 @@ import {
   type SpecSuggestion,
   type TestCase,
 } from '@qcard/shared';
-import { matchVersions, sourceId, type RowPlan, type SpecBundle, type SpecDoc, type SpecRow } from '@qcard/spec';
+import { matchVersions, sourceId, type RowPlan, type SpecBundle, type SpecDoc } from '@qcard/spec';
 import { nameChecker, unmarkUnknownNames } from './names';
+import { bodyOf, flowText, rowText, specSources, type Start } from './parts';
 import { CASE_SYSTEM, CaseBatchOutput, PLAN_SYSTEM, SpecPlanOutput, type GenCase } from './prompts';
 
 /*
@@ -363,39 +364,6 @@ function planSpecsOf(bundle: SpecBundle, rows: RowPlan[]): QaDocJobSpec[] {
 
 // ---------------------------------------------------------------- 조립 도우미
 
-/** 행의 시작 상태 (스펙 계획 결과) */
-type Start = { prepFlowIds: string[]; cleanState: boolean; restoreFlowId?: string };
-
-function bodyOf(g: GenCase, tcId: string, start: Start): CaseBody {
-  return CaseBody.parse({
-    title: g.title,
-    preconditions: g.preconditions,
-    prepFlowIds: start.prepFlowIds,
-    cleanState: start.cleanState,
-    ...(g.account_kind?.trim() ? { accountKind: g.account_kind.trim() } : {}),
-    ...(start.restoreFlowId ? { restoreFlowId: start.restoreFlowId } : {}),
-    ...(g.data ? { data: g.data } : {}),
-    // 사람 전용 단계는 실행자가 직접 하는 수동 스텝이다
-    steps: g.steps.map((s) => ({
-      text: s.text,
-      manual: s.manual || s.risk === 'human',
-      ...(s.risk ? { risk: s.risk } : {}),
-    })),
-    verificationPoints: g.points.map((p, i) => ({
-      id: `${tcId}-P${i + 1}`,
-      target: p.target,
-      compare: p.compare,
-      // 개수 포인트가 숫자만 오면 문장으로 바꾼다
-      expected: /^\d+$/.test(p.expected.trim()) ? `${p.target} ${p.expected.trim()}개` : p.expected,
-      method: p.method,
-    })),
-    priority: g.priority,
-    type: g.type,
-    platform: g.platform,
-    mode: g.mode,
-  });
-}
-
 function requirementsOf(spec: SpecDoc, file: string): Requirement[] {
   return spec.requirements.map((r) => ({
     id: `${spec.name}/${r.id}`,
@@ -419,26 +387,7 @@ function missingRows(rows: RowPlan[], out: { row_id: string }[]): string[] {
   return rows.filter((r) => !got.has(r.row.id)).map((r) => r.row.id);
 }
 
-/** 스펙에 쓰인 글 (버튼 이름의 근거) */
-function specSources(spec: SpecDoc): string[] {
-  return [...spec.requirements.map((r) => r.text), ...spec.rows.flatMap((r) => [r.title, r.given, r.when, r.then])];
-}
-
 // ---------------------------------------------------------------- 프롬프트 본문
-
-function rowText(row: SpecRow, spec: SpecDoc): string {
-  const reqs = row.frs.map((f) => `  - ${f}: ${spec.requirements.find((r) => r.id === f)?.text ?? '(문서에 없음)'}`);
-  return [
-    `[${row.id}] ${row.title}  (${row.kind === 'TS' ? '테스트 시나리오' : '엣지 케이스'} · 유저 플로우 "${row.flow}")`,
-    ...(row.kind === 'TS' ? [`Given: ${row.given || '—'}`, `When: ${row.when}`, `Then: ${row.then}`] : []),
-    ...(row.kind === 'EC' ? [`상황: ${row.when}`, `처리: ${row.then}`] : []),
-    `관련 요구사항:`,
-    ...reqs,
-  ].join('\n');
-}
-
-const flowText = (f: PrepFlow) =>
-  `- ${f.id} · ${f.name} (${f.kind})\n  확인: ${f.check}\n  스텝: ${f.steps.join(' → ') || '—'}`;
 
 function planPrompt(spec: SpecDoc, targets: RowPlan[], flows: PrepFlow[]): string {
   const ids = new Set(targets.map((r) => r.row.id));

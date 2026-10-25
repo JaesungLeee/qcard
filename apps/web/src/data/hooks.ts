@@ -38,6 +38,7 @@ export const keys = {
   jobSpecs: (projectId: string, jobId: string) => ['jobSpecs', projectId, jobId] as const,
   jobEvents: (projectId: string, jobId: string) => ['jobEvents', projectId, jobId] as const,
   jobDrafts: (projectId: string, jobId: string, spec: string) => ['jobDrafts', projectId, jobId, spec] as const,
+  caseRevisions: (projectId: string, docId: string) => ['caseRevisions', projectId, docId] as const,
   hosts: ['hosts'] as const,
   hostConnections: ['hostConnections'] as const,
   builds: (projectId: string) => ['builds', projectId] as const,
@@ -195,6 +196,44 @@ export function useCommentQuestion(doc: DocLike) {
   return useDocMutation(doc, (api, ref, v: { questionId: string; text: string }) =>
     api.commentQuestion(ref, v.questionId, v.text),
   );
+}
+
+/** 이 QA 문서의 케이스 수정안 (F-QD-17). 대기·생성 중인 것이 있으면 3초마다 다시 읽는다 */
+export function useCaseRevisions(doc: DocLike) {
+  const api = useApi();
+  return useQuery({
+    queryKey: keys.caseRevisions(doc.projectId, doc.id),
+    queryFn: () => api.listCaseRevisions({ projectId: doc.projectId, docId: doc.id }),
+    refetchInterval: (q) => (q.state.data?.some((j) => j.status === 'queued' || j.status === 'running') ? 3000 : false),
+  });
+}
+
+/**
+ * 케이스 수정안 동작: 요청·다시 시도·버리기·적용. 적용은 일반 편집(낙관적 잠금)으로 케이스를 고친 뒤 처리했다고 기록한다
+ */
+export function useCaseRevisionAction(doc: DocLike) {
+  const api = useApi();
+  const qc = useQueryClient();
+  const ref = { projectId: doc.projectId, docId: doc.id };
+  return useMutation({
+    mutationFn: async (
+      v:
+        | { kind: 'request'; tcId: string }
+        | { kind: 'retry'; jobId: string }
+        | { kind: 'dismiss'; jobId: string }
+        | { kind: 'apply'; jobId: string; tcId: string; body: CaseBody; expectedRev: number },
+    ) => {
+      if (v.kind === 'request') return void (await api.requestCaseRevision(ref, v.tcId));
+      if (v.kind === 'retry') return api.retryJob(ref.projectId, v.jobId);
+      if (v.kind === 'apply') await api.updateCase(ref, v.tcId, v.body, v.expectedRev);
+      await api.closeCaseRevision(ref.projectId, v.jobId, v.kind === 'apply' ? 'applied' : 'dismissed');
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: keys.caseRevisions(ref.projectId, ref.docId) });
+      void qc.invalidateQueries({ queryKey: keys.qaDoc(ref.projectId, ref.docId) });
+      void qc.invalidateQueries({ queryKey: keys.jobs(ref.projectId) });
+    },
+  });
 }
 
 export function useConfirmVerdict() {

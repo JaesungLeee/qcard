@@ -23,6 +23,7 @@ import {
   restoration,
   type AccountSecret,
   type Actor,
+  type CaseReviseJob,
   type HostConnection,
   type Member,
   type TestAccount,
@@ -42,6 +43,8 @@ import {
 import { localRunCycle, type LocalRun } from './localRuns';
 import {
   approvalFor,
+  caseReviseRequest,
+  closedRevision,
   confirmedResult,
   cycleSummary,
   isActiveCycle,
@@ -475,6 +478,28 @@ export function createMemoryApi(
         const i = db.jobs.findIndex((j) => j.id === jobId);
         if (i < 0) throw new NotFoundError(`작업 없음: ${jobId}`);
         db.jobs[i] = retriedJob(db.jobs[i]!, actor().uid);
+      });
+    },
+    async requestCaseRevision({ projectId, docId }, tcId) {
+      return rules(() => {
+        requireEditor(membersOf(projectId), actor().uid);
+        const job = caseReviseRequest(doc(docId), tcId, db.jobs, actor(), now(), `job-m${db.jobs.length + 1}`);
+        db.jobs.unshift(job);
+        return job;
+      });
+    },
+    async listCaseRevisions({ projectId, docId }) {
+      return wait(
+        db.jobs.filter(
+          (j): j is CaseReviseJob => j.projectId === projectId && j.kind === 'case_revise' && j.input.docId === docId,
+        ),
+      );
+    },
+    async closeCaseRevision(projectId, jobId, outcome) {
+      return rules(() => {
+        const i = db.jobs.findIndex((j) => j.projectId === projectId && j.id === jobId);
+        if (i < 0) throw new NotFoundError(`작업 없음: ${jobId}`);
+        db.jobs[i] = closedRevision(db.jobs[i]!, outcome, actor(), now());
       });
     },
     async myHosts() {

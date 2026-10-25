@@ -5,6 +5,7 @@ import type {
   AccountState,
   Build,
   CaseBody,
+  CaseReviseJob,
   PrepFlow,
   CaseResult,
   Defect,
@@ -115,6 +116,15 @@ export interface QcardApi {
   listJobDrafts(projectId: string, jobId: string, spec: string): Promise<QaDocJobDraft[]>;
   /** 실패·일시정지한 내 작업을 다시 대기열에 넣는다 */
   retryJob(projectId: string, jobId: string): Promise<void>;
+  /**
+   * 케이스 수정안 요청 (F-QD-17): 이 케이스에 연결된 답변된 질문을 반영한 수정안을 내 호스트가 만든다.
+   * 케이스는 바꾸지 않는다. 답변된 질문이 없거나 같은 케이스 수정안이 진행 중이면 `RuleError`. Admin·QA만
+   */
+  requestCaseRevision(ref: DocRef, tcId: string): Promise<CaseReviseJob>;
+  /** 이 QA 문서의 케이스 수정안 작업 (새것 먼저) */
+  listCaseRevisions(ref: DocRef): Promise<CaseReviseJob[]>;
+  /** 수정안을 적용했거나 버렸다고 기록한다 (요청한 사람만). 적용은 `updateCase`로 먼저 한다 */
+  closeCaseRevision(projectId: string, jobId: string, outcome: 'applied' | 'dismissed'): Promise<void>;
   /** 내 호스트 에이전트 (연결 상태는 `lastSeen`으로 판단, HOST_ONLINE_MS) */
   myHosts(): Promise<Host[]>;
   /** 내 계정에 연결된 PC (F-TM-14). 연결 신호(myHosts)는 켜져 있을 때만 있다 */

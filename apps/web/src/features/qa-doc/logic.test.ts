@@ -1,4 +1,4 @@
-import type { CaseBody, SpecQuestion } from '@qcard/shared';
+import type { CaseBody, CaseReviseJob, SpecQuestion } from '@qcard/shared';
 import { describe, expect, it } from 'vitest';
 import { ConflictError } from '../../data/api';
 import { createMemoryApi } from '../../data/memory';
@@ -15,6 +15,7 @@ import {
   NO_CASE_FEATURE,
   pickCategory,
   questionCategories,
+  revisionView,
   inScope,
   isDirty,
   orderByGroup,
@@ -89,7 +90,12 @@ describe('groupRows', () => {
     const p2 = paginate(all, 2, 10);
     const rows = groupRows(p2.items, all);
     // 첫 묶음(16개)이 1페이지에서 이어진다
-    expect(rows[0]).toMatchObject({ kind: 'group', subFeature: '온보딩을 처음부터 끝까지 밟는다', total: 15, continued: true });
+    expect(rows[0]).toMatchObject({
+      kind: 'group',
+      subFeature: '온보딩을 처음부터 끝까지 밟는다',
+      total: 15,
+      continued: true,
+    });
     expect(rows.filter((r) => r.kind === 'case')).toHaveLength(10);
     const second = rows.filter((r) => r.kind === 'group')[1];
     expect(second).toMatchObject({ continued: false });
@@ -183,6 +189,31 @@ describe('스펙 확인 질문 카테고리', () => {
       ['TC-2', true, ['Q-2']],
     ]);
     expect(groupByCase([q('Q-1', ['TC-1'], 'proceed'), q('Q-2', ['TC-2'])], [])[0]!.caseId).toBe('TC-2');
+  });
+});
+
+describe('케이스 수정안 상태 (F-QD-17)', () => {
+  it('답변된 질문이 있으면 요청할 수 있고, 처리 안 된 최근 수정안이 상태를 정한다', async () => {
+    const d = await doc130();
+    const [rev] = await api().listCaseRevisions(DOC130);
+    const c = d.cases.find((x) => x.tcId === rev!.input.tcId)!;
+    const job = (over: Partial<CaseReviseJob>): CaseReviseJob => ({ ...rev!, ...over });
+
+    expect(revisionView(c, d.questions, [])).toEqual({ kind: 'ready' });
+    const unanswered = d.cases.find((x) => d.questions.some((q) => q.status === 'open' && q.caseIds.includes(x.tcId)))!;
+    expect(revisionView(unanswered, d.questions, [])).toEqual({ kind: 'none' });
+
+    expect(revisionView(c, d.questions, [rev!])).toMatchObject({ kind: 'revise', stale: false });
+    expect(revisionView({ ...c, rev: c.rev + 1 }, d.questions, [rev!])).toMatchObject({ kind: 'revise', stale: true });
+    expect(revisionView(c, d.questions, [job({ status: 'running', result: undefined })]).kind).toBe('waiting');
+    expect(revisionView(c, d.questions, [job({ status: 'paused', result: undefined })]).kind).toBe('stopped');
+    expect(
+      revisionView(c, d.questions, [job({ result: { kind: 'no_change', reason: '그대로', tokens: 0, costUsd: 0 } })]),
+    ).toMatchObject({ kind: 'no_change', reason: '그대로' });
+    // 처리한(적용·버린) 수정안은 내려가고 다시 요청할 수 있다
+    expect(revisionView(c, d.questions, [job({ outcome: { kind: 'applied', by: 'x', at: 't' } })])).toEqual({
+      kind: 'ready',
+    });
   });
 });
 
@@ -316,10 +347,7 @@ describe('coverage · prepFlowUsage', () => {
     const d = await doc130();
     const usage = prepFlowUsage(d.cases);
     expect(usage.get('pf-clean')).toHaveLength(61);
-    const total = ['pf-habit', 'pf-mate', 'pf-guide', 'pf-done'].reduce(
-      (n, id) => n + (usage.get(id)?.length ?? 0),
-      0,
-    );
+    const total = ['pf-habit', 'pf-mate', 'pf-guide', 'pf-done'].reduce((n, id) => n + (usage.get(id)?.length ?? 0), 0);
     expect(total).toBeLessThanOrEqual(61);
   });
 });

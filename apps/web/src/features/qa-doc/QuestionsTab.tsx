@@ -1,10 +1,11 @@
-import type { QADocument, SpecQuestion } from '@qcard/shared';
+import type { CaseReviseJob, QADocument, SpecQuestion } from '@qcard/shared';
 import { Button, Icons, SectionMessage, TextArea, textClass, token } from '@qcard/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { fmtDateTime } from '../../components/format';
-import { useCommentQuestion, useResolveQuestion } from '../../data/hooks';
+import { useCaseRevisions, useCommentQuestion, useMyRole, useResolveQuestion } from '../../data/hooks';
 import { Tag, type Tone } from './Badges';
+import { CaseRevision } from './CaseRevision';
 import {
   groupByCase,
   nextOpenCategory,
@@ -24,7 +25,8 @@ const STATUS: Record<SpecQuestion['status'], { label: string; tone: Tone }> = {
   proceed: { label: '현 스펙대로 진행', tone: 'neutral' },
 };
 
-const flowName = (c: QuestionCategory) => c.subFeature || (c.feature === NO_CASE_FEATURE ? '질문' : '(유저 플로우 없음)');
+const flowName = (c: QuestionCategory) =>
+  c.subFeature || (c.feature === NO_CASE_FEATURE ? '질문' : '(유저 플로우 없음)');
 const catName = (c: QuestionCategory) => `${c.feature} › ${flowName(c)}`;
 
 /** 스펙 확인 질문 (F-QD-03). 기능 › 유저 플로우 카테고리를 하나씩 골라 그 안의 질문을 처리한다. */
@@ -118,6 +120,9 @@ function CategoryPanel({
   onPick: (c: QuestionCategory) => void;
 }) {
   const { question } = useDocParams();
+  const role = useMyRole(doc.projectId);
+  const canEdit = role.data === 'admin' || role.data === 'qa';
+  const revisions = useCaseRevisions(doc);
   const groups = useMemo(() => groupByCase(current.questions, doc.cases), [current, doc.cases]);
   const total = current.questions.length;
   const done = total - current.open;
@@ -172,13 +177,32 @@ function CategoryPanel({
       )}
 
       {groups.map((g) => (
-        <CaseGroup key={g.caseId ?? ''} doc={doc} group={g} currentQuestion={question} />
+        <CaseGroup
+          key={g.caseId ?? ''}
+          doc={doc}
+          group={g}
+          currentQuestion={question}
+          revisions={revisions.data ?? []}
+          canEdit={canEdit}
+        />
       ))}
     </div>
   );
 }
 
-function CaseGroup({ doc, group, currentQuestion }: { doc: QADocument; group: QuestionGroup; currentQuestion: string | null }) {
+function CaseGroup({
+  doc,
+  group,
+  currentQuestion,
+  revisions,
+  canEdit,
+}: {
+  doc: QADocument;
+  group: QuestionGroup;
+  currentQuestion: string | null;
+  revisions: CaseReviseJob[];
+  canEdit: boolean;
+}) {
   const href = useDocHref();
   return (
     <section className="qc-card qd-qgroup">
@@ -196,6 +220,7 @@ function CaseGroup({ doc, group, currentQuestion }: { doc: QADocument; group: Qu
       {group.questions.map((q) => (
         <QuestionItem key={q.id} doc={doc} q={q} groupCaseId={group.caseId} current={q.id === currentQuestion} />
       ))}
+      {group.case && <CaseRevision doc={doc} c={group.case} jobs={revisions} canEdit={canEdit} />}
     </section>
   );
 }

@@ -1509,7 +1509,18 @@ const job131 = jobProgress({
 });
 export const jobParts: Record<string, JobParts> = { 'job-140': job140.parts, 'job-131': job131.parts };
 
-/** 완료(1.3.0 문서를 만든 작업), 생성 중(1.4.0), 플랜 한도로 일시정지(1.3.1) */
+/** 케이스 수정안 (F-QD-17): Q-3 답변("dot 중심을 누르면 된다")을 TS-027 케이스에 반영한 것. 아직 적용·버리기 전 */
+const revised039 = (() => {
+  const c = cases130.find((x) => x.sourceId.endsWith('/TS-027'))!;
+  const body = CaseBodySchema.parse({
+    ...c,
+    preconditions: [...c.preconditions, 'dot 터치 영역은 48dp로 확장되어 있다'],
+    steps: c.steps.map((s) => ({ ...s, text: s.text.replace(/dot을 누른다/, 'dot의 중심을 누른다') })),
+  });
+  return { tcId: c.tcId, rev: c.rev, body };
+})();
+
+/** 완료(1.3.0 문서를 만든 작업), 생성 중(1.4.0), 플랜 한도로 일시정지(1.3.1), 케이스 수정안(1.3.0 TS-027) */
 export const jobs: Job[] = [
   {
     id: 'job-140',
@@ -1541,6 +1552,27 @@ export const jobs: Job[] = [
     error: {
       kind: 'plan_limit',
       message: 'Claude 플랜 사용 한도(5시간)에 닿았습니다. 한도가 풀린 뒤 다시 시도하면 끝난 호출은 건너뜁니다.',
+    },
+  },
+  {
+    id: 'job-rev-039',
+    projectId: project.id,
+    kind: 'case_revise',
+    requestedBy: GITHUB[PEOPLE.lead]!,
+    requestedByName: PEOPLE.lead,
+    createdAt: T(16, 9, 30),
+    status: 'done',
+    input: { docId: qaDocV130.id, tcId: revised039.tcId, questionIds: ['Q-3'], baseRev: revised039.rev },
+    host: '이재성의 MacBook Pro',
+    startedAt: T(16, 9, 30),
+    finishedAt: T(16, 9, 31),
+    result: {
+      kind: 'revise',
+      reason: 'Q-3 답변(터치 영역 48dp, dot 중심을 누르면 됨)에 맞춰 dot을 누르는 단계를 "중심을 누른다"로 바꾸고 사전조건에 터치 영역을 적었다.',
+      body: revised039.body,
+      guessed: [],
+      tokens: 3_100,
+      costUsd: 0.04,
     },
   },
   {
