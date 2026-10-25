@@ -7,6 +7,7 @@ import {
   TEST_TYPE_LABEL,
   type CaseBody,
   type CaseChange,
+  type CaseReviseJob,
   type QADocument,
   type Requirement,
   type SpecQuestion,
@@ -293,6 +294,41 @@ export function groupByCase(questions: SpecQuestion[], cases: TestCase[]): Quest
   return [...groups.values()]
     .map((g) => ({ ...g, questions: [...g.questions].sort(openFirst) }))
     .sort((a, b) => Number(b.held) - Number(a.held));
+}
+
+/** 케이스 하나의 수정안 상태 (F-QD-17) */
+export type RevisionView =
+  /** 답변된 질문이 없다 */
+  | { kind: 'none' }
+  /** 답변된 질문이 있고 처리 안 된 수정안이 없다 → 요청할 수 있다 */
+  | { kind: 'ready' }
+  | { kind: 'waiting'; job: CaseReviseJob }
+  | { kind: 'stopped'; job: CaseReviseJob }
+  /** stale: 요청한 뒤 케이스가 바뀌어 그대로 적용할 수 없다 */
+  | { kind: 'revise'; job: CaseReviseJob; body: CaseBody; reason: string; guessed: string[]; stale: boolean }
+  | { kind: 'no_change'; job: CaseReviseJob; reason: string };
+
+/** 가장 최근의 처리 안 된 수정안으로 상태를 정한다. `jobs`는 새것 먼저 */
+export function revisionView(c: TestCase, questions: SpecQuestion[], jobs: CaseReviseJob[]): RevisionView {
+  const job = jobs.find((j) => j.input.tcId === c.tcId);
+  if (job && !job.outcome) {
+    if (job.status === 'queued' || job.status === 'running') return { kind: 'waiting', job };
+    if (job.status !== 'done') return { kind: 'stopped', job };
+    const r = job.result;
+    if (r?.kind === 'revise')
+      return {
+        kind: 'revise',
+        job,
+        body: r.body,
+        reason: r.reason,
+        guessed: r.guessed,
+        stale: c.rev !== job.input.baseRev,
+      };
+    if (r?.kind === 'no_change') return { kind: 'no_change', job, reason: r.reason };
+  }
+  return questions.some((q) => q.status === 'answered' && q.caseIds.includes(c.tcId))
+    ? { kind: 'ready' }
+    : { kind: 'none' };
 }
 
 export const PAGE_SIZES = [10, 20, 50] as const;

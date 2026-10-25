@@ -1,5 +1,5 @@
 import type { LlmClient, LlmRequest } from '@qcard/llm';
-import type { GenCase, SpecPlanOutput } from './prompts';
+import type { GenCase, ReviseOutput, SpecPlanOutput } from './prompts';
 
 /*
  * 테스트용 가짜 생성 모델 (QA Doc Generator). 실제 모델 없이 생성 흐름·저장·작업 처리를 시험한다.
@@ -80,4 +80,26 @@ export function fakeGeneratorLlm(opts: { drop?: string; failOn?: { call: number;
     },
   };
   return { llm, calls };
+}
+
+/** 테스트용 가짜 수정안 모델 (F-QD-17). 정해진 응답을 차례로 돌려주고 받은 프롬프트를 남긴다 */
+export function fakeReviseLlm(...outs: (ReviseOutput | string)[]) {
+  const prompts: string[] = [];
+  const llm: LlmClient = {
+    async create(req: LlmRequest) {
+      prompts.push(req.messages[0]!.content as string);
+      const out = outs[Math.min(prompts.length, outs.length) - 1]!;
+      return {
+        id: 'm',
+        type: 'message',
+        role: 'assistant',
+        model: req.model,
+        content: [{ type: 'text', text: typeof out === 'string' ? out : JSON.stringify(out), citations: null }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 1 },
+      } as never;
+    },
+  };
+  return { llm, prompts };
 }

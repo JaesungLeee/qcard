@@ -477,6 +477,11 @@
   padding: var(--qc-space-20);
   scroll-margin-top: var(--qc-space-16);
 }
+.qd-revision {
+  padding: var(--qc-space-16) var(--qc-space-20);
+  border-top: 1px solid var(--qc-line-neutral-tertiary);
+  background: var(--qc-surface-neutral-secondary);
+}
 .qd-question + .qd-question {
   border-top: 1px solid var(--qc-line-neutral-tertiary);
 }

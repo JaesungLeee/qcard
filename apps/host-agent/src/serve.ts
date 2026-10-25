@@ -14,7 +14,8 @@
  *
  * - 30초마다 연결 신호(+ Claude Code 상태)를 보내 웹이 "호스트 연결됨"을 표시한다 (F-DB-09)
  * - 웹에서 요청한 Run 시작(작업 kind `run_cycle`)을 받아 로컬 콘솔의 [실행]과 같은 경로로 시작한다. QA 문서 생성 중이어도 기다리지 않는다
- * - 내 작업만 받는다(요청자 = 나). 한 번에 하나씩, 처리 중에는 맥이 잠들지 않게 한다(caffeinate)
+ * - 내 작업만 받는다(요청자 = 나). 한 번에 하나씩, 처리 중에는 맥이 잠들지 않게 한다(caffeinate).
+ *   케이스 수정안(F-QD-17)은 대기 중인 QA 문서 생성보다 먼저 한다 — 진행 중인 생성은 끊지 않는다
  * - 작업마다 호출을 ~/.qcard/jobs/<작업>/llm에 녹화한다. 플랜 한도로 멈춘 작업을 웹에서 다시 시도하면
  *   끝난 호출은 재생하고 남은 것만 부른다
  *
@@ -30,7 +31,7 @@ import { collectionGroup, onSnapshot, query, where } from 'firebase/firestore';
 import { HostDisconnectedError, openHostSession, targetFromEnv } from './connect';
 import { attachScreen, ConsoleService, launchConsole, type OnDemandScreen } from './console';
 import { RESTORED, restoreAwake } from './awake';
-import { claimJob, heartbeat, pendingJobs, processJob, startRunJobs } from './jobs';
+import { claimJob, heartbeat, pendingJobs, processJob, processReviseJob, startRunJobs } from './jobs';
 import { UploadQueue } from './queue';
 import { firestoreApply } from './sink';
 
@@ -177,47 +178,53 @@ console.log(
 );
 
 // ---------------------------------------------------------------- 작업 처리 (한 번에 하나)
+// 작업이 하나 끝날 때마다 대기열을 다시 읽는다 — 긴 QA 문서 생성 중에 들어온 케이스 수정안이 다음 차례가 된다 (F-QD-17)
 let busy = false;
 let again = false;
 async function drain() {
   if (busy) return void (again = true);
   busy = true;
   try {
-    do {
+    for (;;) {
       again = false;
-      for (const job of await pendingJobs(db, user.uid)) {
-        if (job.kind !== 'qa_doc_generate') continue;
-        const running = await claimJob(db, job, host.name, new Date().toISOString());
-        if (!running) continue;
-        console.log(`\n■ ${job.projectId} · QA 문서 ${running.input.appVersion} 생성 (${job.id})`);
-        service.setBusy(`QA 문서 ${running.input.appVersion} 생성 중 (${job.projectId})`);
-        const live = createLiveLlm(undefined, { turnTimeoutMs: 600_000 });
-        const awake = keepAwake();
-        try {
-          await processJob(
-            {
-              db,
-              storage,
-              api,
-              uid: user.uid,
-              host: host.name,
-              llmFor: (j) =>
-                createCassetteLlm({
-                  dir: join(homedir(), '.qcard', 'jobs', `${j.projectId}-${j.id}`, 'llm'),
-                  mode: 'resume',
-                  inner: live,
-                }),
-              log: (l) => console.log(l),
-            },
-            running,
-          );
-        } finally {
-          live.close?.();
-          awake?.kill();
-          service.setBusy(undefined);
-        }
+      const job = (await pendingJobs(db, user.uid)).find((j) => j.kind !== 'run_cycle');
+      if (!job) {
+        if (again) continue;
+        break;
       }
-    } while (again);
+      const running = await claimJob(db, job, host.name, new Date().toISOString());
+      if (!running) continue;
+      const label =
+        running.kind === 'case_revise'
+          ? `케이스 수정안 ${running.input.tcId}`
+          : `QA 문서 ${running.input.appVersion} 생성`;
+      console.log(`\n■ ${job.projectId} · ${label} (${job.id})`);
+      service.setBusy(`${label} 중 (${job.projectId})`);
+      const live = createLiveLlm(undefined, { turnTimeoutMs: 600_000 });
+      const awake = keepAwake();
+      try {
+        const deps = {
+          db,
+          storage,
+          api,
+          uid: user.uid,
+          host: host.name,
+          llmFor: (j: { projectId: string; id: string }) =>
+            createCassetteLlm({
+              dir: join(homedir(), '.qcard', 'jobs', `${j.projectId}-${j.id}`, 'llm'),
+              mode: 'resume',
+              inner: live,
+            }),
+          log: (l: string) => console.log(l),
+        };
+        if (running.kind === 'case_revise') await processReviseJob(deps, running);
+        else await processJob(deps, running);
+      } finally {
+        live.close?.();
+        awake?.kill();
+        service.setBusy(undefined);
+      }
+    }
   } finally {
     busy = false;
   }

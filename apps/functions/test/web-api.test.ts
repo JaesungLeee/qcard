@@ -229,6 +229,35 @@ describe('QA 데이터 쓰기', () => {
     expect(Math.abs(new Date(last.at).getTime() - before)).toBeLessThan(10_000);
   });
 
+  it('케이스 수정안: 요청·조회·처리가 메모리 구현과 같고, 처리는 요청한 사람만 한다 (F-QD-17)', async () => {
+    const fb = apiAs(PEOPLE.lead);
+    const mem = memory();
+    expect(await fb.listCaseRevisions(ref)).toEqual(await mem.listCaseRevisions(ref));
+    const [done] = await fb.listCaseRevisions(ref);
+    expect(done!.result?.kind).toBe('revise');
+
+    // 다른 멤버는 내 수정안을 처리할 수 없다
+    await expect(apiAs(PEOPLE.qa).closeCaseRevision('haru', done!.id, 'dismissed')).rejects.toBeInstanceOf(
+      PermissionError,
+    );
+    const doc = await fb.getQaDoc(ref);
+    const open = doc.questions.find((q) => q.status === 'open')!;
+    for (const api of [fb, mem]) {
+      await api.closeCaseRevision('haru', done!.id, 'dismissed');
+      // 답변된 질문이 없는 케이스는 요청할 수 없다
+      await expect(api.requestCaseRevision(ref, open.caseIds[0]!)).rejects.toBeInstanceOf(RuleError);
+      const job = await api.requestCaseRevision(ref, done!.input.tcId);
+      expect(job).toMatchObject({ kind: 'case_revise', status: 'queued', input: done!.input });
+      // 진행 중이면 또 만들지 않는다
+      await expect(api.requestCaseRevision(ref, done!.input.tcId)).rejects.toBeInstanceOf(RuleError);
+    }
+    const noVolatile = (xs: unknown) =>
+      JSON.parse(JSON.stringify(xs).replace(/"(at|createdAt|id)":"[^"]+"/g, '"$1":"T"'));
+    expect(noVolatile(await fb.listCaseRevisions(ref))).toEqual(noVolatile(await mem.listCaseRevisions(ref)));
+    // Viewer는 요청할 수 없다
+    await expect(apiAs(PEOPLE.planner).requestCaseRevision(ref, done!.input.tcId)).rejects.toThrow();
+  });
+
   it('승인·질문 처리·판정 확정이 메모리 구현과 같게 저장된다', async () => {
     const fb = apiAs(PEOPLE.lead);
     const mem = memory();

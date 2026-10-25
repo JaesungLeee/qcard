@@ -3,6 +3,7 @@ import {
   CaseBody,
   type Build,
   type CaseResult,
+  type CaseReviseJob,
   type Job,
   type QaDocJob,
   type QaDocJobDraft,
@@ -21,6 +22,7 @@ import {
 import type { ApkInfo } from '@qcard/apk';
 import { readBundle } from '@qcard/spec';
 import {
+  NotFoundError,
   PermissionError,
   RuleError,
   type ConfirmVerdictInput,
@@ -233,12 +235,58 @@ export function retriedJob(job: Job, uid: string): Job {
   if (job.requestedBy !== uid) throw new PermissionError('요청한 사람만 다시 시도할 수 있습니다.');
   if (job.status !== 'failed' && job.status !== 'paused')
     throw new RuleError('실패하거나 일시정지한 작업만 다시 시도합니다.');
-  if (job.kind === 'run_cycle') {
+  if (job.kind === 'run_cycle' || job.kind === 'case_revise') {
     const { error: _e, host: _h, result: _r, ...rest } = job;
-    return { ...rest, status: 'queued' };
+    return { ...rest, status: 'queued' } as Job;
   }
   const { error: _e, progress: _p, host: _h, ...rest } = job;
   return { ...rest, status: 'queued' };
+}
+
+/**
+ * 케이스 수정안 요청 (F-QD-17, 작업 kind `case_revise`). 답변된 질문 중 이 케이스에 연결된 것만 반영한다.
+ * 같은 케이스에 대기·생성 중인 수정안이 있으면 또 만들지 않는다
+ */
+export function caseReviseRequest(
+  d: Pick<QADocument, 'id' | 'projectId' | 'cases' | 'questions'>,
+  tcId: string,
+  existing: Job[],
+  user: { uid: string; name: string },
+  now: string,
+  jobId: string,
+): CaseReviseJob {
+  const c = d.cases.find((x) => x.tcId === tcId);
+  if (!c) throw new NotFoundError(`케이스 없음: ${tcId}`);
+  const questionIds = d.questions
+    .filter((q) => q.status === 'answered' && q.caseIds.includes(tcId))
+    .map((q) => q.id);
+  if (!questionIds.length) throw new RuleError('이 케이스에 답변된 스펙 확인 질문이 없습니다.');
+  const busy = existing.some(
+    (j) =>
+      j.kind === 'case_revise' &&
+      j.input.docId === d.id &&
+      j.input.tcId === tcId &&
+      (j.status === 'queued' || j.status === 'running'),
+  );
+  if (busy) throw new RuleError('이 케이스의 수정안을 이미 만들고 있습니다.');
+  return {
+    id: jobId,
+    projectId: d.projectId,
+    kind: 'case_revise',
+    requestedBy: user.uid,
+    requestedByName: user.name,
+    createdAt: now,
+    status: 'queued',
+    input: { docId: d.id, tcId, questionIds, baseRev: c.rev },
+  };
+}
+
+/** 수정안을 적용했거나 버렸다고 기록한다. 요청한 사람만, 완료된 수정안만 */
+export function closedRevision(job: Job, outcome: 'applied' | 'dismissed', user: { uid: string; name: string }, now: string): CaseReviseJob {
+  if (job.kind !== 'case_revise') throw new RuleError('케이스 수정안 작업이 아닙니다.');
+  if (job.requestedBy !== user.uid) throw new PermissionError('요청한 사람만 수정안을 처리할 수 있습니다.');
+  if (job.status !== 'done') throw new RuleError('완료된 수정안만 처리합니다.');
+  return { ...job, outcome: { kind: outcome, by: user.name, at: now } };
 }
 
 /** 생성 진행 목록의 순서 (두 구현 공통): 스펙은 묶음 순서, 기록은 오래된 것 먼저, 초안은 TC ID 순 */

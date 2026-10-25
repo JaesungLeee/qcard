@@ -765,9 +765,43 @@ export const RunCycleJob = z.object({
 });
 export type RunCycleJob = z.infer<typeof RunCycleJob>;
 
+/**
+ * 답변 기반 케이스 수정안 (F-QD-17): 답변된 스펙 확인 질문을 케이스에 반영한 수정안을 요청자의 호스트가 만든다.
+ * 케이스는 바꾸지 않는다 — 요청자가 웹에서 diff를 보고 적용(일반 편집과 같은 낙관적 잠금)하거나 버린다
+ */
+export const CaseReviseJob = z.object({
+  ...JobBase,
+  kind: z.literal('case_revise'),
+  input: z.object({
+    docId: z.string(),
+    tcId: z.string(),
+    /** 반영할 답변된 질문 */
+    questionIds: z.array(z.string()),
+    /** 요청할 때의 케이스 버전. 적용할 때 최신이 아니면 다시 적용 화면으로 간다 */
+    baseRev: z.number(),
+  }),
+  result: z
+    .discriminatedUnion('kind', [
+      z.object({
+        kind: z.literal('revise'),
+        reason: z.string(),
+        body: CaseBody,
+        /** 근거가 없어 `(추정)`으로 바꾼 버튼 이름 */
+        guessed: z.array(z.string()),
+        tokens: z.number(),
+        costUsd: z.number(),
+      }),
+      z.object({ kind: z.literal('no_change'), reason: z.string(), tokens: z.number(), costUsd: z.number() }),
+    ])
+    .optional(),
+  /** 사람이 처리한 결과. 처리한 수정안은 질문 화면에서 내려간다 */
+  outcome: z.object({ kind: z.enum(['applied', 'dismissed']), by: z.string(), at: z.string() }).optional(),
+});
+export type CaseReviseJob = z.infer<typeof CaseReviseJob>;
+
 /** 호스트 에이전트가 처리할 작업 (PRD §6.2·6.4) */
-export const Job = z.discriminatedUnion('kind', [QaDocJob, RunCycleJob]);
-export type Job = QaDocJob | RunCycleJob;
+export const Job = z.discriminatedUnion('kind', [QaDocJob, RunCycleJob, CaseReviseJob]);
+export type Job = QaDocJob | RunCycleJob | CaseReviseJob;
 
 /**
  * 호스트 에이전트 연결 상태 (PRD §6.4 Host, F-DB-09). 실행 중인 호스트가 주기적으로 `lastSeen`을 갱신한다.
