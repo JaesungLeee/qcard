@@ -85,8 +85,8 @@ export type ConsoleServer = {
    * ttlMs를 주면 그 시간이 지나도 무효 (웹에 실어 보내는 주소, 터미널에 찍는 주소는 만료 없음)
    */
   loginUrl(origin?: string, ttlMs?: number): string;
-  /** 화면 스트림을 나중에 붙인다 (scrcpy가 뜬 뒤) */
-  attachVideo(video: VideoFeed): void;
+  /** 화면 스트림을 나중에 붙인다 (디바이스가 연결된 뒤). undefined = 떼기 */
+  attachVideo(video: VideoFeed | undefined): void;
   close(): Promise<void>;
 };
 

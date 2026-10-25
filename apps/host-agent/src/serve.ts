@@ -28,7 +28,7 @@ import { AdbDriver, devAppPackage, listDevices } from '@qcard/device/node';
 import { claudeCodeStatus, createCassetteLlm, createLiveLlm, type ClaudeCodeStatus } from '@qcard/llm';
 import { collectionGroup, onSnapshot, query, where } from 'firebase/firestore';
 import { HostDisconnectedError, openHostSession, targetFromEnv } from './connect';
-import { attachScreen, ConsoleService, launchConsole } from './console';
+import { attachScreen, ConsoleService, launchConsole, type OnDemandScreen } from './console';
 import { RESTORED, restoreAwake } from './awake';
 import { claimJob, heartbeat, pendingJobs, processJob, startRunJobs } from './jobs';
 import { UploadQueue } from './queue';
@@ -124,19 +124,17 @@ if (consoleUi && process.stdin.isTTY) {
 }
 
 /** 이 호스트가 쓰는 디바이스 (1인 1대). 바뀌면 콘솔과 화면 스트림을 새 디바이스로 */
-let current: { serial: string; video?: { stop(): Promise<void>; alive(): boolean } } | undefined;
+let current: { serial: string; screen?: OnDemandScreen } | undefined;
 async function useDevice(serials: string[]) {
   const serial = values.serial ? serials.find((s) => s === values.serial) : serials[0];
   if (serial && serial === current?.serial) {
-    // 잠깐 빠졌다 돌아온 경우: 끊긴 화면 스트림만 다시 띄운다
-    if (consoleUi && current.video && !current.video.alive()) {
-      log('디바이스가 다시 연결됐습니다 — 화면 스트림을 다시 띄웁니다');
-      current.video = await attachScreen(consoleUi.server, serial, log);
-    }
+    // 잠깐 빠졌다 돌아왔거나 화면 스트림을 못 띄운 경우: 화면을 보는 사람이 있으면 다시 띄운다
+    current.screen?.wake();
     return;
   }
   if (!serial && !current) return;
-  await current?.video?.stop();
+  await current?.screen?.stop();
+  consoleUi?.server.attachVideo(undefined);
   current = undefined;
   if (!serial) {
     // 빠짐: Run 중이면 Run이 '연결 끊김'으로 일시정지한다
@@ -152,7 +150,7 @@ async function useDevice(serials: string[]) {
   if (await restoreAwake(driver, serial, { log }).catch(() => false)) service.notify(RESTORED);
   service.setDevice({ driver, info });
   log(`디바이스: ${info.model} (Android ${info.osMajor}) · ${serial}`);
-  if (consoleUi) current.video = await attachScreen(consoleUi.server, serial, log);
+  if (consoleUi) current.screen = await attachScreen(consoleUi.server, serial, log);
 }
 
 const status = await beat();

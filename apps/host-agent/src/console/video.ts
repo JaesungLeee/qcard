@@ -55,6 +55,91 @@ export class VideoHub implements VideoFeed {
     if (this.gop.length < 600) this.gop.push(p);
     for (const l of this.listeners) l.packet(p);
   }
+
+  /** 스트림이 끝났을 때: 다음 스트림을 띄우기 전에 이전 화면을 비운다 (구독자는 그대로) */
+  clear() {
+    this.cfg = undefined;
+    this.params = undefined;
+    this.gop = [];
+  }
+}
+
+type ScreenStream = { stop(): Promise<void>; alive(): boolean };
+
+/**
+ * 콘솔에서 화면을 보는 사람이 있을 때만 스트림(scrcpy)을 띄운다 — 폰을 꽂아 두기만 해도 인코딩이 돌지 않게.
+ * 마지막 화면이 닫히고 idleMs가 지나면 끈다(새로고침·탭 이동으로는 끄지 않는다).
+ * 띄우지 못했거나 디바이스가 빠져 끊겼으면 wake()가 retryMs 뒤부터 다시 띄운다(보는 사람이 있을 때만)
+ */
+export class OnDemandScreen implements VideoFeed {
+  private readonly hub = new VideoHub();
+  private viewers = 0;
+  private stream: ScreenStream | undefined;
+  private starting: Promise<void> | undefined;
+  private idle: ReturnType<typeof setTimeout> | undefined;
+  private failedAt = -Infinity;
+  private stopped = false;
+
+  constructor(
+    private readonly opts: {
+      start: (hub: VideoHub) => Promise<ScreenStream>;
+      log: (line: string) => void;
+      idleMs?: number;
+      retryMs?: number;
+      now?: () => number;
+    },
+  ) {}
+
+  subscribe(l: VideoListener) {
+    this.viewers++;
+    clearTimeout(this.idle);
+    const off = this.hub.subscribe(l);
+    this.wake();
+    return () => {
+      off();
+      if (--this.viewers > 0) return;
+      this.idle = setTimeout(() => void this.halt(), this.opts.idleMs ?? 30_000);
+    };
+  }
+
+  /** 보는 사람이 있는데 스트림이 없거나 끊겼으면 띄운다 */
+  wake() {
+    if (this.stopped || this.viewers === 0 || this.starting || this.stream?.alive()) return;
+    const now = this.opts.now ?? Date.now;
+    if (now() - this.failedAt < (this.opts.retryMs ?? 30_000)) return;
+    this.starting = (async () => {
+      await this.stream?.stop();
+      this.stream = undefined;
+      this.hub.clear();
+      try {
+        this.stream = await this.opts.start(this.hub);
+        this.opts.log('실시간 화면 켬');
+      } catch (e) {
+        this.failedAt = now();
+        this.opts.log(`실시간 화면을 띄우지 못했습니다: ${(e as Error).message}`);
+      }
+    })().finally(() => (this.starting = undefined));
+  }
+
+  /** 보는 사람이 없으면 스트림을 끈다 */
+  private async halt() {
+    await this.starting;
+    if (this.viewers > 0 && !this.stopped) return;
+    const s = this.stream;
+    this.stream = undefined;
+    this.hub.clear();
+    if (s) {
+      await s.stop();
+      this.opts.log('실시간 화면 끔 (보는 사람 없음)');
+    }
+  }
+
+  /** 디바이스를 바꾸거나 끝낼 때. 다시 띄우지 않는다 */
+  async stop() {
+    this.stopped = true;
+    clearTimeout(this.idle);
+    await this.halt();
+  }
 }
 
 function concat(a: Uint8Array, b: Uint8Array) {

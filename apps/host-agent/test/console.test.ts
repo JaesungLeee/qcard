@@ -1,6 +1,6 @@
 import { request } from 'node:http';
-import { describe, expect, it } from 'vitest';
-import { ScrcpyParser, VideoHub } from '../src/console';
+import { describe, expect, it, vi } from 'vitest';
+import { OnDemandScreen, ScrcpyParser, VideoHub } from '../src/console';
 
 const header = (hi: number, lo: number, size: number) => {
   const b = new Uint8Array(12);
@@ -45,6 +45,87 @@ describe('scrcpy 스트림', () => {
     const got: unknown[] = [];
     hub.subscribe({ config: (c) => got.push(c), packet: (p) => got.push([...p]) });
     expect(got).toEqual([{ type: 'video', width: 590, height: 1280 }, [1, 1, 2, 3], [0, 4]]);
+  });
+});
+
+describe('OnDemandScreen', () => {
+  const noop = { config() {}, packet() {} };
+  const setup = (fail = false) => {
+    const log: string[] = [];
+    const streams: { stopped: boolean; dead: boolean }[] = [];
+    let now = 0;
+    const screen = new OnDemandScreen({
+      start: async () => {
+        if (fail) throw new Error('adb 오류');
+        const s = { stopped: false, dead: false };
+        streams.push(s);
+        return { alive: () => !s.dead && !s.stopped, stop: async () => void (s.stopped = true) };
+      },
+      log: (l) => log.push(l),
+      idleMs: 1000,
+      retryMs: 5000,
+      now: () => now,
+    });
+    return { screen, streams, log, tick: (ms: number) => (now += ms) };
+  };
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  it('보는 사람이 생기면 띄우고, 마지막 화면이 닫히고 idleMs 뒤에 끈다', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { screen, streams } = setup();
+      expect(streams).toHaveLength(0); // 붙이기만 해서는 띄우지 않는다
+      const a = screen.subscribe(noop);
+      const b = screen.subscribe(noop);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(streams).toHaveLength(1);
+      a();
+      b();
+      await vi.advanceTimersByTimeAsync(500);
+      const c = screen.subscribe(noop); // 새로고침: 끄지 않는다
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(streams).toEqual([{ stopped: false, dead: false }]);
+      c();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(streams[0]!.stopped).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('끊긴 스트림은 wake()로 다시 띄우고, 실패하면 retryMs 동안 다시 시도하지 않는다', async () => {
+    const { screen, streams, log } = setup();
+    screen.subscribe(noop);
+    await flush();
+    streams[0]!.dead = true;
+    screen.wake();
+    await flush();
+    expect(streams).toHaveLength(2);
+    expect(streams[0]!.stopped).toBe(true); // 끊긴 것은 정리하고 새로
+
+    const f = setup(true);
+    f.screen.subscribe(noop);
+    await flush();
+    f.screen.wake();
+    await flush();
+    expect(f.log.filter((l) => l.includes('띄우지 못했습니다'))).toHaveLength(1);
+    f.tick(5000);
+    f.screen.wake();
+    await flush();
+    expect(f.log.filter((l) => l.includes('띄우지 못했습니다'))).toHaveLength(2);
+    expect(log).toEqual(['실시간 화면 켬', '실시간 화면 켬']);
+  });
+
+  it('stop() 뒤에는 보는 사람이 있어도 다시 띄우지 않는다', async () => {
+    const { screen, streams } = setup();
+    screen.subscribe(noop);
+    await flush();
+    await screen.stop();
+    screen.wake();
+    screen.subscribe(noop);
+    await flush();
+    expect(streams).toHaveLength(1);
+    expect(streams[0]!.stopped).toBe(true);
   });
 });
 

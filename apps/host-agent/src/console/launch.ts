@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { startConsoleServer, type ConsoleBackend, type ConsoleServer } from './server';
-import { startScrcpy, VideoHub } from './video';
+import { findScrcpy, OnDemandScreen, startScrcpy } from './video';
 
 /** 개발 서버(pnpm dev). 떠 있으면 콘솔 화면은 여기서 열고, /console-api는 Vite가 콘솔 서버로 넘긴다 */
 export const DEV_WEB = 'http://localhost:5173';
@@ -52,13 +52,16 @@ export async function launchConsole(
   return { server, printUrl, webUrl };
 }
 
-/** 디바이스 화면 스트림을 띄워 콘솔에 붙인다. 실패하면 화면 없이 진행한다 */
+/**
+ * 디바이스 화면 스트림을 콘솔에 붙인다. scrcpy는 콘솔에서 화면을 보는 동안만 돈다(OnDemandScreen).
+ * scrcpy가 없으면 화면 없이 진행한다
+ */
 export async function attachScreen(server: ConsoleServer, serial: string, log: (line: string) => void) {
-  const hub = new VideoHub();
-  const video = await startScrcpy({ serial, hub, log: (l) => log(`  ${l}`) }).catch((e: Error) => {
-    log(`실시간 화면 없이 진행합니다: ${e.message}`);
+  if (!(await findScrcpy())) {
+    log('scrcpy가 없어 실시간 화면 없이 진행합니다 (brew install scrcpy)');
     return undefined;
-  });
-  if (video) server.attachVideo(hub);
-  return video;
+  }
+  const screen = new OnDemandScreen({ start: (hub) => startScrcpy({ serial, hub, log: (l) => log(`  ${l}`) }), log });
+  server.attachVideo(screen);
+  return screen;
 }
