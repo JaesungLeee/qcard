@@ -41,7 +41,8 @@ pnpm이 전역에 없으면 `npx -y pnpm@10.34.6 <명령>`으로 실행한다.
 - [emulators.md](docs/dev/emulators.md) — 에뮬레이터 구성·시드·임시 폴더 분리
 - [worktree.md](docs/dev/worktree.md) — 워크트리에서 병렬 작업할 때 복사되는 파일·포트·`qcard-specs` 경로
 - [deploy.md](docs/dev/deploy.md) — 실제 Firebase 프로젝트(`qcard-d2ade`) 설정, 웹·규칙·Functions 배포, 호스트 환경변수
-- [ci.md](docs/dev/ci.md) — GitHub Actions: `main` 푸시 → 검증·자동 배포, 태그 `host-v*` → npm publish
+- [ci.md](docs/dev/ci.md) — GitHub Actions: `main` 푸시 → 검증·자동 배포, `develop`·PR → 검증, 태그 `host-v*` → npm publish
+- [branching.md](docs/dev/branching.md) — git flow: `feature/*` → `develop`, `release/*`·`hotfix/*` → `main`(PR), 태그 `v*`·`host-v*`
 
 ## 하네스
 
@@ -51,6 +52,7 @@ pnpm이 전역에 없으면 `npx -y pnpm@10.34.6 <명령>`으로 실행한다.
 
 ## 하지 말 것
 
-- 배포(Firebase·gcloud), `git push --force`, 비밀값 조회 — `guard-bash.sh`가 막는다. 필요하면 사용자에게 명령을 알려준다.
+- 배포(Firebase·gcloud), `git push --force`, `main`으로 직접 push, 비밀값 조회 — `guard-bash.sh`가 막는다. 필요하면 사용자에게 명령을 알려준다.
+- `main`·`develop`에서 바로 작업. 작업은 `develop`에서 딴 `feature/<이름>` 브랜치에서 한다([branching.md](docs/dev/branching.md)).
 - `.env`·서비스 계정 키 읽기(`settings.json`의 deny).
 - 실기기 대상 파괴적 ADB 명령(앱 데이터 삭제, 앱 삭제, 재부팅, 초기화, `/data/local/tmp` 밖 파일 삭제)을 사용자 확인 없이 실행. `guard-bash.sh`가 막으며, `pm clear`는 로컬 설정 `qcard.local.json`(gitignore)의 `devApp`만 허용한다.

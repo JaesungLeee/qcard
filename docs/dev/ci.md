@@ -1,9 +1,9 @@
 # CI·자동 배포 (GitHub Actions)
 
-| 워크플로                             | 언제                         | 하는 일                                                                                    |
-| ------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------ |
-| `.github/workflows/deploy.yml`       | `main` 푸시 · PR · 수동 실행 | `pnpm verify` → (`main`만) 바뀐 대상만 운영 배포. 수동 실행에서 "모두 배포"를 고를 수 있다 |
-| `.github/workflows/publish-host.yml` | 태그 `host-v<버전>` 푸시     | 버전 확인 → `pnpm verify` → `bundle` → `npm publish`                                       |
+| 워크플로                             | 언제                                   | 하는 일                                                                                    |
+| ------------------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `.github/workflows/deploy.yml`       | `main`·`develop` 푸시 · PR · 수동 실행 | `pnpm verify` → (`main`만) 바뀐 대상만 운영 배포. 수동 실행에서 "모두 배포"를 고를 수 있다 |
+| `.github/workflows/publish-host.yml` | 태그 `host-v<버전>` 푸시               | 버전 확인 → `pnpm verify` → `bundle` → `npm publish`                                       |
 
 배포 대상은 마지막으로 성공한 deploy 실행 이후 바뀐 것으로 고른다(실패한 실행의 변경도 다음 성공 때 함께 나간다): 웹·패키지 소스 → `hosting`, Functions·그 의존 패키지 소스 → `functions`, `firebase/firestore*` → `firestore`, `firebase/storage*` → `storage`. 테스트·문서만 바뀌면 배포하지 않는다.
 
@@ -62,11 +62,14 @@ gcloud iam service-accounts add-iam-policy-binding $SA \
 
 ## 쓰는 법
 
-- 웹·규칙·Functions 배포: `main`에 푸시하면 끝. Actions 탭에서 진행을 본다. 다시 배포하려면 Actions → deploy → **Run workflow**(필요하면 "모두 배포").
-- 호스트 에이전트 새 버전: `apps/host-agent/package.json`의 `version`을 올려 커밋·푸시한 뒤
+브랜치·릴리스 흐름은 [branching.md](branching.md).
+
+- 웹·규칙·Functions 배포: release·hotfix PR을 `main`에 머지하면 끝. Actions 탭에서 진행을 본다. 다시 배포하려면 Actions → deploy → **Run workflow**에서 브랜치 `main`을 고른다(필요하면 "모두 배포"). 다른 브랜치에서 실행하면 검증만 한다.
+- 호스트 에이전트 새 버전: release 브랜치에서 `apps/host-agent/package.json`의 `version`을 올리고, `main`에 머지된 뒤
 
   ```sh
-  git tag host-v0.1.4 && git push origin host-v0.1.4
+  git switch main && git pull
+  git tag host-v0.1.6 && git push origin host-v0.1.6
   ```
 
 ## 실패할 때
