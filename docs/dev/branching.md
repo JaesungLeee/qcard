@@ -40,7 +40,8 @@ gh pr create --base develop
 git switch develop && git pull
 git switch -c release/0.2.0
 # 루트 package.json version → 0.2.0 (호스트가 바뀌었으면 apps/host-agent도), 릴리스 전 수정만
-git commit -am "chore: release 0.2.0"
+# CHANGELOG.md에 0.2.0 항목 추가 (아래)
+git add -A && git commit -m "chore: release 0.2.0"
 git push -u origin release/0.2.0
 gh pr create --base main --title "release 0.2.0"
 ```
@@ -51,11 +52,21 @@ PR을 머지하면 운영 배포가 돈다. 그다음:
 git switch main && git pull
 git tag v0.2.0 && git push origin v0.2.0
 git tag host-v0.1.6 && git push origin host-v0.1.6   # 호스트 버전을 올렸을 때만
+gh release create v0.2.0 --title "qcard 0.2.0" --notes "$(awk '/^## \[?0.2.0[] ]/{f=1;next} /^## /{f=0} f' CHANGELOG.md)"
 # release 브랜치의 변경을 develop에도
 gh pr create --base develop --head release/0.2.0 --title "back-merge release 0.2.0"
 ```
 
 back-merge PR까지 머지하면 `release/0.2.0`을 지운다.
+
+#### CHANGELOG
+
+루트 `CHANGELOG.md`에 새 버전 항목을 맨 위에 더하고 release 브랜치에 함께 커밋한다. 태그를 단 뒤 그 항목으로 GitHub Release를 만든다(위 `gh release create`).
+
+- 형식은 Release Please와 같다: `## [버전](비교 링크) (날짜)` 아래 `### ⚠ 호환되지 않는 변경`·`### 새 기능`·`### 버그 수정`, 항목은 `* **scope:** 변경 요약(한국어) ([#PR](링크)) ([짧은 해시](링크))`. scope 알파벳 순.
+- 범위는 직전 태그 이후 커밋이다(`git log --no-merges <직전 태그>..release/<버전>`). `feat`·`fix`만 쓰고 `docs`·`chore`·`test`는 뺀다.
+- 호스트 버전을 올렸으면 항목 맨 위에 새 호스트 버전과 업데이트 방법(`npm i -g @qcard/host`)을 한 줄로 쓴다.
+- 핫픽스도 같은 파일에 patch 버전 항목으로 더한다.
 
 ### 핫픽스
 
