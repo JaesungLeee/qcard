@@ -1,5 +1,7 @@
 // QA 문서 검토 화면의 순수 로직: 필터·그룹·diff·재적용·커버리지. 화면 코드와 분리해 테스트한다.
 import {
+  HOST_ONLINE_MS,
+  hostHandles,
   PLATFORM_LABEL,
   POINT_COMPARE_LABEL,
   POINT_METHOD_LABEL,
@@ -8,6 +10,8 @@ import {
   type CaseBody,
   type CaseChange,
   type CaseReviseJob,
+  type Host,
+  type Job,
   type QADocument,
   type Requirement,
   type SpecQuestion,
@@ -329,6 +333,16 @@ export function revisionView(c: TestCase, questions: SpecQuestion[], jobs: CaseR
   return questions.some((q) => q.status === 'answered' && q.caseIds.includes(c.tcId))
     ? { kind: 'ready' }
     : { kind: 'none' };
+}
+
+/**
+ * 내 호스트가 이 작업을 지금 처리할 수 있는가: 켜진 호스트 중 하나라도 처리하면 ok,
+ * 켜진 호스트가 모두 옛 버전이면 outdated(요청해도 대기로 남는다), 켜진 호스트가 없으면 offline
+ */
+export function hostSupport(hosts: Host[], kind: Job['kind'], now = Date.now()): 'ok' | 'offline' | 'outdated' {
+  const online = hosts.filter((h) => now - Date.parse(h.lastSeen) < HOST_ONLINE_MS);
+  if (!online.length) return 'offline';
+  return online.some((h) => hostHandles(h, kind)) ? 'ok' : 'outdated';
 }
 
 export const PAGE_SIZES = [10, 20, 50] as const;

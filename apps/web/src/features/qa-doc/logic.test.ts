@@ -11,6 +11,7 @@ import {
   caseTree,
   groupByCase,
   groupRows,
+  hostSupport,
   nextOpenCategory,
   NO_CASE_FEATURE,
   pickCategory,
@@ -214,6 +215,22 @@ describe('케이스 수정안 상태 (F-QD-17)', () => {
     expect(revisionView(c, d.questions, [job({ outcome: { kind: 'applied', by: 'x', at: 't' } })])).toEqual({
       kind: 'ready',
     });
+  });
+});
+
+describe('hostSupport — 옛 호스트 알아보기', () => {
+  const now = Date.parse('2026-10-26T10:00:00Z');
+  const host = (over: object = {}) => ({ id: 'h', name: 'PC', lastSeen: '2026-10-26T09:59:30Z', ...over });
+
+  it('켜진 호스트 중 하나라도 처리하면 ok, 모두 옛 버전이면 outdated, 켜진 게 없으면 offline', () => {
+    const fresh = host({ jobs: ['qa_doc_generate', 'run_cycle', 'case_revise'] });
+    // jobs가 없는 호스트는 이 필드보다 오래됐다 — QA 문서 생성·Run 시작만 한다
+    expect(hostSupport([host()], 'case_revise', now)).toBe('outdated');
+    expect(hostSupport([host()], 'qa_doc_generate', now)).toBe('ok');
+    expect(hostSupport([host(), fresh], 'case_revise', now)).toBe('ok');
+    expect(hostSupport([fresh], 'case_revise', now)).toBe('ok');
+    expect(hostSupport([{ ...fresh, lastSeen: '2026-10-26T09:00:00Z' }], 'case_revise', now)).toBe('offline');
+    expect(hostSupport([], 'case_revise', now)).toBe('offline');
   });
 });
 

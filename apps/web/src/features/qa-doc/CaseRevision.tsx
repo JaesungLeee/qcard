@@ -4,8 +4,9 @@ import { fmtDateTime } from '../../components/format';
 import { useApi, useCaseRevisionAction, useMyHosts } from '../../data/hooks';
 import { Tag } from './Badges';
 import { CaseDiff } from './CaseDiff';
-import { SERVE_COMMAND, isOnline } from './Jobs';
-import { diffCase, revisionView, toBody } from './logic';
+import { INSTALL_COMMAND } from '../hosts/model';
+import { SERVE_COMMAND } from './Jobs';
+import { diffCase, hostSupport, revisionView, toBody } from './logic';
 
 /*
  * 답변 기반 케이스 수정안 (PRD F-QD-17): 질문 탭의 케이스 묶음 아래에 붙는다.
@@ -24,6 +25,8 @@ export function CaseRevision({
 }) {
   const api = useApi();
   const action = useCaseRevisionAction(doc);
+  const hosts = useMyHosts();
+  const support = hosts.data ? hostSupport(hosts.data, 'case_revise') : 'ok';
   const view = revisionView(c, doc.questions, jobs);
   if (view.kind === 'none') return null;
   const mine = 'job' in view && view.job.requestedBy === api.currentUid;
@@ -32,20 +35,25 @@ export function CaseRevision({
   if (view.kind === 'ready') {
     if (!canEdit) return null;
     return (
-      <div className="qd-revision qd-row" style={{ justifyContent: 'space-between' }}>
-        <span className={`${textClass('label1')} qd-muted`}>
-          답변을 이 케이스에 반영한 수정안을 내 호스트가 만듭니다. 케이스는 적용할 때만 바뀝니다.
-        </span>
-        <Button
-          size="small"
-          variant="outlined"
-          color="primary"
-          leadingContent={<Icons.IconSparkle />}
-          loading={action.isPending}
-          onClick={() => action.mutate({ kind: 'request', tcId: c.tcId })}
-        >
-          케이스 수정안 만들기
-        </Button>
+      <div className="qd-revision qd-stack" style={{ gap: token('space-8') }}>
+        <div className="qd-row" style={{ justifyContent: 'space-between' }}>
+          <span className={`${textClass('label1')} qd-muted`}>
+            답변을 이 케이스에 반영한 수정안을 내 호스트가 만듭니다. 케이스는 적용할 때만 바뀝니다.
+          </span>
+          <Button
+            size="small"
+            variant="outlined"
+            color="primary"
+            leadingContent={<Icons.IconSparkle />}
+            // 켜진 호스트가 모두 옛 버전이면 요청해도 처리되지 않는다
+            disabled={support === 'outdated'}
+            loading={action.isPending}
+            onClick={() => action.mutate({ kind: 'request', tcId: c.tcId })}
+          >
+            케이스 수정안 만들기
+          </Button>
+        </div>
+        <HostHint support={support} />
         {error && <ErrorLine text={error} />}
       </div>
     );
@@ -62,7 +70,7 @@ export function CaseRevision({
             {running && view.job.host ? ` · ${view.job.host}` : ''}
           </span>
         </div>
-        {!running && mine && <OfflineHint />}
+        {!running && mine && <HostHint support={support} />}
       </div>
     );
   }
@@ -206,13 +214,22 @@ function ErrorLine({ text }: { text: string }) {
   );
 }
 
-/** 내 호스트가 꺼져 있으면 켜는 방법 */
-function OfflineHint() {
-  const hosts = useMyHosts();
-  if (hosts.isPending || (hosts.data ?? []).some((h) => isOnline(h))) return null;
+/** 내 호스트가 꺼져 있으면 켜는 방법, 옛 버전이면 업데이트 방법 */
+function HostHint({ support }: { support: 'ok' | 'offline' | 'outdated' }) {
+  if (support === 'ok') return null;
   return (
     <span className={`${textClass('label2')} qd-muted`}>
-      내 호스트 에이전트가 꺼져 있습니다. 터미널에서 <code className="qd-code">{SERVE_COMMAND}</code>를 켜면 시작합니다.
+      {support === 'offline' ? (
+        <>
+          내 호스트 에이전트가 꺼져 있습니다. 터미널에서 <code className="qd-code">{SERVE_COMMAND}</code>를 켜면
+          시작합니다.
+        </>
+      ) : (
+        <>
+          내 호스트 에이전트가 수정안을 지원하지 않는 이전 버전입니다.{' '}
+          <code className="qd-code">{INSTALL_COMMAND}</code>로 업데이트한 뒤 다시 켜세요.
+        </>
+      )}
     </span>
   );
 }
