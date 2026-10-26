@@ -20,6 +20,18 @@
     --member serviceAccount:<프로젝트번호>-compute@developer.gserviceaccount.com --role roles/cloudkms.cryptoKeyEncrypterDecrypter
   ```
 
+- 프로젝트 영구 삭제(F-TM-12, 예약 함수 `purgeDeletedProjects`, 매일 04:00)는 Storage `projects/<id>/` 아래 파일도 지운다. 함수의 서비스 계정에 `storage.objects.delete`가 있어야 한다(기본 compute 계정은 보통 `roles/editor`로 갖고 있다). 확인:
+
+  ```sh
+  gcloud functions describe purgeDeletedProjects --region=asia-northeast3 --project=qcard-d2ade \
+    --format="value(serviceConfig.serviceAccountEmail)"
+  gcloud policy-intelligence troubleshoot-policy iam \
+    //storage.googleapis.com/projects/_/buckets/qcard-d2ade.firebasestorage.app \
+    --principal-email=<위 결과> --permission=storage.objects.delete
+  ```
+
+  버킷의 소프트 삭제 보관 기간은 7일(2026-10-26 확인, `gcloud storage buckets describe gs://qcard-d2ade.firebasestorage.app --format="default(soft_delete_policy)"`)이라 지운 파일은 7일 동안 복구할 수 있는 상태로 남는다. 개인정보처리방침의 삭제 안내와 맞춘다.
+
 ## 웹
 
 `apps/web/.env.example`을 `apps/web/.env.production`으로 복사해 `apiKey`·`appId`를 채운다(공개값, gitignore).

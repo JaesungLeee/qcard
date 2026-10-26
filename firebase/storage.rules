@@ -18,10 +18,12 @@ service firebase.storage {
           || (firestore.exists(connection()) && firestore.get(connection()).data.uid == request.auth.uid));
     }
 
-    // 빌드(APK)는 크다. 한 번 올린 파일은 덮어쓰지 않는다 (F-DV-05)
+    // 빌드(APK)는 크다. 한 번 올린 파일은 덮어쓰지 않는다 (F-DV-05).
+    // `create`만으로는 기존 파일 위 업로드가 막히지 않으므로 `resource == null`(아직 없는 파일)을 함께 본다
     match /projects/{p}/builds/{id}/{file} {
       allow read: if signedIn() && firestore.exists(member(p));
       allow create: if signedIn()
+        && resource == null
         && firestore.exists(member(p))
         && firestore.get(member(p)).data.role in ['admin', 'qa']
         && request.resource.size < 300 * 1024 * 1024;
@@ -40,12 +42,22 @@ service firebase.storage {
         && request.resource.size < 20 * 1024 * 1024;
     }
 
-    // 그 밖의 프로젝트 파일(스펙 묶음 등). 빌드·사이클(Run 스크린샷) 경로는 위 규칙만 — 여기서 쓰기를 열지 않는다
-    // (Storage는 맞는 규칙 중 하나만 허용해도 통과하므로, 여기서 빼지 않으면 빌드 덮어쓰기가 열린다)
+    // 스펙 스냅샷은 변경 불가 (F-IN-03). 업로드마다 묶음 id가 새로 생기므로 덮어쓸 일이 없다
+    match /projects/{p}/specBundles/{bundle}/{rest=**} {
+      allow read: if signedIn() && firestore.exists(member(p));
+      allow create: if signedIn()
+        && resource == null
+        && firestore.exists(member(p))
+        && firestore.get(member(p)).data.role in ['admin', 'qa']
+        && request.resource.size < 20 * 1024 * 1024;
+    }
+
+    // 그 밖의 프로젝트 파일. 빌드·사이클(Run 스크린샷)·스펙 경로는 위 규칙만 — 여기서 쓰기를 열지 않는다
+    // (Storage는 맞는 규칙 중 하나만 허용해도 통과하므로, 여기서 빼지 않으면 빌드·스펙 덮어쓰기가 열린다)
     match /projects/{p}/{top}/{rest=**} {
       allow read: if signedIn() && firestore.exists(member(p));
       allow write: if signedIn()
-        && !(top in ['builds', 'cycles'])
+        && !(top in ['builds', 'cycles', 'specBundles'])
         && firestore.exists(member(p))
         && firestore.get(member(p)).data.role in ['admin', 'qa']
         && request.resource.size < 20 * 1024 * 1024;

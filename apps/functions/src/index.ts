@@ -1,6 +1,7 @@
 import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
@@ -88,7 +89,16 @@ export const clearAccountFlag = call(acc.clearAccountFlag);
 export const claimAccount = call(acc.claimAccount, { allowHost: true });
 export const releaseAccount = call(acc.releaseAccount, { allowHost: true });
 
-/** 삭제 유예(30일)가 지난 프로젝트 영구 삭제 (F-TM-12) */
-export const purgeDeletedProjects = onSchedule({ schedule: 'every day 04:00', timeZone: 'Asia/Seoul' }, async () => {
-  await h.purgeDeletedProjects(getFirestore(), new Date().toISOString());
-});
+/**
+ * 삭제 유예(30일)가 지난 프로젝트 영구 삭제 (F-TM-12). 스크린샷이 많으면 오래 걸려 제한 시간을 최대로 둔다 —
+ * 그래도 넘기면 남은 것은 다음 날 이어서 지운다
+ */
+export const purgeDeletedProjects = onSchedule(
+  { schedule: 'every day 04:00', timeZone: 'Asia/Seoul', timeoutSeconds: 540 },
+  async () => {
+    const bucket = getStorage().bucket();
+    await h.purgeDeletedProjects(getFirestore(), new Date().toISOString(), (prefix) =>
+      bucket.deleteFiles({ prefix }),
+    );
+  },
+);

@@ -99,12 +99,13 @@ describe('쓰기', () => {
     const cycle = doc(qa, 'projects/haru/cycles/c2');
     const copy = doc(qa, 'projects/haru/cycles/c2/cases/TC-1');
     const snapshot = [{ tcId: 'TC-1', contentHash: 'h1' }];
-    await assertSucceeds(setDoc(cycle, { name: 'c2', docId: 'doc-130', snapshot }));
+    await assertSucceeds(setDoc(cycle, { name: 'c2', docId: 'doc-130', buildId: 'build-100-a', snapshot }));
     await assertSucceeds(setDoc(copy, { title: '원래 제목' }));
     await assertFails(setDoc(copy, { title: '바꾼 제목' }));
     await assertFails(deleteDoc(copy));
     await assertFails(updateDoc(cycle, { snapshot: [{ tcId: 'TC-1', contentHash: 'h2' }] }));
     await assertFails(updateDoc(cycle, { docId: 'doc-120' }));
+    await assertFails(updateDoc(cycle, { buildId: 'build-101-b' })); // 새 빌드는 새 사이클로
     // 이름·기간 같은 다른 필드와 결과 칸(N/T)은 계속 쓴다
     await assertSucceeds(updateDoc(cycle, { name: 'c2 (수정)' }));
     await assertSucceeds(setDoc(doc(qa, 'projects/haru/cycles/c2/results/TC-1__d'), { verdict: 'nt' }));
