@@ -2,7 +2,6 @@ import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { setGlobalOptions } from 'firebase-functions/v2';
-import { defineString } from 'firebase-functions/params';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { MembershipError } from '@qcard/shared';
@@ -17,16 +16,17 @@ import { kmsBox, localBox, type SecretBox } from './secretBox';
 initializeApp();
 setGlobalOptions({ region: 'asia-northeast3' });
 
-/** 테스트 계정 비밀값을 봉인하는 Cloud KMS 키. 키 이름은 비밀이 아니다 — 만드는 법은 docs/dev/deploy.md */
-const ACCOUNT_KMS_KEY = defineString('ACCOUNT_KMS_KEY', {
-  default: 'projects/qcard-d2ade/locations/asia-northeast3/keyRings/qcard/cryptoKeys/test-accounts',
-});
+/**
+ * 테스트 계정 비밀값을 봉인하는 Cloud KMS 키 (F-EX-09). 키 이름은 비밀이 아니라 코드에 둔다 — 배포 파라미터로 받으면
+ * CI(비대화형) 배포가 값을 요구하며 멈춘다. 키를 만드는 법은 docs/dev/deploy.md
+ */
+const ACCOUNT_KMS_KEY = 'projects/qcard-d2ade/locations/asia-northeast3/keyRings/qcard/cryptoKeys/test-accounts';
 const emulator = process.env.FUNCTIONS_EMULATOR === 'true';
 let box: SecretBox | undefined;
 const secretBox = () =>
   (box ??= emulator
     ? localBox('qcard-emulator')
-    : kmsBox(ACCOUNT_KMS_KEY.value(), async () => (await applicationDefault().getAccessToken()).access_token));
+    : kmsBox(ACCOUNT_KMS_KEY, async () => (await applicationDefault().getAccessToken()).access_token));
 
 const CODE = { permission: 'permission-denied', rule: 'failed-precondition', not_found: 'not-found' } as const;
 
