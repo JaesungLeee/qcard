@@ -7,6 +7,7 @@
   },
   "scripts": {
     "generate": "tsx scripts/generate.ts",
+    "revise": "tsx scripts/revise.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },
