@@ -104,6 +104,7 @@ export function CaseEditForm({
   const [errors, setErrors] = useState<string[]>([]);
 
   const dirty = isDirty(base.body, draft);
+  const restoreFlows = prepFlows.filter((p) => p.kind === 'restore');
   const prepName = useMemo(() => {
     const byId = new Map(prepFlows.map((p) => [p.id, p.name]));
     return (id: string) => byId.get(id) ?? id;
@@ -258,32 +259,54 @@ export function CaseEditForm({
 
       <Field label="준비 플로우" hint="Agent가 실행 전에 확인 조건을 보고, 충족되지 않으면 순서대로 수행합니다.">
         <div className="qd-stack" style={{ gap: token('space-6') }}>
-          {prepFlows.map((pf) => {
-            const on = draft.prepFlowIds.includes(pf.id);
-            return (
-              <CheckLabel
-                key={pf.id}
-                className={`${textClass('label1')} qd-check`}
-                style={{ alignItems: 'flex-start', whiteSpace: 'normal' }}
-                checked={on}
-                onCheckedChange={(v) =>
-                  patch({
-                    // 준비 플로우 목록 순서(수행 순서)를 유지한다
-                    prepFlowIds: prepFlows
-                      .map((x) => x.id)
-                      .filter((id) => (id === pf.id ? v : draft.prepFlowIds.includes(id))),
-                  })
-                }
-              >
-                <span style={{ display: 'block', paddingTop: 2 }}>{pf.name}</span>
-                <span className={`${textClass('caption1')} qd-faint`} style={{ display: 'block' }}>
-                  확인: {pf.check}
-                </span>
-              </CheckLabel>
-            );
-          })}
+          {prepFlows
+            .filter((pf) => pf.kind !== 'restore')
+            .map((pf) => {
+              const on = draft.prepFlowIds.includes(pf.id);
+              return (
+                <CheckLabel
+                  key={pf.id}
+                  className={`${textClass('label1')} qd-check`}
+                  style={{ alignItems: 'flex-start', whiteSpace: 'normal' }}
+                  checked={on}
+                  onCheckedChange={(v) =>
+                    patch({
+                      // 준비 플로우 목록 순서(수행 순서)를 유지한다
+                      prepFlowIds: prepFlows
+                        .map((x) => x.id)
+                        .filter((id) => (id === pf.id ? v : draft.prepFlowIds.includes(id))),
+                    })
+                  }
+                >
+                  <span style={{ display: 'block', paddingTop: 2 }}>{pf.name}</span>
+                  <span className={`${textClass('caption1')} qd-faint`} style={{ display: 'block' }}>
+                    확인: {pf.check}
+                  </span>
+                </CheckLabel>
+              );
+            })}
         </div>
       </Field>
+
+      {restoreFlows.length > 0 && (
+        <Field
+          label="원복 플로우"
+          hint="테스트 계정에 남는 상태(구독·설정 등)를 바꾸는 케이스만. 케이스가 끝나면 수행하고, 실패하면 계정을 격리합니다."
+        >
+          <Select
+            aria-label="원복 플로우"
+            value={draft.restoreFlowId ?? ''}
+            onChange={(v) => patch({ restoreFlowId: (v as string) || undefined })}
+          >
+            <Option value="">없음</Option>
+            {restoreFlows.map((pf) => (
+              <Option key={pf.id} value={pf.id}>
+                {pf.name}
+              </Option>
+            ))}
+          </Select>
+        </Field>
+      )}
 
       <CheckLabel
         className={`${textClass('label1')} qd-check`}

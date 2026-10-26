@@ -87,8 +87,17 @@ describe('generateQaDoc — 첫 버전', async () => {
     expect(prepFlows.map((f) => [f.id, f.kind])).toEqual([
       ['pf-clean', 'env'],
       ['pf-home', 'data_state'],
+      ['pf-undo', 'restore'],
     ]);
     expect(warnings.join('\n')).toContain('pf-nope');
+  });
+
+  it('계정 종류와 원복 플로우를 케이스에 붙이고, 원복이 아닌 플로우는 원복으로 쓰지 않는다 (F-QD-04, F-PF-09)', () => {
+    expect(byId('EC-001')).toMatchObject({ accountKind: '구독자', restoreFlowId: 'pf-undo' });
+    expect(byId('EC-001').prepFlowIds).not.toContain('pf-undo');
+    expect(byId('TS-001').accountKind).toBeUndefined();
+    expect(byId('TS-002').restoreFlowId).toBeUndefined();
+    expect(warnings.join('\n')).toContain('sample/TS-002: 원복 플로우가 아닌 pf-home를 뺐다');
   });
 
   it('스펙에 없는 버튼 이름은 추정으로 표시한다', () => {
@@ -163,7 +172,8 @@ describe('generateQaDoc — 다음 버전 (F-QD-08)', async () => {
     expect(events.map((e) => e.kind)).toEqual([
       'match',
       'plan',
-      'warning', // 가짜 모델이 없는 준비 플로우를 가리킨다
+      'warning', // 가짜 모델이 없는 준비 플로우를 가리킨다 (TS-002·TS-004·TS-003), TS-002는 원복도 잘못 지정
+      'warning',
       'warning',
       'warning',
       'planned',
