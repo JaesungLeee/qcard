@@ -1,8 +1,9 @@
 import type { QcardApi } from '@qcard/data';
 import { ClaudeCodeSetupError, PlanLimitError, UsageMeter, withUsage, type LlmClient } from '@qcard/llm';
-import { generateQaDoc, type GenerateProgress } from '@qcard/qadoc';
+import { generateQaDoc, reviseCase, type GenerateProgress } from '@qcard/qadoc';
 import {
   hash,
+  type CaseReviseJob,
   type Host,
   type Job,
   type JobErrorKind,
@@ -30,8 +31,8 @@ import {
 import { getBytes, ref, type FirebaseStorage } from 'firebase/storage';
 
 /*
- * 호스트 에이전트의 작업 처리 (PRD §5.2, §6.2): 웹에서 요청한 "QA 문서 생성"을 요청자 본인의 PC에서,
- * 본인 Claude Code(플랜)로 만든다. 로그인한 사용자 권한으로 Firestore·Storage에 쓰므로 보안 규칙을 그대로 따른다.
+ * 호스트 에이전트의 작업 처리 (PRD §5.2, §6.2): 웹에서 요청한 "QA 문서 생성"·"케이스 수정안"(F-QD-17)을
+ * 요청자 본인의 PC에서, 본인 Claude Code(플랜)로 만든다. 로그인한 사용자 권한으로 Firestore·Storage에 쓰므로 보안 규칙을 그대로 따른다.
  *
  *   pendingJobs → claimJob(대기 → 생성 중, 트랜잭션) → processJob(스펙 읽기 → 생성 → 저장 → 완료)
  * 플랜 한도·Claude Code 문제면 "일시정지"로 남기고, 웹에서 다시 시도하면 같은 호스트가 이어서 한다
@@ -47,22 +48,29 @@ export type JobDeps = {
   /** 처리하는 호스트 이름 (웹에 보인다) */
   host: string;
   /** 작업용 LLM. 작업마다 녹화 폴더를 따로 둔다 */
-  llmFor: (job: QaDocJob) => LlmClient;
+  llmFor: (job: QaDocJob | CaseReviseJob) => LlmClient;
   now?: () => string;
   log?: (line: string) => void;
 };
+
+/** 이 호스트가 처리하는 작업 종류. 연결 신호에 실어 보내 웹이 옛 호스트를 알아본다 (Host.jobs) */
+export const HOST_JOBS: Job['kind'][] = ['qa_doc_generate', 'run_cycle', 'case_revise'];
 
 const jobRef = (db: Firestore, j: Pick<Job, 'projectId' | 'id'>) => doc(db, 'projects', j.projectId, 'jobs', j.id);
 /** Firestore는 undefined를 저장하지 못한다 */
 const clean = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
-/** 내가 요청한 대기 작업 (오래된 것 먼저). 다른 사람의 작업은 규칙상 보이지도 않는다 */
+/**
+ * 내가 요청한 대기 작업. 케이스 수정안(짧다)을 QA 문서 생성(길다)보다 먼저, 그 안에서는 오래된 것 먼저 (F-QD-17).
+ * 다른 사람의 작업은 규칙상 보이지도 않는다
+ */
 export async function pendingJobs(db: Firestore, uid: string): Promise<Job[]> {
   const snap = await getDocs(query(collectionGroup(db, 'jobs'), where('requestedBy', '==', uid)));
+  const rank = (j: Job) => (j.kind === 'case_revise' ? 0 : 1);
   return snap.docs
     .map((d) => d.data() as Job)
     .filter((j) => j.status === 'queued')
-    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+    .sort((a, b) => rank(a) - rank(b) || (a.createdAt < b.createdAt ? -1 : 1));
 }
 
 /** 대기 → 생성 중. 다른 호스트(같은 사용자의 다른 PC)가 먼저 가져갔으면 undefined */
@@ -233,6 +241,57 @@ export async function processJob(deps: JobDeps, job: QaDocJob): Promise<Job> {
   }
 }
 
+/**
+ * 케이스 수정안 작업 하나를 처리한다 (F-QD-17): 케이스·답변된 질문·출처 스펙 행으로 수정안을 만들어 작업 결과에 쓴다.
+ * 케이스는 바꾸지 않는다 — 요청자가 웹에서 보고 적용한다
+ */
+export async function processReviseJob(deps: JobDeps, job: CaseReviseJob): Promise<Job> {
+  const { db, storage, api } = deps;
+  const now = deps.now ?? (() => new Date().toISOString());
+  const log = deps.log ?? (() => {});
+  const r = jobRef(db, job);
+  const meter = new UsageMeter();
+  try {
+    const d = await api.getQaDoc({ projectId: job.projectId, docId: job.input.docId });
+    const current = d.cases.find((c) => c.tcId === job.input.tcId);
+    if (!current) throw new Error(`케이스가 문서에 없습니다: ${job.input.tcId}`);
+    const bundle = await loadBundle(db, storage, job.projectId, d.specBundleId);
+    const spec = bundle?.parsed.specs.find((s) => s.name === current.sourceRef.spec);
+    if (!spec) throw new Error(`출처 스펙을 찾지 못했습니다: ${current.sourceRef.spec}`);
+    const out = await reviseCase({
+      current,
+      spec,
+      questions: d.questions.filter((q) => job.input.questionIds.includes(q.id)),
+      prepFlows: await api.listPrepFlows(job.projectId),
+      llm: withUsage(deps.llmFor(job), meter),
+    });
+    const usage = { tokens: meter.run.tokens, costUsd: meter.run.costUsd };
+    const done: CaseReviseJob = {
+      ...job,
+      status: 'done',
+      finishedAt: now(),
+      result: { ...out, ...usage },
+    };
+    await setDoc(r, clean(done));
+    log(
+      `수정안 ${job.input.tcId}: ${out.kind === 'revise' ? '수정안' : '수정 불필요'} · 토큰 ${usage.tokens.toLocaleString()}`,
+    );
+    return done;
+  } catch (e) {
+    const kind = errorKind(e);
+    const message = (e as Error).message ?? String(e);
+    const next: CaseReviseJob = {
+      ...job,
+      status: kind ? 'paused' : 'failed',
+      finishedAt: now(),
+      error: { kind: kind ?? 'failed', message },
+    };
+    await setDoc(r, clean(next));
+    log(`${kind ? '일시정지' : '실패'}: ${message}`);
+    return next;
+  }
+}
+
 type Progress = NonNullable<QaDocJob['progress']>;
 type ProgressRecorder = Awaited<ReturnType<typeof progressRecorder>>;
 
@@ -309,7 +368,11 @@ async function progressRecorder(
       case 'planned':
         event(`plan-${e.spec}`, 'plan', `${e.spec} 계획 · 보강 제안 ${e.suggestions}개`);
         if (e.prepFlows.length)
-          event(`prep-${e.spec}`, 'prep_flow', `새로 만듦: ${e.prepFlows.map((f) => `${f.id} (${f.name})`).join(', ')}`);
+          event(
+            `prep-${e.spec}`,
+            'prep_flow',
+            `새로 만듦: ${e.prepFlows.map((f) => `${f.id} (${f.name})`).join(', ')}`,
+          );
         return progress({ done: e.index + 1 });
       case 'batch_start':
         for (const s of e.sources) active.add(s);
@@ -331,7 +394,8 @@ async function progressRecorder(
         const range = e.rows.length > 1 ? `${e.rows[0]}~${e.rows.at(-1)}` : e.rows[0];
         event(`cases-${e.spec}-${e.rows[0]}`, 'cases', `${e.spec} ${range} 초안 ${e.drafts.length}개`);
         for (const d of e.drafts)
-          if (d.questions.length) event(`q-${d.spec}-${d.rowId}`, 'question', `${d.spec}/${d.rowId}: ${d.questions.join(' / ')}`);
+          if (d.questions.length)
+            event(`q-${d.spec}-${d.rowId}`, 'question', `${d.spec}/${d.rowId}: ${d.questions.join(' / ')}`);
         return progress({
           phase: 'cases',
           done: e.done,

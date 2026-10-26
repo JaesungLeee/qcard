@@ -1,4 +1,4 @@
-import type { CaseBody } from '@qcard/shared';
+import type { CaseBody, CaseReviseJob, SpecQuestion } from '@qcard/shared';
 import { describe, expect, it } from 'vitest';
 import { ConflictError } from '../../data/api';
 import { createMemoryApi } from '../../data/memory';
@@ -9,7 +9,14 @@ import {
   diffLines,
   filterCases,
   caseTree,
+  groupByCase,
   groupRows,
+  hostSupport,
+  nextOpenCategory,
+  NO_CASE_FEATURE,
+  pickCategory,
+  questionCategories,
+  revisionView,
   inScope,
   isDirty,
   orderByGroup,
@@ -84,7 +91,12 @@ describe('groupRows', () => {
     const p2 = paginate(all, 2, 10);
     const rows = groupRows(p2.items, all);
     // 첫 묶음(16개)이 1페이지에서 이어진다
-    expect(rows[0]).toMatchObject({ kind: 'group', subFeature: '온보딩을 처음부터 끝까지 밟는다', total: 15, continued: true });
+    expect(rows[0]).toMatchObject({
+      kind: 'group',
+      subFeature: '온보딩을 처음부터 끝까지 밟는다',
+      total: 15,
+      continued: true,
+    });
     expect(rows.filter((r) => r.kind === 'case')).toHaveLength(10);
     const second = rows.filter((r) => r.kind === 'group')[1];
     expect(second).toMatchObject({ continued: false });
@@ -125,6 +137,100 @@ describe('caseTree · inScope', () => {
       flow.count,
     );
     expect(d.cases.filter((c) => inScope(c, { feature: '없는 기능', subFeature: null }))).toHaveLength(0);
+  });
+});
+
+describe('스펙 확인 질문 카테고리', () => {
+  const q = (id: string, caseIds: string[], status: SpecQuestion['status'] = 'open'): SpecQuestion => ({
+    id,
+    requirementId: 'R',
+    caseIds,
+    text: id,
+    assignee: '',
+    status,
+    comments: [],
+  });
+
+  it('연결된 첫 케이스의 기능 › 유저 플로우로 묶고 케이스 분류 순서를 따른다', async () => {
+    const d = await doc130();
+    const [f] = caseTree(d.cases);
+    const [a, b] = [f!.flows[0]!, f!.flows[1]!].map((fl) => d.cases.find((c) => c.subFeature === fl.subFeature)!);
+    const cats = questionCategories({
+      cases: d.cases,
+      questions: [q('Q-1', [b!.tcId]), q('Q-2', [a!.tcId], 'answered'), q('Q-3', ['없는 케이스']), q('Q-4', [b!.tcId])],
+    });
+    expect(cats.map((c) => [c.subFeature, c.questions.map((x) => x.id), c.open])).toEqual([
+      [a!.subFeature, ['Q-2'], 0],
+      [b!.subFeature, ['Q-1', 'Q-4'], 2],
+      ['', ['Q-3'], 1],
+    ]);
+    expect(cats[2]!.feature).toBe(NO_CASE_FEATURE);
+  });
+
+  it('주소의 질문 → 주소의 분류 → 미답변 있는 첫 카테고리 순으로 고르고, 다음은 미답변 남은 곳', () => {
+    const cats = [
+      { feature: 'F', subFeature: 'a', open: 0, questions: [q('Q-1', [], 'answered')] },
+      { feature: 'F', subFeature: 'b', open: 1, questions: [q('Q-2', [])] },
+      { feature: 'F', subFeature: 'c', open: 1, questions: [q('Q-3', [])] },
+    ];
+    const none = { question: null, feature: null, flow: null };
+    expect(pickCategory(cats, none)).toBe(cats[1]);
+    expect(pickCategory(cats, { ...none, feature: 'F', flow: 'a' })).toBe(cats[0]);
+    expect(pickCategory(cats, { question: 'Q-3', feature: 'F', flow: 'a' })).toBe(cats[2]);
+    expect(pickCategory([], none)).toBeUndefined();
+    expect(nextOpenCategory(cats, cats[1]!)).toBe(cats[2]);
+    expect(nextOpenCategory(cats, cats[2]!)).toBe(cats[1]);
+    expect(nextOpenCategory([cats[0]!, cats[1]!], cats[1]!)).toBeUndefined();
+  });
+
+  it('케이스별로 묶어 보류 케이스와 미답변 질문을 먼저 둔다', () => {
+    const groups = groupByCase([q('Q-1', ['TC-1'], 'answered'), q('Q-2', ['TC-2']), q('Q-3', ['TC-1'])], []);
+    expect(groups.map((g) => [g.caseId, g.held, g.questions.map((x) => x.id)])).toEqual([
+      ['TC-1', true, ['Q-3', 'Q-1']],
+      ['TC-2', true, ['Q-2']],
+    ]);
+    expect(groupByCase([q('Q-1', ['TC-1'], 'proceed'), q('Q-2', ['TC-2'])], [])[0]!.caseId).toBe('TC-2');
+  });
+});
+
+describe('케이스 수정안 상태 (F-QD-17)', () => {
+  it('답변된 질문이 있으면 요청할 수 있고, 처리 안 된 최근 수정안이 상태를 정한다', async () => {
+    const d = await doc130();
+    const [rev] = await api().listCaseRevisions(DOC130);
+    const c = d.cases.find((x) => x.tcId === rev!.input.tcId)!;
+    const job = (over: Partial<CaseReviseJob>): CaseReviseJob => ({ ...rev!, ...over });
+
+    expect(revisionView(c, d.questions, [])).toEqual({ kind: 'ready' });
+    const unanswered = d.cases.find((x) => d.questions.some((q) => q.status === 'open' && q.caseIds.includes(x.tcId)))!;
+    expect(revisionView(unanswered, d.questions, [])).toEqual({ kind: 'none' });
+
+    expect(revisionView(c, d.questions, [rev!])).toMatchObject({ kind: 'revise', stale: false });
+    expect(revisionView({ ...c, rev: c.rev + 1 }, d.questions, [rev!])).toMatchObject({ kind: 'revise', stale: true });
+    expect(revisionView(c, d.questions, [job({ status: 'running', result: undefined })]).kind).toBe('waiting');
+    expect(revisionView(c, d.questions, [job({ status: 'paused', result: undefined })]).kind).toBe('stopped');
+    expect(
+      revisionView(c, d.questions, [job({ result: { kind: 'no_change', reason: '그대로', tokens: 0, costUsd: 0 } })]),
+    ).toMatchObject({ kind: 'no_change', reason: '그대로' });
+    // 처리한(적용·버린) 수정안은 내려가고 다시 요청할 수 있다
+    expect(revisionView(c, d.questions, [job({ outcome: { kind: 'applied', by: 'x', at: 't' } })])).toEqual({
+      kind: 'ready',
+    });
+  });
+});
+
+describe('hostSupport — 옛 호스트 알아보기', () => {
+  const now = Date.parse('2026-10-26T10:00:00Z');
+  const host = (over: object = {}) => ({ id: 'h', name: 'PC', lastSeen: '2026-10-26T09:59:30Z', ...over });
+
+  it('켜진 호스트 중 하나라도 처리하면 ok, 모두 옛 버전이면 outdated, 켜진 게 없으면 offline', () => {
+    const fresh = host({ jobs: ['qa_doc_generate', 'run_cycle', 'case_revise'] });
+    // jobs가 없는 호스트는 이 필드보다 오래됐다 — QA 문서 생성·Run 시작만 한다
+    expect(hostSupport([host()], 'case_revise', now)).toBe('outdated');
+    expect(hostSupport([host()], 'qa_doc_generate', now)).toBe('ok');
+    expect(hostSupport([host(), fresh], 'case_revise', now)).toBe('ok');
+    expect(hostSupport([fresh], 'case_revise', now)).toBe('ok');
+    expect(hostSupport([{ ...fresh, lastSeen: '2026-10-26T09:00:00Z' }], 'case_revise', now)).toBe('offline');
+    expect(hostSupport([], 'case_revise', now)).toBe('offline');
   });
 });
 
@@ -258,10 +364,7 @@ describe('coverage · prepFlowUsage', () => {
     const d = await doc130();
     const usage = prepFlowUsage(d.cases);
     expect(usage.get('pf-clean')).toHaveLength(61);
-    const total = ['pf-habit', 'pf-mate', 'pf-guide', 'pf-done'].reduce(
-      (n, id) => n + (usage.get(id)?.length ?? 0),
-      0,
-    );
+    const total = ['pf-habit', 'pf-mate', 'pf-guide', 'pf-done'].reduce((n, id) => n + (usage.get(id)?.length ?? 0), 0);
     expect(total).toBeLessThanOrEqual(61);
   });
 });

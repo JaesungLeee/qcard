@@ -6,12 +6,12 @@ import { createFirebaseApi, writeAll } from '@qcard/data/firebase';
 import { seedDocs } from '@qcard/data/seed';
 import { GITHUB, PEOPLE } from '@qcard/fixtures';
 import { PlanLimitError, type LlmClient } from '@qcard/llm';
-import type { QaDocJob } from '@qcard/shared';
-import { fakeGeneratorLlm } from '@qcard/qadoc';
+import type { CaseReviseJob, QaDocJob } from '@qcard/shared';
+import { fakeGeneratorLlm, fakeReviseLlm } from '@qcard/qadoc';
 import { setLogLevel, type Firestore } from 'firebase/firestore';
 import type { FirebaseStorage } from 'firebase/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { claimJob, heartbeat, pendingJobs, processJob } from '../src';
+import { claimJob, heartbeat, HOST_JOBS, pendingJobs, processJob, processReviseJob } from '../src';
 
 /*
  * QA 문서 생성 작업 (PRD §5.2, §6.2): 웹이 스펙을 올려 작업을 만들고 → 요청자의 호스트가 받아 생성 → Firestore에 저장.
@@ -181,7 +181,78 @@ describe('QA 문서 생성 작업', () => {
     const after = await lead.api.listJobEvents(PROJECT, job.id);
     expect(after.filter((e) => e.kind === 'start').map((e) => e.id)).toEqual(['start', `restart-${before.length}`]);
     expect(after.filter((e) => e.kind === 'plan')).toHaveLength(1);
-    expect(after.filter((e) => e.kind === 'warning')).toHaveLength(before.filter((e) => e.kind === 'warning').length + 1);
+    expect(after.filter((e) => e.kind === 'warning')).toHaveLength(
+      before.filter((e) => e.kind === 'warning').length + 1,
+    );
+  });
+
+  it('케이스 수정안: 답변한 뒤 요청하면 내 호스트가 출처 행과 답변으로 수정안을 만들고, 케이스는 그대로 둔다 (F-QD-17)', async () => {
+    const lead = as(PEOPLE.lead);
+    const first = await lead.api.requestQaDoc(PROJECT, { appVersion: '2.0.0', files: FILES });
+    await processJob(lead.deps(fakeGeneratorLlm().llm), (await claimJob(lead.db, first, 'pc', 'now'))!);
+    const ref = { projectId: PROJECT, docId: 'doc-2.0.0' };
+    const before = await lead.api.getQaDoc(ref);
+    const q = before.questions[0]!;
+    await lead.api.resolveQuestion(ref, q.id, { kind: 'answer', text: '모달이 아니라 화면 안 안내입니다.' });
+
+    // 대기 중인 QA 문서 생성보다 수정안을 먼저 가져간다
+    const later = await lead.api.requestQaDoc(PROJECT, { appVersion: '2.1.0', files: FILES, prevDocId: 'doc-2.0.0' });
+    const job = await lead.api.requestCaseRevision(ref, q.caseIds[0]!);
+    expect((await pendingJobs(lead.db, lead.uid)).map((j) => j.id)).toEqual([job.id, later.id]);
+
+    const current = before.cases.find((c) => c.tcId === job.input.tcId)!;
+    const fake = fakeReviseLlm({
+      decision: 'revise',
+      reason: '답변대로 안내 위치를 바꿨다.',
+      case: {
+        title: current.title,
+        preconditions: current.preconditions,
+        data: null,
+        account_kind: null,
+        steps: current.steps.map((s) => ({ text: s.text, manual: s.manual, risk: null })),
+        points: [
+          { target: '재시도 안내', compare: 'visible', expected: '화면 안에 재시도 안내가 보인다', method: 'tree' },
+        ],
+        priority: current.priority,
+        type: current.type,
+        platform: current.platform,
+        mode: current.mode,
+      },
+    });
+    const running = (await claimJob(lead.db, job, 'pc', 'now')) as CaseReviseJob;
+    const done = await processReviseJob(lead.deps(fake.llm), running);
+    expect(done).toMatchObject({ status: 'done', result: { kind: 'revise', reason: '답변대로 안내 위치를 바꿨다.' } });
+    expect(fake.prompts[0]).toContain('→ 답변: 모달이 아니라 화면 안 안내입니다.');
+    expect(fake.prompts[0]).toContain('[EC-001]');
+
+    // 다른 멤버도 웹에서 수정안을 본다
+    const qa = as(PEOPLE.qa);
+    const [seen] = await qa.api.listCaseRevisions(ref);
+    expect(seen).toMatchObject({ id: job.id, status: 'done' });
+    expect(seen!.result?.kind === 'revise' && seen!.result.body.verificationPoints[0]!.expected).toBe(
+      '화면 안에 재시도 안내가 보인다',
+    );
+    // 케이스는 아직 그대로다 (답변으로 보류만 풀렸다)
+    expect((await qa.api.getQaDoc(ref)).cases.find((c) => c.tcId === job.input.tcId)).toMatchObject({
+      rev: current.rev,
+      verificationPoints: current.verificationPoints,
+    });
+  });
+
+  it('케이스 수정안도 플랜 한도면 일시정지로 남는다', async () => {
+    const lead = as(PEOPLE.lead);
+    const first = await lead.api.requestQaDoc(PROJECT, { appVersion: '2.0.0', files: FILES });
+    await processJob(lead.deps(fakeGeneratorLlm().llm), (await claimJob(lead.db, first, 'pc', 'now'))!);
+    const ref = { projectId: PROJECT, docId: 'doc-2.0.0' };
+    const q = (await lead.api.getQaDoc(ref)).questions[0]!;
+    await lead.api.resolveQuestion(ref, q.id, { kind: 'answer', text: '화면 안 안내' });
+    const job = await lead.api.requestCaseRevision(ref, q.caseIds[0]!);
+    const failing = { create: () => Promise.reject(new PlanLimitError('5시간 한도')) } as unknown as LlmClient;
+    const paused = await processReviseJob(
+      lead.deps(failing),
+      (await claimJob(lead.db, job, 'pc', 'now')) as CaseReviseJob,
+    );
+    expect(paused).toMatchObject({ status: 'paused', error: { kind: 'plan_limit' } });
   });
 
   it('Viewer는 요청할 수 없고, 스펙 묶음은 만든 뒤 바꿀 수 없다', async () => {
@@ -205,7 +276,8 @@ describe('QA 문서 생성 작업', () => {
     });
     // 호스트 토큰(host 클레임)으로 접속한 호스트
     const hostDb = env.authenticatedContext(lead.uid, { host: 'mbp' }).firestore() as unknown as Firestore;
-    const beat = { id: 'mbp', name: 'MacBook Pro', lastSeen: '2026-10-22T10:00:00Z' };
+    // 처리할 수 있는 작업 종류를 함께 보내 웹이 옛 호스트를 알아본다
+    const beat = { id: 'mbp', name: 'MacBook Pro', lastSeen: '2026-10-22T10:00:00Z', jobs: HOST_JOBS };
     await heartbeat(hostDb, lead.uid, beat);
     expect(await lead.api.myHosts()).toEqual([beat]);
     expect(await as(PEOPLE.qa).api.myHosts()).toEqual([]);

@@ -765,9 +765,43 @@ export const RunCycleJob = z.object({
 });
 export type RunCycleJob = z.infer<typeof RunCycleJob>;
 
+/**
+ * 답변 기반 케이스 수정안 (F-QD-17): 답변된 스펙 확인 질문을 케이스에 반영한 수정안을 요청자의 호스트가 만든다.
+ * 케이스는 바꾸지 않는다 — 요청자가 웹에서 diff를 보고 적용(일반 편집과 같은 낙관적 잠금)하거나 버린다
+ */
+export const CaseReviseJob = z.object({
+  ...JobBase,
+  kind: z.literal('case_revise'),
+  input: z.object({
+    docId: z.string(),
+    tcId: z.string(),
+    /** 반영할 답변된 질문 */
+    questionIds: z.array(z.string()),
+    /** 요청할 때의 케이스 버전. 적용할 때 최신이 아니면 다시 적용 화면으로 간다 */
+    baseRev: z.number(),
+  }),
+  result: z
+    .discriminatedUnion('kind', [
+      z.object({
+        kind: z.literal('revise'),
+        reason: z.string(),
+        body: CaseBody,
+        /** 근거가 없어 `(추정)`으로 바꾼 버튼 이름 */
+        guessed: z.array(z.string()),
+        tokens: z.number(),
+        costUsd: z.number(),
+      }),
+      z.object({ kind: z.literal('no_change'), reason: z.string(), tokens: z.number(), costUsd: z.number() }),
+    ])
+    .optional(),
+  /** 사람이 처리한 결과. 처리한 수정안은 질문 화면에서 내려간다 */
+  outcome: z.object({ kind: z.enum(['applied', 'dismissed']), by: z.string(), at: z.string() }).optional(),
+});
+export type CaseReviseJob = z.infer<typeof CaseReviseJob>;
+
 /** 호스트 에이전트가 처리할 작업 (PRD §6.2·6.4) */
-export const Job = z.discriminatedUnion('kind', [QaDocJob, RunCycleJob]);
-export type Job = QaDocJob | RunCycleJob;
+export const Job = z.discriminatedUnion('kind', [QaDocJob, RunCycleJob, CaseReviseJob]);
+export type Job = QaDocJob | RunCycleJob | CaseReviseJob;
 
 /**
  * 호스트 에이전트 연결 상태 (PRD §6.4 Host, F-DB-09). 실행 중인 호스트가 주기적으로 `lastSeen`을 갱신한다.
@@ -800,8 +834,16 @@ export const Host = z.object({
    * 콘솔은 127.0.0.1에만 열려 있어 이 주소는 그 PC의 브라우저에서만 쓸 수 있다
    */
   consoleUrl: z.string().optional(),
+  /** 이 호스트가 처리할 수 있는 작업 종류. 없으면 이 필드보다 오래된 호스트다 (QA 문서 생성·Run 시작만) */
+  jobs: z.array(z.string()).optional(),
 });
 export type Host = z.infer<typeof Host>;
+
+/** 이 필드가 생기기 전 호스트가 처리하던 작업 */
+const LEGACY_HOST_JOBS: readonly string[] = ['qa_doc_generate', 'run_cycle'];
+/** 호스트가 이 종류의 작업을 처리하는가. 옛 호스트는 모르는 작업을 건너뛰어 영영 대기로 남는다 */
+export const hostHandles = (host: Pick<Host, 'jobs'>, kind: Job['kind']) =>
+  (host.jobs ?? LEGACY_HOST_JOBS).includes(kind);
 /** 이 시간 안에 신호가 있으면 연결된 것으로 본다 (호스트는 30초마다 갱신) */
 export const HOST_ONLINE_MS = 90_000;
 

@@ -23,6 +23,7 @@ import {
   restoration,
   type AccountSecret,
   type Actor,
+  type CaseReviseJob,
   type HostConnection,
   type Member,
   type TestAccount,
@@ -42,6 +43,8 @@ import {
 import { localRunCycle, type LocalRun } from './localRuns';
 import {
   approvalFor,
+  caseReviseRequest,
+  closedRevision,
   confirmedResult,
   cycleSummary,
   isActiveCycle,
@@ -477,6 +480,28 @@ export function createMemoryApi(
         db.jobs[i] = retriedJob(db.jobs[i]!, actor().uid);
       });
     },
+    async requestCaseRevision({ projectId, docId }, tcId) {
+      return rules(() => {
+        requireEditor(membersOf(projectId), actor().uid);
+        const job = caseReviseRequest(doc(docId), tcId, db.jobs, actor(), now(), `job-m${db.jobs.length + 1}`);
+        db.jobs.unshift(job);
+        return job;
+      });
+    },
+    async listCaseRevisions({ projectId, docId }) {
+      return wait(
+        db.jobs.filter(
+          (j): j is CaseReviseJob => j.projectId === projectId && j.kind === 'case_revise' && j.input.docId === docId,
+        ),
+      );
+    },
+    async closeCaseRevision(projectId, jobId, outcome) {
+      return rules(() => {
+        const i = db.jobs.findIndex((j) => j.projectId === projectId && j.id === jobId);
+        if (i < 0) throw new NotFoundError(`작업 없음: ${jobId}`);
+        db.jobs[i] = closedRevision(db.jobs[i]!, outcome, actor(), now());
+      });
+    },
     async myHosts() {
       // 시연: 이재성만 호스트 에이전트를 켜 두었다 (다른 사용자로 바꾸면 "호스트 꺼짐" 안내를 볼 수 있다)
       if (currentUser !== PEOPLE.lead || !connections.some((c) => c.id === DEMO_HOST)) return wait([]);
@@ -488,6 +513,7 @@ export function createMemoryApi(
           // 시드 사이클(1.3.0 1차 회귀)의 대상 — 웹에서 [내 호스트에서 실행]을 볼 수 있게
           devices: [{ serial: '3A281FDH2000AB', model: 'Pixel 8', osMajor: 16, resolution: '1080×2400' }],
           claudeCode: { version: '2.1.308', loggedIn: true, subscriptionType: 'max' },
+          jobs: ['qa_doc_generate', 'run_cycle', 'case_revise'],
         },
       ]);
     },

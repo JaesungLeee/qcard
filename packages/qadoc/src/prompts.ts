@@ -169,3 +169,34 @@ export const CASE_SYSTEM = `너는 Android 앱 QA 문서 작성자다. 스펙의
 
 ## 변경된 행
 "이전 케이스"가 함께 오면 이전 버전 스펙으로 만들었고 사람이 고쳤을 수 있는 케이스다. 바뀐 스펙에 맞게 다시 만들되, 아직 유효한 사람의 수정(단계 순서·표현·수동 표시·포인트 구분)은 유지한다. 이미 답이 달린 질문은 다시 묻지 않는다.`;
+
+// ---------------------------------------------------------------- 3. 케이스 수정안 (F-QD-17)
+
+export const ReviseOutput = z.object({
+  decision: z
+    .enum(['revise', 'no_change'])
+    .describe('답변을 반영해 케이스를 바꿔야 하면 revise, 지금 케이스가 이미 맞으면 no_change'),
+  reason: z
+    .string()
+    .describe('검토자에게 보일 근거. revise면 무엇을 왜 바꿨는지, no_change면 왜 바꿀 것이 없는지 한두 문장'),
+  case: GenCase.omit({ row_id: true, questions: true })
+    .nullable()
+    .describe('revise일 때 고친 케이스 전체. no_change면 null'),
+});
+export type ReviseOutput = z.infer<typeof ReviseOutput>;
+
+// 필드 규칙은 케이스 변환과 같다 (케이스 변환 프롬프트를 바꾸면 그 녹화가 깨지므로 잘라서 쓴다)
+const CASE_RULES = CASE_SYSTEM.slice(CASE_SYSTEM.indexOf('## 실행 환경'), CASE_SYSTEM.indexOf('## 변경된 행')).trim();
+
+export const REVISE_SYSTEM = `너는 Android 앱 QA 문서 작성자다. 사람이 검토 중인 케이스 하나와, 그 케이스를 만들 때 생긴 스펙 확인 질문에 기획자·개발자가 단 답변을 받는다.
+답변을 케이스에 반영한 수정안을 만들거나, 반영할 것이 없으면 no_change로 답한다.
+
+## 수정 원칙
+- 답변이 정한 내용만 바꾼다. 답변과 관계없는 단계·포인트·필드는 글자 하나도 바꾸지 않는다. 사람이 고친 표현·순서·수동 표시는 그대로 둔다.
+- 답변이 기대 결과의 기준을 정하면 그 검증 포인트를 고친다(기준값·대상·compare·method). 답변이 사전조건이나 만드는 방법을 알려 주면 사전조건·단계를 고친다.
+- 답변이 지금 케이스와 같은 뜻이면(이미 그렇게 쓰여 있다) no_change. 답변이 케이스로 확인할 수 없는 내용이면(구현 설명 등) no_change로 두고 이유를 쓴다.
+- 답변이 스펙 행의 Then과 다르면 답변을 따른다. 스펙은 아직 고쳐지지 않았을 수 있다.
+- revise면 case에 고친 케이스 전체를 낸다(바꾸지 않은 부분도 그대로 포함). 준비 플로우는 코드가 유지하므로 신경 쓰지 않는다.
+- reason은 검토자가 diff를 보기 전에 읽는 요약이다. 어떤 답변 때문에 무엇을 바꿨는지 쓴다.
+
+${CASE_RULES}`;

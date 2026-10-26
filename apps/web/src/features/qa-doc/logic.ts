@@ -1,5 +1,7 @@
 // QA 문서 검토 화면의 순수 로직: 필터·그룹·diff·재적용·커버리지. 화면 코드와 분리해 테스트한다.
 import {
+  HOST_ONLINE_MS,
+  hostHandles,
   PLATFORM_LABEL,
   POINT_COMPARE_LABEL,
   POINT_METHOD_LABEL,
@@ -7,8 +9,12 @@ import {
   TEST_TYPE_LABEL,
   type CaseBody,
   type CaseChange,
+  type CaseReviseJob,
+  type Host,
+  type Job,
   type QADocument,
   type Requirement,
+  type SpecQuestion,
   type TestCase,
 } from '@qcard/shared';
 
@@ -216,6 +222,127 @@ export function caseTree(cases: TestCase[]): FeatureNode[] {
     if (c.change === 'new') f.hasNew = true;
   }
   return [...features.values()];
+}
+
+// ---------------------------------------------------------------- 스펙 확인 질문
+
+/** 질문 카테고리: 연결된 첫 케이스의 기능 › 세부 기능. 케이스 탭 분류 목록과 같은 순서 */
+export type QuestionCategory = {
+  feature: string;
+  subFeature: string;
+  open: number;
+  questions: SpecQuestion[];
+};
+
+/** 연결 케이스가 문서에 없는 질문의 카테고리 */
+export const NO_CASE_FEATURE = '(연결 케이스 없음)';
+
+export function questionCategories(doc: Pick<QADocument, 'cases' | 'questions'>): QuestionCategory[] {
+  const byId = new Map(doc.cases.map((c) => [c.tcId, c]));
+  const rank = new Map<string, number>();
+  for (const f of caseTree(doc.cases)) for (const fl of f.flows) rank.set(`${f.feature}\0${fl.subFeature}`, rank.size);
+  const cats = new Map<string, QuestionCategory>();
+  for (const q of doc.questions) {
+    const c = q.caseIds.map((id) => byId.get(id)).find((x) => x !== undefined);
+    const feature = c ? c.feature : NO_CASE_FEATURE;
+    const subFeature = c ? c.subFeature : '';
+    const key = `${feature}\0${subFeature}`;
+    let cat = cats.get(key);
+    if (!cat) {
+      cat = { feature, subFeature, open: 0, questions: [] };
+      cats.set(key, cat);
+    }
+    cat.questions.push(q);
+    if (q.status === 'open') cat.open++;
+  }
+  return [...cats.entries()]
+    .sort(([a], [b]) => (rank.get(a) ?? Infinity) - (rank.get(b) ?? Infinity))
+    .map(([, cat]) => cat);
+}
+
+/** 보여 줄 카테고리: 주소의 질문 → 주소의 분류 → 미답변이 있는 첫 카테고리 → 첫 카테고리 */
+export function pickCategory(
+  cats: QuestionCategory[],
+  want: { question: string | null; feature: string | null; flow: string | null },
+): QuestionCategory | undefined {
+  return (
+    cats.find((c) => c.questions.some((q) => q.id === want.question)) ??
+    cats.find((c) => c.feature === want.feature && c.subFeature === (want.flow ?? '')) ??
+    cats.find((c) => c.open > 0) ??
+    cats[0]
+  );
+}
+
+/** 현재 카테고리 다음으로 미답변이 남은 카테고리(끝에 가면 처음부터) */
+export function nextOpenCategory(cats: QuestionCategory[], current: QuestionCategory): QuestionCategory | undefined {
+  const i = cats.indexOf(current);
+  return [...cats.slice(i + 1), ...cats.slice(0, i)].find((c) => c.open > 0);
+}
+
+export type QuestionGroup = { caseId: string | null; case?: TestCase; held: boolean; questions: SpecQuestion[] };
+
+/** 카테고리 안을 연결된 첫 케이스별로 묶는다. 보류 케이스 먼저, 묶음 안에서는 미답변 먼저 */
+export function groupByCase(questions: SpecQuestion[], cases: TestCase[]): QuestionGroup[] {
+  const groups = new Map<string | null, QuestionGroup>();
+  for (const q of questions) {
+    const caseId = q.caseIds[0] ?? null;
+    let g = groups.get(caseId);
+    if (!g) {
+      g = { caseId, case: cases.find((c) => c.tcId === caseId), held: false, questions: [] };
+      groups.set(caseId, g);
+    }
+    g.questions.push(q);
+    if (q.status === 'open') g.held = true;
+  }
+  const openFirst = (a: SpecQuestion, b: SpecQuestion) => Number(b.status === 'open') - Number(a.status === 'open');
+  return [...groups.values()]
+    .map((g) => ({ ...g, questions: [...g.questions].sort(openFirst) }))
+    .sort((a, b) => Number(b.held) - Number(a.held));
+}
+
+/** 케이스 하나의 수정안 상태 (F-QD-17) */
+export type RevisionView =
+  /** 답변된 질문이 없다 */
+  | { kind: 'none' }
+  /** 답변된 질문이 있고 처리 안 된 수정안이 없다 → 요청할 수 있다 */
+  | { kind: 'ready' }
+  | { kind: 'waiting'; job: CaseReviseJob }
+  | { kind: 'stopped'; job: CaseReviseJob }
+  /** stale: 요청한 뒤 케이스가 바뀌어 그대로 적용할 수 없다 */
+  | { kind: 'revise'; job: CaseReviseJob; body: CaseBody; reason: string; guessed: string[]; stale: boolean }
+  | { kind: 'no_change'; job: CaseReviseJob; reason: string };
+
+/** 가장 최근의 처리 안 된 수정안으로 상태를 정한다. `jobs`는 새것 먼저 */
+export function revisionView(c: TestCase, questions: SpecQuestion[], jobs: CaseReviseJob[]): RevisionView {
+  const job = jobs.find((j) => j.input.tcId === c.tcId);
+  if (job && !job.outcome) {
+    if (job.status === 'queued' || job.status === 'running') return { kind: 'waiting', job };
+    if (job.status !== 'done') return { kind: 'stopped', job };
+    const r = job.result;
+    if (r?.kind === 'revise')
+      return {
+        kind: 'revise',
+        job,
+        body: r.body,
+        reason: r.reason,
+        guessed: r.guessed,
+        stale: c.rev !== job.input.baseRev,
+      };
+    if (r?.kind === 'no_change') return { kind: 'no_change', job, reason: r.reason };
+  }
+  return questions.some((q) => q.status === 'answered' && q.caseIds.includes(c.tcId))
+    ? { kind: 'ready' }
+    : { kind: 'none' };
+}
+
+/**
+ * 내 호스트가 이 작업을 지금 처리할 수 있는가: 켜진 호스트 중 하나라도 처리하면 ok,
+ * 켜진 호스트가 모두 옛 버전이면 outdated(요청해도 대기로 남는다), 켜진 호스트가 없으면 offline
+ */
+export function hostSupport(hosts: Host[], kind: Job['kind'], now = Date.now()): 'ok' | 'offline' | 'outdated' {
+  const online = hosts.filter((h) => now - Date.parse(h.lastSeen) < HOST_ONLINE_MS);
+  if (!online.length) return 'offline';
+  return online.some((h) => hostHandles(h, kind)) ? 'ok' : 'outdated';
 }
 
 export const PAGE_SIZES = [10, 20, 50] as const;
