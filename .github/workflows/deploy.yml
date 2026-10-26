@@ -1,10 +1,10 @@
-# main에 푸시하면 검증한 뒤 바뀐 부분만 운영(qcard-d2ade)에 배포한다. PR은 검증만 한다.
-# Google Cloud 인증은 Workload Identity Federation(키 파일 없음) — 설정은 docs/dev/ci.md
+# main에 푸시하면 검증한 뒤 바뀐 부분만 운영(qcard-d2ade)에 배포한다. develop 푸시와 PR은 검증만 한다.
+# Google Cloud 인증은 Workload Identity Federation(키 파일 없음) — 설정은 docs/dev/ci.md, 브랜치 전략은 docs/dev/branching.md
 name: deploy
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -49,7 +49,7 @@ jobs:
       - run: pnpm verify
 
   deploy:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: verify
     runs-on: ubuntu-latest
     # GitHub 저장소 설정 → Environments → production에서 승인자를 걸면 배포 전에 멈춘다
