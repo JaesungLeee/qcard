@@ -117,13 +117,15 @@ service cloud.firestore {
         allow create: if canEdit(p);
         allow update, delete: if false;
       }
-      // 테스트 사이클. 만들 때 고정한 스냅샷(TC ID·내용 해시)과 케이스 사본은 바꾸지 않는다 (F-CY-02)
+      // 테스트 사이클. 만들 때 고정한 스냅샷(TC ID·내용 해시)·QA 문서·빌드와 케이스 사본은 바꾸지 않는다 (F-CY-01·02)
+      // — 새 빌드는 새 사이클로 돌린다(한 사이클에 두 빌드의 결과가 섞이지 않게)
       match /cycles/{c} {
         allow read: if isMember(p);
         allow create, delete: if canEdit(p);
         allow update: if canEdit(p)
           && request.resource.data.snapshot == resource.data.snapshot
-          && request.resource.data.docId == resource.data.docId;
+          && request.resource.data.docId == resource.data.docId
+          && request.resource.data.buildId == resource.data.buildId;
       }
       match /cycles/{c}/cases/{tcId} {
         allow read: if isMember(p);
