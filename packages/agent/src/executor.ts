@@ -20,7 +20,7 @@ import {
   parseToolUse,
   toolUses,
 } from '@qcard/llm';
-import { EXECUTOR_TOOL_INPUTS, RISK_KIND_LABEL, type CaseStep, type ExecStep } from '@qcard/shared';
+import { EXECUTOR_TOOL_INPUTS, RISK_KIND_LABEL, type CaseStep, type ExecStep, type ExecutorToolInput } from '@qcard/shared';
 import {
   clockOf,
   imageBlock,
@@ -64,10 +64,14 @@ export const EXECUTOR_SYSTEM = `너는 Android 앱 QA Executor다. QA 케이스�
 - tap·tap_point·input_text를 부를 때마다 결과를 따져 risk를 채운다: 실제 사람에게 닿는가, 돈이 움직이는가, 되돌릴 수 없는가, 대상 앱 밖인가, 계정·보안이 바뀌는가, 현실에서 일이 일어나는가, 본인인증·인증번호·실제 개인정보가 필요한가. 하나라도 그렇거나 결과를 모르겠으면 risk에 종류와 이유를 쓰고, 아니면 null. 위험 액션은 실행자가 승인해야 실행되거나 실행자가 직접 한다.
 - 본인인증·인증번호·소셜 로그인 화면에서는 아무것도 입력하지 않는다(risk=identity로 실행자에게 넘긴다).`;
 
+type GiveUpKind = ExecutorToolInput<'give_up'>['kind'];
+
 export type ExecOutcome = {
   status: 'done' | 'blocked' | 'fail';
   /** blocked·fail 사유 (F-EX-05) */
   reason?: string;
+  /** Agent가 give_up으로 멈췄으면 그 종류 */
+  gaveUp?: GiveUpKind;
   steps: ExecStep[];
   /** 끝낸 케이스 단계 수 */
   stepsDone: number;
@@ -143,7 +147,7 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
   /** 인증 단계가 있는 케이스 — 인앱 웹뷰를 인증 화면으로 본다 (F-EX-10) */
   const withAuth = caseHasAuth(steps);
 
-  const outcome = (status: ExecOutcome['status'], reason?: string): ExecOutcome => {
+  const outcome = (status: ExecOutcome['status'], reason?: string, gaveUp?: GiveUpKind): ExecOutcome => {
     if (reason) thought(env, start, 'system', `${status === 'fail' ? 'Fail' : 'Blocked'}: ${reason}`);
     let from = steps.length - 1;
     while (from > 0 && !operated.has(from)) from--;
@@ -153,6 +157,7 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
     return {
       status,
       reason,
+      ...(gaveUp ? { gaveUp } : {}),
       steps: timeline,
       stepsDone: pointer,
       recoveries,
@@ -377,7 +382,7 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
       }
       if (call.name === 'give_up') {
         const reason = `${call.input.kind}: ${call.input.reason}`;
-        return outcome(call.input.kind === 'crash' ? 'fail' : 'blocked', reason);
+        return outcome(call.input.kind === 'crash' ? 'fail' : 'blocked', reason, call.input.kind);
       }
       if (call.name === 'view_screen') {
         const blocked = screenshotBlocker(env, last);

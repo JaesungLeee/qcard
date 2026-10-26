@@ -1,6 +1,7 @@
 import { cachedSystem, LlmOutputError, MODELS, outputFormat, parseOutput, type LlmClient } from '@qcard/llm';
 import {
   CaseBody,
+  DEFAULT_ACCOUNT_KIND,
   hash,
   type PrepFlow,
   type QADocument,
@@ -168,6 +169,7 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
         ),
         cleanState: clean,
         ...(restore?.kind === 'restore' ? { restoreFlowId: restore.id } : {}),
+        ...(ids.some((id) => flows.find((f) => f.id === id)?.kind === 'login') ? { login: true } : {}),
       });
     }
     for (const s of out.suggestions) {
@@ -271,6 +273,9 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
       continue;
     }
     const start = startOf.get(r.sourceId) ?? { prepFlowIds: [], cleanState: false };
+    if (start.login && !g.account_kind?.trim()) {
+      warnings.push(`${r.tcId}: 로그인 준비 플로우를 쓰는데 계정 종류가 없어 ${DEFAULT_ACCOUNT_KIND}으로 채웠다`);
+    }
     const body = bodyOf(g, r.tcId, start);
     const contentHash = hash(body);
     const asked = g.questions.map((q) => {
