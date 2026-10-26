@@ -169,15 +169,31 @@ export async function restoreProject(ctx: Ctx, data: unknown): Promise<Project> 
   });
 }
 
-/** 삭제 유예가 지난 프로젝트를 하위 문서·초대 토큰까지 영구 삭제한다 (예약 실행) */
-export async function purgeDeletedProjects(db: Firestore, now: string): Promise<string[]> {
+/** Storage에서 접두어 아래 파일을 모두 지운다 (Functions는 기본 버킷, 테스트는 에뮬레이터) */
+export type RemoveFiles = (prefix: string) => Promise<void>;
+
+/**
+ * 삭제 유예가 지난 프로젝트를 영구 삭제한다 (예약 실행, F-TM-12) — Storage 파일(스펙·빌드·스크린샷), 초대 토큰,
+ * 프로젝트 문서와 하위 문서(테스트 계정 비밀값·감사 로그 포함). Storage를 먼저 지워, 중간에 실패해도 `purgeAt`이
+ * 남은 프로젝트를 다음 실행이 처음부터 다시 지운다. 한 프로젝트가 실패해도 나머지는 계속한다.
+ * 지운 프로젝트 id를 돌려준다
+ */
+export async function purgeDeletedProjects(db: Firestore, now: string, removeFiles: RemoveFiles): Promise<string[]> {
   const due = await db.collection('projects').where('purgeAt', '<=', now).get();
+  const purged: string[] = [];
   for (const doc of due.docs) {
-    const tokens = await db.collection('invitationTokens').where('projectId', '==', doc.id).get();
-    await Promise.all(tokens.docs.map((t) => t.ref.delete()));
-    await db.recursiveDelete(doc.ref);
+    try {
+      // 끝의 '/'가 없으면 `demo-app`이 `demo-app-2`의 파일까지 지운다
+      await removeFiles(`projects/${doc.id}/`);
+      const tokens = await db.collection('invitationTokens').where('projectId', '==', doc.id).get();
+      await Promise.all(tokens.docs.map((t) => t.ref.delete()));
+      await db.recursiveDelete(doc.ref);
+      purged.push(doc.id);
+    } catch (e) {
+      console.error(`프로젝트 영구 삭제 실패, 다음 실행에서 다시 지운다: ${doc.id}`, e);
+    }
   }
-  return due.docs.map((d) => d.id);
+  return purged;
 }
 
 // ------------------------------------------------------------------ 멤버
