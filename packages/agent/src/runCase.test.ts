@@ -4,7 +4,7 @@ import { SecretVault, withSecretGuard } from '@qcard/llm';
 import type { PrepFlow, TestCase } from '@qcard/shared';
 import { describe, expect, it } from 'vitest';
 import { fakeClock, type AgentEnv } from './env';
-import { ACCOUNT_SECRET, runCase, type AccountIssue } from './runCase';
+import { ACCOUNT_SECRET, runCase, type AccountIssue, type RunCaseInput } from './runCase';
 import { scriptedLlm, toolUse } from './testing';
 
 /*
@@ -111,15 +111,17 @@ function setup(replies: Parameters<typeof scriptedLlm>[0], password = 'pw-1') {
     saveScreenshot: async () => ({ kind: 'mock', screen: device.current }),
   };
   const issues: [AccountIssue, string][] = [];
-  const run = (tc: TestCase) =>
+  const runWith = (tc: TestCase, extra: Partial<RunCaseInput> = {}) =>
     runCase(env, {
       testCase: tc,
       prepFlows: FLOWS,
       deviceId: 'pixel8',
       account: { kind: '구독자', loginId: 'qa.sub01@moabook.test', totp: false },
       onAccountIssue: (i, d) => issues.push([i, d]),
+      ...extra,
     });
-  return { device, llm, issues, run };
+  const run = (tc: TestCase) => runWith(tc);
+  return { device, llm, issues, run, runWith };
 }
 
 describe('테스트 계정으로 실행 (F-PF-04·08, F-EX-09)', () => {
@@ -136,15 +138,37 @@ describe('테스트 계정으로 실행 (F-PF-04·08, F-EX-09)', () => {
     expect(sent).toContain('테스트 계정(구독자): 로그인 ID qa.sub01@moabook.test, 비밀번호 {{secret.password}}');
   });
 
-  it('로그인 준비 플로우가 실패하면 로그인 실패로 Blocked하고 호스트에 알린다', async () => {
-    const { issues, run } = setup(
-      [...loginReplies, [toolUse('give_up', { kind: 'stuck', reason: '비밀번호 오류 메시지' })]],
+  it('앱이 계정 정보를 거절하면 로그인 실패로 Blocked하고 호스트에 알린다', async () => {
+    const { device, issues, llm, run } = setup(
+      [...loginReplies, [toolUse('give_up', { kind: 'prep_failed', reason: '비밀번호 오류 메시지' })]],
       'wrong',
     );
     const r = await run(testCase());
+    expect(device.current).toBe('error');
     expect(r.verdict).toBe('blocked');
     expect(r.blockedReason).toMatch(/^로그인 실패: 준비 플로우 실패: 로그인/);
     expect(issues.map(([i]) => i)).toEqual(['login_failed']);
+    // 로그인 플로우에서만 인증 거부를 구분하라고 알린다
+    expect(JSON.stringify(llm.requests)).toContain('give_up(kind=prep_failed)');
+  });
+
+  it('계정 탓이 아닌 이유로 로그인 플로우가 멈추면 계정에 표시하지 않는다 (F-PF-08)', async () => {
+    const { issues, run } = setup([[toolUse('give_up', { kind: 'stuck', reason: 'ID 입력란을 찾지 못함' })]]);
+    const r = await run(testCase());
+    expect(r.verdict).toBe('blocked');
+    expect(r.blockedReason).toMatch(/^준비 플로우 실패: 로그인 \(stuck: ID 입력란을 찾지 못함\)/);
+    expect(issues.map(([i]) => i)).toEqual(['login_flow_failed']);
+  });
+
+  it('다른 계정이 남아 있을 수 있으면 클린 상태가 아니어도 앱 데이터를 초기화한다 (F-PF-04)', async () => {
+    const kept = setup([...loginReplies, ...caseReplies]);
+    await kept.run(testCase({ cleanState: false }));
+    expect(kept.device.log).toContain(`stop ${APP}`);
+    expect(kept.device.log).not.toContain(`clear ${APP}`);
+
+    const reset = setup([...loginReplies, ...caseReplies]);
+    await reset.runWith(testCase({ cleanState: false }), { resetApp: true });
+    expect(reset.device.log).toContain(`clear ${APP}`);
   });
 
   it('원복 플로우는 케이스 뒤에 돌고, 실패하면 판정은 그대로 두고 원복 실패를 알린다 (F-PF-09)', async () => {

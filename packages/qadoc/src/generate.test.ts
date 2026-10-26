@@ -251,4 +251,15 @@ describe('generateQaDoc — 응답 확인', () => {
     const { prepFlows } = await run({ llm: fakeGeneratorLlm().llm, prepFlows: [CLEAN_FLOW, home] });
     expect(prepFlows).toEqual([]);
   });
+
+  it('로그인 준비 플로우를 쓰는데 계정 종류가 없으면 기본 종류로 채운다 (F-QD-04)', async () => {
+    const login = { id: 'pf-home', name: '로그인', kind: 'login' as const, check: '홈', steps: [] };
+    const { doc, warnings } = await run({ llm: fakeGeneratorLlm().llm, prepFlows: [CLEAN_FLOW, login] });
+    const caseOf = (src: string) => doc.cases.find((c) => c.sourceId === `sample/${src}`)!;
+    expect(caseOf('TS-001').accountKind).toBe('기본');
+    expect(warnings).toContain(`${caseOf('TS-001').tcId}: 로그인 준비 플로우를 쓰는데 계정 종류가 없어 기본으로 채웠다`);
+    // 모델이 정한 종류는 그대로 둔다
+    expect(caseOf('EC-001').accountKind).toBe('구독자');
+    expect(warnings.join('\n')).not.toContain(caseOf('EC-001').tcId);
+  });
 });
