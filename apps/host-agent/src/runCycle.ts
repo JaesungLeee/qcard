@@ -136,6 +136,7 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
           meter: input.meter,
           onPhase: input.onPhase,
           account: acc.account,
+          resetApp: acc.resetApp,
           onAccountIssue: (issue, detail) => issues.push([issue, detail]),
         });
         if (result.verdict === 'blocked') {

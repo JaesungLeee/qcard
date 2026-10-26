@@ -1,11 +1,15 @@
-import { CaseBody, type PrepFlow } from '@qcard/shared';
+import { CaseBody, DEFAULT_ACCOUNT_KIND, type PrepFlow } from '@qcard/shared';
 import type { SpecDoc, SpecRow } from '@qcard/spec';
 import type { GenCase } from './prompts';
 
 // 생성(generate)과 수정안(revise)이 같이 쓰는 조립·프롬프트 도우미. 패키지 밖으로 내보내지 않는다
 
-/** 행의 시작 상태 (스펙 계획 결과) */
-export type Start = { prepFlowIds: string[]; cleanState: boolean; restoreFlowId?: string };
+/** 행의 시작 상태 (스펙 계획 결과). `login`: 로그인 준비 플로우를 쓴다 — 테스트 계정이 있어야 한다 */
+export type Start = { prepFlowIds: string[]; cleanState: boolean; restoreFlowId?: string; login?: boolean };
+
+/** 필요 계정 종류. 로그인 준비 플로우를 쓰는데 종류가 없으면 기본 종류로 채운다 (F-QD-04) */
+const accountKindOf = (g: GenCase, start: Start) =>
+  g.account_kind?.trim() || (start.login ? DEFAULT_ACCOUNT_KIND : undefined);
 
 export function bodyOf(g: GenCase, tcId: string, start: Start): CaseBody {
   return CaseBody.parse({
@@ -13,7 +17,7 @@ export function bodyOf(g: GenCase, tcId: string, start: Start): CaseBody {
     preconditions: g.preconditions,
     prepFlowIds: start.prepFlowIds,
     cleanState: start.cleanState,
-    ...(g.account_kind?.trim() ? { accountKind: g.account_kind.trim() } : {}),
+    ...(accountKindOf(g, start) ? { accountKind: accountKindOf(g, start) } : {}),
     ...(start.restoreFlowId ? { restoreFlowId: start.restoreFlowId } : {}),
     ...(g.data ? { data: g.data } : {}),
     // 사람 전용 단계는 실행자가 직접 하는 수동 스텝이다
