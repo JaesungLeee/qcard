@@ -24,6 +24,15 @@ pnpm --filter @qcard/qadoc generate <docs/specs 폴더> --out <결과.json> [--o
 
 웹에서 요청한 생성 작업은 호스트 에이전트 `serve`가 처리한다([host-agent.md](host-agent.md)).
 
+## qadoc revise — 케이스 수정안 (Opus, F-QD-17)
+
+```sh
+pnpm --filter @qcard/qadoc revise <docs/specs 폴더> --doc <generate 결과.json> --tc <TC ID> [--answer Q-1=<답변>]
+```
+
+- 답변된 확인 질문으로 케이스 수정안을 만들어 바뀐 필드를 출력한다. `--answer`로 아직 답이 없는 질문에 답을 넣어 볼 수 있다. 플랜 사용량 차감, Firestore에 올리지 않는다.
+- 녹화 위치는 `generate`와 같다(`--cassettes`로 바꾼다). 웹에서 요청한 수정안은 `serve`가 처리하고, 에뮬레이터 시드에는 1.3.0 문서의 스펙 묶음이 있어 그대로 해 볼 수 있다.
+
 ## seed-generated — 결과를 에뮬레이터에 넣기
 
 ```sh
