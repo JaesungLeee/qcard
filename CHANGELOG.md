@@ -4,6 +4,17 @@
 릴리스할 때 Conventional Commits를 보고 작성한다([docs/dev/branching.md](docs/dev/branching.md)).
 버전은 [Semantic Versioning](https://semver.org/)을 따른다.
 
+## [0.2.1](https://github.com/JaesungLeee/qcard/compare/v0.2.0...v0.2.1) (2026-10-26)
+
+`@qcard/host` 0.1.5 → 0.2.1(0.2.0은 npm에 배포하지 않았다). 케이스 수정안과 테스트 계정 배정은 이 호스트부터 동작한다.
+`npm i -g @qcard/host`로 업데이트하고 `qcard serve`를 다시 켠다.
+
+### 버그 수정
+
+* **host:** 계정이 바뀌거나 다음 케이스에 계정이 필요 없으면 앱 데이터를 지워, 다른 계정의 로그인이 기기에 남지 않게 한다 (F-PF-04) ([#7](https://github.com/JaesungLeee/qcard/pull/7)) ([241ef70](https://github.com/JaesungLeee/qcard/commit/241ef7050b56431ecfc1f46eb0d1939313db6bf7))
+* **host:** 앱이 자격 정보를 거절했을 때만 계정을 로그인 실패로 표시하고, 같은 종류가 한 Run에서 두 번 실패하면 배정을 멈춰 계정 풀 전체가 잠기지 않게 한다 (F-PF-08) ([#7](https://github.com/JaesungLeee/qcard/pull/7)) ([241ef70](https://github.com/JaesungLeee/qcard/commit/241ef7050b56431ecfc1f46eb0d1939313db6bf7))
+* **qadoc:** 로그인 준비 플로우를 쓰는데 필요 계정 종류가 비어 있으면 기본 종류로 채운다 (F-QD-04) ([#7](https://github.com/JaesungLeee/qcard/pull/7)) ([241ef70](https://github.com/JaesungLeee/qcard/commit/241ef7050b56431ecfc1f46eb0d1939313db6bf7))
+
 ## [0.2.0](https://github.com/JaesungLeee/qcard/compare/host-v0.1.5...v0.2.0) (2026-10-26)
 
 `@qcard/host` 0.1.5 → 0.2.0. 케이스 수정안과 테스트 계정 배정은 새 호스트가 있어야 동작한다.
