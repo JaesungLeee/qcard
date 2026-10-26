@@ -31,7 +31,7 @@ import { collectionGroup, onSnapshot, query, where } from 'firebase/firestore';
 import { HostDisconnectedError, openHostSession, targetFromEnv } from './connect';
 import { attachScreen, ConsoleService, launchConsole, type OnDemandScreen } from './console';
 import { RESTORED, restoreAwake } from './awake';
-import { claimJob, heartbeat, pendingJobs, processJob, processReviseJob, startRunJobs } from './jobs';
+import { claimJob, heartbeat, HOST_JOBS, pendingJobs, processJob, processReviseJob, startRunJobs } from './jobs';
 import { UploadQueue } from './queue';
 import { firestoreApply } from './sink';
 
@@ -89,6 +89,7 @@ async function beat() {
     lastSeen: new Date().toISOString(),
     devices: list,
     claudeCode: { version: s.version, loggedIn: s.loggedIn, subscriptionType: s.subscriptionType },
+    jobs: HOST_JOBS,
     ...(consoleUi ? { consoleUrl: consoleUi.webUrl() } : {}),
   }).catch((e: Error) => console.error(`연결 신호 실패: ${e.message}`));
   return s;

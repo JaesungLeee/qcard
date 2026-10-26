@@ -513,6 +513,7 @@ export function createMemoryApi(
           // 시드 사이클(1.3.0 1차 회귀)의 대상 — 웹에서 [내 호스트에서 실행]을 볼 수 있게
           devices: [{ serial: '3A281FDH2000AB', model: 'Pixel 8', osMajor: 16, resolution: '1080×2400' }],
           claudeCode: { version: '2.1.308', loggedIn: true, subscriptionType: 'max' },
+          jobs: ['qa_doc_generate', 'run_cycle', 'case_revise'],
         },
       ]);
     },

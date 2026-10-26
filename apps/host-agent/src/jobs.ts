@@ -53,6 +53,9 @@ export type JobDeps = {
   log?: (line: string) => void;
 };
 
+/** 이 호스트가 처리하는 작업 종류. 연결 신호에 실어 보내 웹이 옛 호스트를 알아본다 (Host.jobs) */
+export const HOST_JOBS: Job['kind'][] = ['qa_doc_generate', 'run_cycle', 'case_revise'];
+
 const jobRef = (db: Firestore, j: Pick<Job, 'projectId' | 'id'>) => doc(db, 'projects', j.projectId, 'jobs', j.id);
 /** Firestore는 undefined를 저장하지 못한다 */
 const clean = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;

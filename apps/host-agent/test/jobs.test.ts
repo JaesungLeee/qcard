@@ -11,7 +11,7 @@ import { fakeGeneratorLlm, fakeReviseLlm } from '@qcard/qadoc';
 import { setLogLevel, type Firestore } from 'firebase/firestore';
 import type { FirebaseStorage } from 'firebase/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { claimJob, heartbeat, pendingJobs, processJob, processReviseJob } from '../src';
+import { claimJob, heartbeat, HOST_JOBS, pendingJobs, processJob, processReviseJob } from '../src';
 
 /*
  * QA 문서 생성 작업 (PRD §5.2, §6.2): 웹이 스펙을 올려 작업을 만들고 → 요청자의 호스트가 받아 생성 → Firestore에 저장.
@@ -276,7 +276,8 @@ describe('QA 문서 생성 작업', () => {
     });
     // 호스트 토큰(host 클레임)으로 접속한 호스트
     const hostDb = env.authenticatedContext(lead.uid, { host: 'mbp' }).firestore() as unknown as Firestore;
-    const beat = { id: 'mbp', name: 'MacBook Pro', lastSeen: '2026-10-22T10:00:00Z' };
+    // 처리할 수 있는 작업 종류를 함께 보내 웹이 옛 호스트를 알아본다
+    const beat = { id: 'mbp', name: 'MacBook Pro', lastSeen: '2026-10-22T10:00:00Z', jobs: HOST_JOBS };
     await heartbeat(hostDb, lead.uid, beat);
     expect(await lead.api.myHosts()).toEqual([beat]);
     expect(await as(PEOPLE.qa).api.myHosts()).toEqual([]);

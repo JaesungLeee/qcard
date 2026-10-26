@@ -834,8 +834,16 @@ export const Host = z.object({
    * 콘솔은 127.0.0.1에만 열려 있어 이 주소는 그 PC의 브라우저에서만 쓸 수 있다
    */
   consoleUrl: z.string().optional(),
+  /** 이 호스트가 처리할 수 있는 작업 종류. 없으면 이 필드보다 오래된 호스트다 (QA 문서 생성·Run 시작만) */
+  jobs: z.array(z.string()).optional(),
 });
 export type Host = z.infer<typeof Host>;
+
+/** 이 필드가 생기기 전 호스트가 처리하던 작업 */
+const LEGACY_HOST_JOBS: readonly string[] = ['qa_doc_generate', 'run_cycle'];
+/** 호스트가 이 종류의 작업을 처리하는가. 옛 호스트는 모르는 작업을 건너뛰어 영영 대기로 남는다 */
+export const hostHandles = (host: Pick<Host, 'jobs'>, kind: Job['kind']) =>
+  (host.jobs ?? LEGACY_HOST_JOBS).includes(kind);
 /** 이 시간 안에 신호가 있으면 연결된 것으로 본다 (호스트는 30초마다 갱신) */
 export const HOST_ONLINE_MS = 90_000;
 
