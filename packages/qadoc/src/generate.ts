@@ -114,7 +114,7 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
     flows.unshift(CLEAN_FLOW);
     added.push(CLEAN_FLOW);
   }
-  const startOf = new Map<string, { prepFlowIds: string[]; cleanState: boolean }>();
+  const startOf = new Map<string, Start>();
   const newSuggestions: (Omit<SpecSuggestion, 'id'> & { spec: string })[] = [];
   const replannedSpecs = new Set<string>();
   // 버튼 이름의 근거: 스펙 본문 + 사람이 검토한 기존 준비 플로우
@@ -156,9 +156,17 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
       const ids = r.prep_flow_ids.filter((id) => !unknown.includes(id));
       // 초기화는 다른 준비보다 먼저 한다
       const clean = ids.includes(CLEAN_FLOW.id);
+      // 원복은 restore 플로우만 (준비 순서에는 넣지 않는다, F-PF-09)
+      const restore = r.restore_flow_id ? flows.find((f) => f.id === r.restore_flow_id) : undefined;
+      if (r.restore_flow_id && restore?.kind !== 'restore') {
+        warnings.push(`${spec.name}/${r.row_id}: 원복 플로우가 아닌 ${r.restore_flow_id}를 뺐다`);
+      }
       startOf.set(sourceId(spec.name, r.row_id), {
-        prepFlowIds: clean ? [CLEAN_FLOW.id, ...ids.filter((id) => id !== CLEAN_FLOW.id)] : ids,
+        prepFlowIds: (clean ? [CLEAN_FLOW.id, ...ids.filter((id) => id !== CLEAN_FLOW.id)] : ids).filter(
+          (id) => flows.find((f) => f.id === id)?.kind !== 'restore',
+        ),
         cleanState: clean,
+        ...(restore?.kind === 'restore' ? { restoreFlowId: restore.id } : {}),
       });
     }
     for (const s of out.suggestions) {
@@ -355,13 +363,17 @@ function planSpecsOf(bundle: SpecBundle, rows: RowPlan[]): QaDocJobSpec[] {
 
 // ---------------------------------------------------------------- 조립 도우미
 
-function bodyOf(g: GenCase, tcId: string, start: { prepFlowIds: string[]; cleanState: boolean }): CaseBody {
+/** 행의 시작 상태 (스펙 계획 결과) */
+type Start = { prepFlowIds: string[]; cleanState: boolean; restoreFlowId?: string };
+
+function bodyOf(g: GenCase, tcId: string, start: Start): CaseBody {
   return CaseBody.parse({
     title: g.title,
     preconditions: g.preconditions,
     prepFlowIds: start.prepFlowIds,
     cleanState: start.cleanState,
-    ...(g.account_role ? { accountKind: g.account_role } : {}),
+    ...(g.account_kind?.trim() ? { accountKind: g.account_kind.trim() } : {}),
+    ...(start.restoreFlowId ? { restoreFlowId: start.restoreFlowId } : {}),
     ...(g.data ? { data: g.data } : {}),
     // 사람 전용 단계는 실행자가 직접 하는 수동 스텝이다
     steps: g.steps.map((s) => ({
@@ -454,7 +466,7 @@ function planPrompt(spec: SpecDoc, targets: RowPlan[], flows: PrepFlow[]): strin
 function casePrompt(
   batch: RowPlan[],
   flows: PrepFlow[],
-  startOf: Map<string, { prepFlowIds: string[]; cleanState: boolean }>,
+  startOf: Map<string, Start>,
   prev: QADocument | undefined,
   prevBundle: SpecBundle | undefined,
 ): string {
@@ -470,9 +482,9 @@ function casePrompt(
       const oldRow = prevBundle?.specs.find((s) => s.name === spec.name)?.rows.find((x) => x.id === r.row.id);
       const oldSpec = prevBundle?.specs.find((s) => s.name === spec.name);
       if (oldRow && oldSpec) lines.push(`이전 버전 행:\n${rowText(oldRow, oldSpec).replace(/^/gm, '  ')}`);
-      const { title, preconditions, data, steps, verificationPoints, mode, priority, type } = r.previous;
+      const { title, preconditions, data, accountKind, steps, verificationPoints, mode, priority, type } = r.previous;
       lines.push(
-        `이전 케이스 (사람이 고쳤을 수 있음):\n${JSON.stringify({ title, preconditions, data, steps, points: verificationPoints.map(({ id: _, ...p }) => p), mode, priority, type })}`,
+        `이전 케이스 (사람이 고쳤을 수 있음):\n${JSON.stringify({ title, preconditions, data, ...(accountKind ? { account_kind: accountKind } : {}), steps, points: verificationPoints.map(({ id: _, ...p }) => p), mode, priority, type })}`,
       );
       const qs = (prev?.questions ?? []).filter((q) => q.caseIds.includes(r.tcId) && q.status !== 'open');
       if (qs.length)

@@ -100,7 +100,7 @@ describe('QA 문서 생성 작업', () => {
     const done = await processJob(lead.deps(llm), running!);
     expect(done).toMatchObject({
       status: 'done',
-      result: { docId: 'doc-2.0.0', cases: 3, generated: 3, questions: 1, newPrepFlows: 1 },
+      result: { docId: 'doc-2.0.0', cases: 3, generated: 3, questions: 1, newPrepFlows: 2 },
     });
 
     // 웹(다른 멤버)에서 그대로 읽힌다
@@ -111,7 +111,7 @@ describe('QA 문서 생성 작업', () => {
       ['TC-SAMPLE-003', 'new'],
     ]);
     expect(doc.specs).toEqual([{ name: 'sample', feature: '샘플 기능', file: 'docs/specs/sample/spec.md' }]);
-    expect((await qa.api.listPrepFlows(PROJECT)).map((f) => f.id)).toContain('pf-home');
+    expect((await qa.api.listPrepFlows(PROJECT)).map((f) => f.id)).toEqual(expect.arrayContaining(['pf-home', 'pf-undo']));
     expect((await qa.api.listJobs(PROJECT))[0]).toMatchObject({
       id: job.id,
       status: 'done',

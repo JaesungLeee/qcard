@@ -325,6 +325,15 @@ export function CaseBodyBlocks({
               <dd>{body.accountKind}</dd>
             </>
           )}
+          {body.restoreFlowId && (
+            <>
+              <dt>원복 플로우</dt>
+              <dd>
+                <Tag tone="quiet">{prepName(body.restoreFlowId)}</Tag>
+                <span className="qd-faint"> — 끝나면 수행, 실패하면 계정 격리</span>
+              </dd>
+            </>
+          )}
           <dt>테스트 데이터</dt>
           <dd>{body.data ? <RichText text={body.data} /> : <span className="qd-faint">없음</span>}</dd>
         </dl>
