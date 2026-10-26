@@ -10,7 +10,7 @@
 - Authentication → GitHub 공급자. GitHub OAuth App의 callback은 `https://qcard-d2ade.firebaseapp.com/__/auth/handler`.
 - Authentication → 설정 → 승인된 도메인에 `qcard.dev`(커스텀 도메인은 자동으로 들어가지 않는다).
 - 첫 Functions 배포 뒤 IAM에서 `<프로젝트번호>-compute@developer.gserviceaccount.com`에 **서비스 계정 토큰 생성자** 역할(`hostToken`이 커스텀 토큰을 만든다).
-- 테스트 계정 비밀값(F-EX-09)을 봉인할 Cloud KMS 키. 이름은 `apps/functions/src/index.ts`의 `ACCOUNT_KMS_KEY` 기본값과 같아야 한다. 키가 없으면 계정 등록·배정 함수만 실패하고 나머지는 그대로 돈다.
+- 테스트 계정 비밀값(F-EX-09)을 봉인할 Cloud KMS 키. 이름은 `apps/functions/src/index.ts`의 상수 `ACCOUNT_KMS_KEY`와 같아야 한다(배포 파라미터로 받지 않는다 — CI의 비대화형 배포가 값을 요구하며 멈춘다). 키가 없으면 계정 등록·배정 함수만 실패하고 나머지는 그대로 돈다.
 
   ```sh
   gcloud services enable cloudkms.googleapis.com --project qcard-d2ade
