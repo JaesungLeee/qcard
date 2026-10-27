@@ -118,6 +118,71 @@ describe('프로젝트', () => {
   });
 });
 
+describe('사이클 삭제 (F-CY-10)', () => {
+  const T0 = '2026-10-28T10:00:00.000Z';
+  const NAME = '1.0.0 (7) 통합테스트';
+  /** 사이클 c1(하위 문서·증거 포함)과, 지우면 안 되는 사이클 c10·빌드 */
+  async function seed(p: string) {
+    const c = (id: string) => ({
+      id,
+      projectId: p,
+      name: NAME,
+      docId: 'd',
+      buildId: 'b',
+      targets: [],
+      period: { start: T0 },
+    });
+    await db.doc(`projects/${p}/cycles/c1`).set(c('c1'));
+    await db.doc(`projects/${p}/cycles/c10`).set(c('c10'));
+    for (const sub of ['cases/TC-1', 'results/TC-1__d', 'runs/r1', 'attempts/a1', 'defects/D-1', 'verdictLog/l1'])
+      await db.doc(`projects/${p}/cycles/c1/${sub}`).set({ at: T0 });
+    await db.doc(`projects/${p}/builds/b`).set({ id: 'b' });
+    const files = [
+      `projects/${p}/cycles/c1/runs/r1/TC-1/obs-01.png`,
+      `projects/${p}/cycles/c10/runs/r1/TC-1/obs-01.png`,
+    ];
+    for (const f of files) await bucket.file(f).save('x');
+    return files;
+  }
+  const del = (who: Who, p: string, confirmName = NAME, files = removeFiles) =>
+    h.deleteCycle(ctx(who, T0), { projectId: p, cycleId: 'c1', confirmName }, files);
+
+  it('사이클과 하위 문서·증거를 지우고, 접두어가 겹치는 다른 사이클·빌드는 남긴다', async () => {
+    const p = (await h.createProject(ctx('lead'), input)).id;
+    const [mine, other] = await seed(p);
+    await del('lead', p);
+    expect((await db.doc(`projects/${p}/cycles/c1`).get()).exists).toBe(false);
+    expect((await db.doc(`projects/${p}/cycles/c1`).listCollections()).length).toBe(0);
+    expect((await bucket.file(mine!).exists())[0]).toBe(false);
+    expect((await bucket.file(other!).exists())[0]).toBe(true);
+    expect((await db.doc(`projects/${p}/cycles/c10`).get()).exists).toBe(true);
+    expect((await db.doc(`projects/${p}/builds/b`).get()).exists).toBe(true);
+  });
+
+  it('이름이 다르거나, 멤버가 아니거나, 신호가 살아 있는 Run이 있으면 거부한다', async () => {
+    const p = (await h.createProject(ctx('lead'), input)).id;
+    await seed(p);
+    await expectRule(del('lead', p, '틀림'), 'rule', '이름');
+    await expectRule(del('guest', p), 'permission');
+    await db.doc(`projects/${p}/cycles/c1/runs/r1`).set({ status: 'running', heartbeatAt: T0 });
+    await expectRule(del('lead', p), 'rule', '실행 중인 Run 1개');
+    expect((await db.doc(`projects/${p}/cycles/c1`).get()).data()?.deletingAt).toBeUndefined();
+  });
+
+  it('Storage 삭제가 실패하면 삭제 중 표시를 남기고, 다시 삭제하면 이어서 지운다', async () => {
+    const p = (await h.createProject(ctx('lead'), input)).id;
+    await seed(p);
+    await expect(
+      del('lead', p, NAME, async () => {
+        throw new Error('storage down');
+      }),
+    ).rejects.toThrow('storage down');
+    expect((await db.doc(`projects/${p}/cycles/c1`).get()).data()?.deletingAt).toBe(T0);
+    await del('lead', p);
+    expect((await db.doc(`projects/${p}/cycles/c1`).get()).exists).toBe(false);
+  });
+});
+
 describe('멤버·초대', () => {
   it('링크 초대: 토큰으로 찾아 수락하면 멤버가 되고, 링크는 계속 쓸 수 있다', async () => {
     const p = await h.createProject(ctx('lead'), input);

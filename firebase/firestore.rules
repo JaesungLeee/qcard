@@ -51,10 +51,12 @@ service cloud.firestore {
         && id == 'D-' + string(seq)
         && request.resource.data.id == id;
     }
-    // 완료된 사이클(period.end)은 새 Run을 받지 않는다 (F-CY-09). 이미 시작한 Run의 갱신·결과는 막지 않는다
+    // 완료된 사이클(period.end)·삭제 중인 사이클(deletingAt)은 새 Run을 받지 않는다 (F-CY-09·10).
+    // 이미 시작한 Run의 갱신·결과는 막지 않는다
     function cycleOpen(p, c) {
       let path = /databases/$(database)/documents/projects/$(p)/cycles/$(c);
-      return exists(path) && get(path).data.get('period', {}).get('end', null) == null;
+      return exists(path) && get(path).data.get('period', {}).get('end', null) == null
+        && get(path).data.get('deletingAt', null) == null;
     }
     function ownsRun(p, c, run) {
       return isHost() && exists(runOf(p, c, run))
@@ -131,14 +133,18 @@ service cloud.firestore {
         allow update, delete: if false;
       }
       // 테스트 사이클. 만들 때 고정한 스냅샷(TC ID·내용 해시)·QA 문서·빌드와 케이스 사본은 바꾸지 않는다 (F-CY-01·02)
-      // — 새 빌드는 새 사이클로 돌린다(한 사이클에 두 빌드의 결과가 섞이지 않게). 완료·다시 열기(F-CY-09)는 사람만
+      // — 새 빌드는 새 사이클로 돌린다(한 사이클에 두 빌드의 결과가 섞이지 않게). 완료·다시 열기(F-CY-09)는 사람만.
+      // 삭제(F-CY-10)는 Functions만 한다 — 하위 문서·Storage 증거를 함께 지워야 해서 클라이언트는 지우지 못하고,
+      // 삭제 중 표시(deletingAt)도 바꾸지 못한다
       match /cycles/{c} {
         allow read: if isMember(p);
-        allow create, delete: if canEdit(p);
+        allow create: if canEdit(p) && !('deletingAt' in request.resource.data);
         allow update: if canEdit(p) && !isHost()
           && request.resource.data.snapshot == resource.data.snapshot
           && request.resource.data.docId == resource.data.docId
-          && request.resource.data.buildId == resource.data.buildId;
+          && request.resource.data.buildId == resource.data.buildId
+          && request.resource.data.get('deletingAt', null) == resource.data.get('deletingAt', null);
+        allow delete: if false;
       }
       match /cycles/{c}/cases/{tcId} {
         allow read: if isMember(p);
