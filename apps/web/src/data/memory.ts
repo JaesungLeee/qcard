@@ -45,6 +45,7 @@ import { localRunCycle, type LocalRun } from './localRuns';
 import {
   approvalFor,
   caseReviseRequest,
+  changedDefect,
   closedRevision,
   completedCycle,
   confirmedResult,
@@ -53,6 +54,7 @@ import {
   jobPartOrder,
   newBuild,
   newCycle,
+  newDefect,
   nextCase,
   qaDocRequest,
   runRequest,
@@ -445,6 +447,33 @@ export function createMemoryApi(
       results[i] = confirmedResult(results[i]!, input, currentUser, now());
       notify(input);
       return wait(results[i]);
+    },
+    async createDefect(input) {
+      await ensureLocal();
+      return rules(() => {
+        requireEditor(membersOf(input.projectId), actor().uid);
+        const c = cycle(input.cycleId);
+        const results = db.results[c.id] ?? [];
+        const i = results.findIndex((x) => x.tcId === input.tcId && x.deviceId === input.deviceId);
+        if (i < 0) throw new NotFoundError(`결과 없음: ${input.tcId} × ${input.deviceId}`);
+        const made = newDefect(c, results[i]!, input, actor(), now());
+        db.cycles = db.cycles.map((x) => (x.id === c.id ? made.cycle : x));
+        results[i] = made.result;
+        db.defects[c.id] = [...(db.defects[c.id] ?? []), made.defect];
+        notify(input);
+        return clone(made.defect);
+      });
+    },
+    async updateDefect(ref, defectId, patch) {
+      return rules(() => {
+        requireEditor(membersOf(ref.projectId), actor().uid);
+        const list = db.defects[ref.cycleId] ?? [];
+        const i = list.findIndex((x) => x.id === defectId);
+        if (i < 0) throw new NotFoundError(`결함 없음: ${defectId}`);
+        list[i] = changedDefect(list[i]!, patch);
+        notify(ref);
+        return clone(list[i]);
+      });
     },
     async completeCycle(ref) {
       return rules(() => {

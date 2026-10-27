@@ -291,6 +291,10 @@
   color: var(--qc-qcard-verdict-fail-fg);
   flex: none;
 }
+/* 결함이 연결되지 않은 Fail 칸이 있는 행의 결함 ID 셀 (F-RP-19) */
+.qs-no-defect {
+  color: var(--qc-qcard-verdict-fail-fg);
+}
 .qs-history {
   margin: 0;
   padding: 0;

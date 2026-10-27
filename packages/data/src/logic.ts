@@ -4,6 +4,7 @@ import {
   type Build,
   type CaseResult,
   type CaseReviseJob,
+  type Defect,
   type Job,
   type QaDocJob,
   type QaDocJobDraft,
@@ -26,6 +27,9 @@ import {
   PermissionError,
   RuleError,
   type ConfirmVerdictInput,
+  type DefectDraft,
+  type DefectPatch,
+  type NewDefectInput,
   type CycleSummary,
   type NewCycleInput,
   type QaDocSummary,
@@ -168,6 +172,65 @@ export function cycleSummary(
     done: results.length - counts.nt,
     passRate: passRate(counts),
     activeRuns: runs.filter((r) => r.status === 'running' || r.status === 'paused'),
+    unlinkedFails: unlinkedFails(results).length,
+  };
+}
+
+/** 결함이 연결되지 않은 Fail 칸 (F-RP-19) */
+export const unlinkedFails = (results: CaseResult[]) => results.filter((r) => r.verdict === 'fail' && !r.defectId);
+
+/** 결함 등록 폼에 미리 채울 값 (F-RP-19): 케이스의 제목·사전 조건과 스텝·기대 결과, 칸의 실제 결과 */
+export function defectDraft(tc: TestCase, r: CaseResult): DefectDraft {
+  return {
+    title: tc.title,
+    severity: 'major',
+    repro: [...tc.preconditions, ...tc.steps.map((s) => s.text)],
+    expected: tc.verificationPoints.map((v) => v.expected).join(' / '),
+    actual: r.actualSummary ?? '',
+  };
+}
+
+/**
+ * 결함 등록 (F-RP-19): 사이클의 다음 번호로 결함을 만들고 칸에 연결한다. 저장은 세 문서 — 결함, 번호를 올린 사이클,
+ * `defectId`를 채운 결과 칸 — 를 함께 쓴다
+ */
+export function newDefect(
+  cycle: TestCycle,
+  r: CaseResult,
+  input: NewDefectInput,
+  user: { name: string },
+  now: string,
+): { defect: Defect; cycle: TestCycle; result: CaseResult } {
+  if (r.verdict !== 'fail') throw new RuleError('Fail 칸에서만 결함을 등록할 수 있습니다.');
+  if (r.defectId) throw new RuleError(`이미 결함 ${r.defectId}이(가) 연결된 칸입니다.`);
+  const title = input.title.trim();
+  if (!title) throw new RuleError('결함 제목을 입력하세요.');
+  const repro = input.repro.map((s) => s.trim()).filter(Boolean);
+  if (!repro.length) throw new RuleError('재현 절차를 한 단계 이상 입력하세요.');
+  const seq = (cycle.defectSeq ?? 0) + 1;
+  const defect: Defect = {
+    id: `D-${seq}`,
+    title,
+    severity: input.severity,
+    tcId: r.tcId,
+    deviceId: r.deviceId,
+    ...(r.osBuild ? { osBuild: r.osBuild } : {}),
+    repro,
+    expected: input.expected.trim(),
+    actual: input.actual.trim(),
+    status: 'open',
+    createdBy: user.name,
+    createdAt: now,
+  };
+  return { defect, cycle: { ...cycle, defectSeq: seq }, result: { ...r, defectId: defect.id } };
+}
+
+/** 결함 심각도·상태 바꾸기 (F-RP-19). 그 밖의 필드는 바꾸지 않는다 */
+export function changedDefect(d: Defect, patch: DefectPatch): Defect {
+  return {
+    ...d,
+    ...(patch.severity ? { severity: patch.severity } : {}),
+    ...(patch.status ? { status: patch.status } : {}),
   };
 }
 

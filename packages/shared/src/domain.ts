@@ -484,17 +484,26 @@ export const SEVERITY_LABEL: Record<Severity, string> = {
   trivial: 'Trivial',
 };
 
+/**
+ * 결함 (F-RP-19). Fail 칸에서 만들고 그 칸의 `defectId`로 연결한다. id(`D-1`)는 사이클 안에서 매긴다 —
+ * 사이클 밖에서 가리킬 때는 사이클 이름을 함께 쓴다. 앱 빌드는 사이클의 빌드다
+ */
 export const Defect = z.object({
   id: z.string(),
   title: z.string(),
   severity: Severity,
   tcId: z.string(),
   deviceId: z.string(),
+  /** 결함이 난 칸의 OS 빌드 */
+  osBuild: z.string().optional(),
   repro: z.array(z.string()),
   expected: z.string(),
   actual: z.string(),
   status: z.enum(['open', 'fixed', 'closed']),
+  /** GitHub Issues로 발행한 이슈 주소 (F-RP-13, P1 — 아직 화면에 보이지 않는다) */
   trackerUrl: z.string().optional(),
+  createdBy: z.string().optional(),
+  createdAt: z.string().optional(),
 });
 export type Defect = z.infer<typeof Defect>;
 
@@ -570,6 +579,8 @@ export const TestCycle = z.object({
   /** 케이스 스냅샷 (F-CY-02) */
   snapshot: z.array(z.object({ tcId: z.string(), contentHash: z.string() })),
   createdBy: z.string(),
+  /** 이 사이클에서 마지막으로 매긴 결함 번호 (F-RP-19). 없으면 0 */
+  defectSeq: z.number().optional(),
   /** local_run: 호스트에서 돌린 실행 결과를 사이클로 묶어 보여 주는 것 (개발용) */
   origin: z.enum(['cycle', 'local_run']).optional(),
 });

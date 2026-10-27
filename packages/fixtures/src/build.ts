@@ -917,7 +917,6 @@ const SPECIAL_130: Record<string, Partial<Record<string, Special>>> = {
     [S24.id]: {
       verdict: 'fail',
       actual: '[초대 링크 복사]를 3번 누르자 토스트가 3개 겹쳐 쌓여 보였다.',
-      defectId: 'D-1',
       finalScreen: 'mate-toast',
       finalState: { toastCount: '3' },
       points: {
@@ -933,7 +932,7 @@ const SPECIAL_130: Record<string, Partial<Record<string, Special>>> = {
     [P8.id]: {
       verdict: 'fail',
       actual: '사용법 안내 스텝 3에서 뒤로가기를 누르자 스텝 2가 아니라 앱이 백그라운드로 갔다.',
-      defectId: 'D-2',
+      defectId: 'D-1',
       finalScreen: 'launcher',
       points: {
         0: {
@@ -998,7 +997,7 @@ const SPECIAL_130: Record<string, Partial<Record<string, Special>>> = {
       agentVerdict: 'pass',
       human: PEOPLE.qa,
       actual: '본문 두 번째 문장 끝 마침표가 빠져 있다 ("…습관이 돼요 메이트가 들어오면").',
-      defectId: 'D-3',
+      defectId: 'D-2',
       history: [
         { at: T(16, 15, 40), by: PEOPLE.qa, from: 'pass', to: 'fail', note: '자동 Pass 반전 — 문구 마침표 누락' },
       ],
@@ -1112,6 +1111,7 @@ export const cycle130: TestCycle = {
   serverEnv: 'stage',
   snapshot: snapshotCases.map((c) => ({ tcId: c.tcId, contentHash: c.contentHash })),
   createdBy: PEOPLE.lead,
+  defectSeq: 2,
 };
 
 /** Pixel 8 Run은 준비 상태가 같은 케이스끼리 묶어 실행 중이고, TS-021(수동 스텝)에서 멈춰 있다. */
@@ -1159,18 +1159,6 @@ const caseBySrc = (id: string) => qaDocV130.cases.find((c) => c.sourceId === src
 export const defects130: Defect[] = [
   {
     id: 'D-1',
-    title: '[초대 링크 복사] 연타 시 토스트가 겹쳐 쌓임',
-    severity: 'minor',
-    tcId: caseBySrc('EC-009').tcId,
-    deviceId: S24.id,
-    repro: ['온보딩을 메이트 초대 스텝까지 진행', '[초대 링크 복사]를 빠르게 3번 누른다'],
-    expected: '토스트가 하나만 보인다 (EC-009)',
-    actual: '토스트 3개가 겹쳐 쌓여 보인다',
-    status: 'open',
-    trackerUrl: 'https://github.com/example/harukong-android/issues/412',
-  },
-  {
-    id: 'D-2',
     title: '사용법 안내 스텝 3에서 뒤로가기 시 앱이 백그라운드로 감',
     severity: 'major',
     tcId: caseBySrc('TS-034').tcId,
@@ -1181,7 +1169,7 @@ export const defects130: Defect[] = [
     status: 'open',
   },
   {
-    id: 'D-3',
+    id: 'D-2',
     title: '메이트 초대 안내 본문 마침표 누락',
     severity: 'trivial',
     tcId: caseBySrc('TS-016').tcId,
@@ -1208,6 +1196,7 @@ export const cycle121: TestCycle = {
   serverEnv: 'stage',
   snapshot: snapshot120.map((c) => ({ tcId: c.tcId, contentHash: c.contentHash })),
   createdBy: PEOPLE.lead,
+  defectSeq: 1,
 };
 
 const results121: CaseResult[] = snapshot120.flatMap((tc, i) =>
@@ -1221,7 +1210,7 @@ const results121: CaseResult[] = snapshot120.flatMap((tc, i) =>
         ? {
             verdict: 'fail',
             actual: '첫 습관 만들기 스텝에서 뒤로가기 시 닉네임 설정 스텝으로 되돌아감',
-            defectId: 'D-0',
+            defectId: 'D-1',
           }
         : undefined,
       `run-121-${k}`,
@@ -1231,7 +1220,7 @@ const results121: CaseResult[] = snapshot120.flatMap((tc, i) =>
 
 export const defects121: Defect[] = [
   {
-    id: 'D-0',
+    id: 'D-1',
     title: '첫 습관 만들기 스텝 뒤로가기가 닉네임 설정으로 되돌아감',
     severity: 'major',
     tcId: caseBySrc('EC-004').tcId,

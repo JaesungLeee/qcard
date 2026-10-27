@@ -4,7 +4,9 @@ import { createContext, useContext, useEffect, useRef } from 'react';
 import type {
   ConfirmVerdictInput,
   CycleRef,
+  DefectPatch,
   DocRef,
+  NewDefectInput,
   NewCycleInput,
   NewProjectInput,
   QcardApi,
@@ -249,6 +251,19 @@ export function useConfirmVerdict() {
   });
 }
 
+/** 결함 등록·심각도·상태 변경 (F-RP-19) */
+export function useCreateDefect() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: NewDefectInput) => api.createDefect(input),
+    onSettled: (_r, _e, input) => {
+      void qc.invalidateQueries({ queryKey: keys.cycle(input.projectId, input.cycleId) });
+      void qc.invalidateQueries({ queryKey: keys.cycles(input.projectId) });
+    },
+  });
+}
+
 /** 사이클 완료·다시 열기 (F-CY-09) */
 export function useCycleCompletion(ref: CycleRef) {
   const api = useApi();
@@ -260,6 +275,15 @@ export function useCycleCompletion(ref: CycleRef) {
       void qc.invalidateQueries({ queryKey: keys.cycles(ref.projectId) });
       void qc.invalidateQueries({ queryKey: keys.projects }); // 진행 중 사이클 수
     },
+  });
+}
+
+export function useUpdateDefect(ref: CycleRef) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { defectId: string; patch: DefectPatch }) => api.updateDefect(ref, v.defectId, v.patch),
+    onSettled: () => void qc.invalidateQueries({ queryKey: keys.cycle(ref.projectId, ref.cycleId) }),
   });
 }
 

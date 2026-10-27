@@ -192,6 +192,55 @@ describe('QA 데이터 쓰기', () => {
     expect((await fb.getCycle(cref)).cases).toEqual(before.cases);
   });
 
+  it('결함 등록·변경이 메모리 구현과 같고, 번호는 사이클 안에서 이어진다 (F-RP-19)', async () => {
+    const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
+    const fb = apiAs(PEOPLE.qa);
+    const mem = memory();
+    mem.switchUser(PEOPLE.qa);
+    const before = await fb.getCycle(cref);
+    const fail = before.results.find((r) => r.verdict === 'fail' && !r.defectId)!;
+    const pass = before.results.find((r) => r.verdict === 'pass')!;
+    const input = {
+      ...cref,
+      tcId: fail.tcId,
+      deviceId: fail.deviceId,
+      title: ' 토스트가 겹쳐 쌓임 ',
+      severity: 'minor' as const,
+      repro: ['메이트 초대 스텝까지 진행', '', '[초대 링크 복사]를 연달아 누른다'],
+      expected: '토스트가 하나만 보인다',
+      actual: fail.actualSummary ?? '',
+    };
+    const made = await fb.createDefect(input);
+    const { createdAt: _, ...same } = made;
+    expect(await mem.createDefect(input)).toMatchObject(same);
+    expect(made).toMatchObject({ id: 'D-3', title: '토스트가 겹쳐 쌓임', status: 'open', createdBy: PEOPLE.qa });
+    expect(made.repro).toHaveLength(2);
+
+    const after = await fb.getCycle(cref);
+    expect(after.cycle.defectSeq).toBe(3);
+    expect(after.results.find((r) => r.tcId === fail.tcId && r.deviceId === fail.deviceId)?.defectId).toBe('D-3');
+    expect(after.defects.map((d) => d.id)).toEqual(['D-1', 'D-2', 'D-3']);
+    // 이미 결함이 있는 칸·Fail이 아닌 칸은 등록하지 못하고, Viewer는 아무것도 못 한다
+    await expect(fb.createDefect(input)).rejects.toBeInstanceOf(RuleError);
+    await expect(fb.createDefect({ ...input, tcId: pass.tcId, deviceId: pass.deviceId })).rejects.toBeInstanceOf(
+      RuleError,
+    );
+    await expect(apiAs(PEOPLE.planner).updateDefect(cref, 'D-3', { status: 'closed' })).rejects.toBeInstanceOf(
+      PermissionError,
+    );
+
+    const fixed = await fb.updateDefect(cref, 'D-3', { status: 'fixed', severity: 'major' });
+    expect(fixed).toEqual(
+      await mem
+        .updateDefect(cref, 'D-3', { status: 'fixed', severity: 'major' })
+        .then((d) => ({ ...d, createdAt: fixed.createdAt })),
+    );
+    expect((await fb.getCycle(cref)).defects.find((d) => d.id === 'D-3')).toMatchObject({
+      status: 'fixed',
+      severity: 'major',
+    });
+  });
+
   it('사이클 완료·다시 열기가 메모리 구현과 같고, 완료된 사이클은 Run 요청을 받지 않는다 (F-CY-09)', async () => {
     const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
     const fb = apiAs(PEOPLE.qa);

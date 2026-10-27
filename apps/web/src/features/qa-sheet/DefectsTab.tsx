@@ -1,8 +1,9 @@
-// ③ 결함 목록 (PRD §5.10)
-import { SEVERITY_LABEL } from '@qcard/shared';
+// ③ 결함 목록 (PRD §5.10). Admin·QA는 심각도·상태를 그 자리에서 바꾼다 (F-RP-19). 결함은 판정 추적 뷰의 Fail 칸에서 등록한다
+import { SEVERITY_LABEL, Severity, type Defect } from '@qcard/shared';
 import {
   ContentBadge,
-  Icons,
+  Option,
+  Select,
   Table,
   TableBody,
   TableCell,
@@ -14,28 +15,39 @@ import {
   token,
 } from '@qcard/ui';
 import { Link } from 'react-router';
+import { fmtDateTime } from '../../components/format';
+import { useMyRole, useUpdateDefect } from '../../data/hooks';
+import { ErrorMessage } from '../projects/parts';
 import { resultKey } from './model';
 import { Mono, TabBody, traceUrl } from './parts';
 import type { SheetProps } from './QaSheetPage';
 import { DEFECT_STATUS_LABEL } from './SummaryTab';
 
+const STATUSES: Defect['status'][] = ['open', 'fixed', 'closed'];
+
 export function DefectsTab({ d, index, projectId }: SheetProps) {
+  const role = useMyRole(projectId);
+  const canEdit = role.data === 'admin' || role.data === 'qa';
+  const update = useUpdateDefect({ projectId, cycleId: d.cycle.id });
+  const change = (df: Defect, patch: Partial<Pick<Defect, 'severity' | 'status'>>) =>
+    update.mutate({ defectId: df.id, patch });
   if (d.defects.length === 0)
     return (
       <TabBody>
         <div className="qc-card qs-empty">
           <span className={textClass('headline2', 'bold')}>결함이 없습니다</span>
           <span className={`${textClass('label1')} qs-muted`}>
-            Fail로 확정한 결과에 결함을 연결하면 여기에 모입니다.
+            판정 추적 뷰의 Fail 칸에서 결함을 등록하면 여기에 모입니다.
           </span>
         </div>
       </TabBody>
     );
   return (
     <TabBody>
+      <ErrorMessage error={update.error} title="결함을 바꾸지 못했습니다" />
       <div className="qc-card" style={{ padding: 0 }}>
         <div className="qs-scroll-x">
-          <Table sx={{ minWidth: 1180 }}>
+          <Table sx={{ minWidth: 1200 }}>
             <TableHead>
               <TableRow>
                 <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>결함 ID</TableHeadCell>
@@ -46,7 +58,7 @@ export function DefectsTab({ d, index, projectId }: SheetProps) {
                 <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>재현 절차</TableHeadCell>
                 <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>기대 / 실제 결과</TableHeadCell>
                 <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>상태</TableHeadCell>
-                <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>트래커</TableHeadCell>
+                <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>등록</TableHeadCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -60,12 +72,27 @@ export function DefectsTab({ d, index, projectId }: SheetProps) {
                     </TableCell>
                     <TableCell sx={{ verticalAlign: 'top', minWidth: 200 }}>{df.title}</TableCell>
                     <TableCell sx={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
-                      <ContentBadge color="neutral"
-                        size="small"
-                        variant={df.severity === 'critical' || df.severity === 'major' ? 'solid' : 'outlined'}
-                      >
-                        {SEVERITY_LABEL[df.severity]}
-                      </ContentBadge>
+                      {canEdit ? (
+                        <Select
+                          aria-label={`${df.id} 심각도`}
+                          value={df.severity}
+                          onChange={(v) => change(df, { severity: v as Severity })}
+                        >
+                          {Severity.options.map((s) => (
+                            <Option key={s} value={s}>
+                              {SEVERITY_LABEL[s]}
+                            </Option>
+                          ))}
+                        </Select>
+                      ) : (
+                        <ContentBadge
+                          color="neutral"
+                          size="small"
+                          variant={df.severity === 'critical' || df.severity === 'major' ? 'solid' : 'outlined'}
+                        >
+                          {SEVERITY_LABEL[df.severity]}
+                        </ContentBadge>
+                      )}
                     </TableCell>
                     <TableCell sx={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
                       <span className="qs-stack" style={{ gap: token('space-4') }}>
@@ -78,7 +105,9 @@ export function DefectsTab({ d, index, projectId }: SheetProps) {
                     <TableCell sx={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
                       <span className="qs-stack" style={{ gap: token('space-2') }}>
                         <span style={{ whiteSpace: 'nowrap' }}>{device?.label ?? df.deviceId}</span>
-                        {r?.osBuild && <span className={`${textClass('caption1')} qs-muted qc-mono`}>{r.osBuild}</span>}
+                        {(df.osBuild ?? r?.osBuild) && (
+                          <span className={`${textClass('caption1')} qs-muted qc-mono`}>{df.osBuild ?? r?.osBuild}</span>
+                        )}
                       </span>
                     </TableCell>
                     <TableCell sx={{ verticalAlign: 'top', minWidth: 220 }}>
@@ -101,26 +130,34 @@ export function DefectsTab({ d, index, projectId }: SheetProps) {
                       </span>
                     </TableCell>
                     <TableCell sx={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
-                      <ContentBadge color="neutral" size="small" variant="outlined">
-                        {DEFECT_STATUS_LABEL[df.status]}
-                      </ContentBadge>
+                      {canEdit ? (
+                        <Select
+                          aria-label={`${df.id} 상태`}
+                          value={df.status}
+                          onChange={(v) => change(df, { status: v as Defect['status'] })}
+                        >
+                          {STATUSES.map((s) => (
+                            <Option key={s} value={s}>
+                              {DEFECT_STATUS_LABEL[s]}
+                            </Option>
+                          ))}
+                        </Select>
+                      ) : (
+                        <ContentBadge color="neutral" size="small" variant="outlined">
+                          {DEFECT_STATUS_LABEL[df.status]}
+                        </ContentBadge>
+                      )}
                     </TableCell>
                     <TableCell sx={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
-                      {df.trackerUrl ? (
-                        <a
-                          href={df.trackerUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="qs-link qs-row"
-                          style={{ gap: token('space-2') }}
-                        >
-                          {df.trackerUrl.match(/issues\/(\d+)/)?.[1]
-                            ? `#${df.trackerUrl.match(/issues\/(\d+)/)![1]}`
-                            : '열기'}
-                          <Icons.IconExternalLink aria-label="새 창" />
-                        </a>
+                      {df.createdBy ? (
+                        <span className="qs-stack" style={{ gap: token('space-2') }}>
+                          <span>{df.createdBy}</span>
+                          {df.createdAt && (
+                            <span className={`${textClass('caption1')} qs-muted`}>{fmtDateTime(df.createdAt)}</span>
+                          )}
+                        </span>
                       ) : (
-                        <span className="qs-faint">미발행</span>
+                        <span className="qs-faint">—</span>
                       )}
                     </TableCell>
                   </TableRow>
