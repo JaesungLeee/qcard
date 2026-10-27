@@ -74,6 +74,10 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
   // 이어서 실행하면 그 Run의 큐를 그대로 쓴다 (남은 전체로 넓어지지 않게)
   const resumed = req.resumeRunId ? runs.find((r) => r.id === req.resumeRunId) : undefined;
   const tcIds = req.tcIds?.length ? req.tcIds : resumed?.tcIds?.length ? resumed.tcIds : undefined;
+  // 완료된 사이클은 새 Run도, 일시정지된 Run 이어서 실행도 받지 않는다 (F-CY-09)
+  if (cycle.period.end) {
+    throw new CycleRunError(`완료된 사이클입니다 (${cycle.name}). 웹에서 다시 열어야 실행할 수 있습니다.`);
+  }
   const target = cycle.targets.find((t) => t.model === info.model && t.osMajor === info.osMajor);
   if (!target) {
     throw new CycleRunError(

@@ -43,6 +43,11 @@ service cloud.firestore {
     function runOf(p, c, run) {
       return /databases/$(database)/documents/projects/$(p)/cycles/$(c)/runs/$(run);
     }
+    // 완료된 사이클(period.end)은 새 Run을 받지 않는다 (F-CY-09). 이미 시작한 Run의 갱신·결과는 막지 않는다
+    function cycleOpen(p, c) {
+      let path = /databases/$(database)/documents/projects/$(p)/cycles/$(c);
+      return exists(path) && get(path).data.get('period', {}).get('end', null) == null;
+    }
     function ownsRun(p, c, run) {
       return isHost() && exists(runOf(p, c, run))
         && get(runOf(p, c, run)).data.get('executorUid', '') == request.auth.uid;
@@ -118,11 +123,11 @@ service cloud.firestore {
         allow update, delete: if false;
       }
       // 테스트 사이클. 만들 때 고정한 스냅샷(TC ID·내용 해시)·QA 문서·빌드와 케이스 사본은 바꾸지 않는다 (F-CY-01·02)
-      // — 새 빌드는 새 사이클로 돌린다(한 사이클에 두 빌드의 결과가 섞이지 않게)
+      // — 새 빌드는 새 사이클로 돌린다(한 사이클에 두 빌드의 결과가 섞이지 않게). 완료·다시 열기(F-CY-09)는 사람만
       match /cycles/{c} {
         allow read: if isMember(p);
         allow create, delete: if canEdit(p);
-        allow update: if canEdit(p)
+        allow update: if canEdit(p) && !isHost()
           && request.resource.data.snapshot == resource.data.snapshot
           && request.resource.data.docId == resource.data.docId
           && request.resource.data.buildId == resource.data.buildId;
@@ -141,12 +146,14 @@ service cloud.firestore {
           && request.resource.data.at == request.time;
         allow update, delete: if false;
       }
-      // Run: 실행한 사용자의 호스트만 만들고 고친다. 다른 PC(같은 사용자의 다시 연결한 PC 포함)에서 이어서 실행할 수 있다
+      // Run: 실행한 사용자의 호스트만 만들고 고친다. 다른 PC(같은 사용자의 다시 연결한 PC 포함)에서 이어서 실행할 수 있다.
+      // 새 Run은 완료되지 않은 사이클에만 (이어서 실행은 호스트가 막는다 — 실행 중 Run은 완료 뒤에도 결과를 올려야 한다)
       match /cycles/{c}/runs/{run} {
         allow read: if isMember(p);
         allow create: if canEdit(p) && isHost()
           && request.resource.data.executorUid == request.auth.uid
-          && request.resource.data.hostId == hostClaim();
+          && request.resource.data.hostId == hostClaim()
+          && cycleOpen(p, c);
         allow update: if canEdit(p) && isHost()
           && resource.data.get('executorUid', '') == request.auth.uid
           && request.resource.data.executorUid == request.auth.uid;

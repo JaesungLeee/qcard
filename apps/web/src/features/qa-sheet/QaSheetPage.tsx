@@ -7,8 +7,10 @@ import { useCycle, useProject } from '../../data/hooks';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
 import { CasesTab } from './CasesTab';
+import { CycleCompleteAction, CycleCompleteMessage, useCycleComplete } from './CycleComplete';
 import { DefectsTab } from './DefectsTab';
 import { EnvTab } from './EnvTab';
+import { fmtDateTime } from '../../components/format';
 import { indexResults, parseTab, type QaTab, type ResultIndex } from './model';
 import { SERVER_ENV_LABEL, periodLabel } from './parts';
 import { RunLaunchActions, RunLaunchMessage } from './RunLaunch';
@@ -42,6 +44,7 @@ function Sheet({ d, projectId }: { d: CycleDetail; projectId: string }) {
       },
       { replace: true },
     );
+  const completion = useCycleComplete(d, projectId);
   const props: SheetProps = { d, index, projectId, projectName: project.data?.name ?? projectId };
   const check = d.results.filter((r) => r.verdict === 'check').length;
 
@@ -70,12 +73,23 @@ function Sheet({ d, projectId }: { d: CycleDetail; projectId: string }) {
             )}
             <span>QA 문서 v{d.doc.appVersion}</span>
             <span>기간 {periodLabel(d.cycle.period)}</span>
+            {!local && d.cycle.period.end && (
+              <span>
+                {fmtDateTime(d.cycle.period.end)} 완료{d.cycle.completedBy ? ` · ${d.cycle.completedBy}` : ''}
+              </span>
+            )}
             {!local && <span>서버 {SERVER_ENV_LABEL[d.cycle.serverEnv]}</span>}
             {check > 0 && <span style={{ color: token('qcard-verdict-check-fg') }}>확인필요 {check}칸</span>}
           </span>
         }
-        actions={<RunLaunchActions d={d} projectId={projectId} />}
+        actions={
+          <>
+            <RunLaunchActions d={d} projectId={projectId} />
+            <CycleCompleteAction c={completion} />
+          </>
+        }
       />
+      <CycleCompleteMessage c={completion} />
       <RunLaunchMessage d={d} projectId={projectId} />
       <Tab value={tab} onValueChange={setTab}>
         <div className="qs-scroll-x">

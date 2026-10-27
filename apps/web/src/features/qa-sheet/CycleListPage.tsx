@@ -44,7 +44,12 @@ export function CycleListPage() {
           ) : (
             <ul className="qs-stack" style={{ listStyle: 'none', margin: 0, padding: 0 }} aria-label="사이클 목록">
               {[...list]
-                .sort((a, b) => b.cycle.period.start.localeCompare(a.cycle.period.start))
+                // 진행 중인 사이클을 먼저, 그 안에서는 최근 것부터 (F-CY-09)
+                .sort(
+                  (a, b) =>
+                    Number(Boolean(a.cycle.period.end)) - Number(Boolean(b.cycle.period.end)) ||
+                    b.cycle.period.start.localeCompare(a.cycle.period.start),
+                )
                 .map((s) => (
                   <li key={s.cycle.id}>
                     <CycleCard s={s} projectId={projectId} />

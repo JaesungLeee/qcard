@@ -6,7 +6,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { FirebaseError } from 'firebase/app';
 import { setLogLevel, type Firestore } from 'firebase/firestore';
 import { GITHUB, PEOPLE } from '@qcard/fixtures';
-import { MembershipError } from '@qcard/shared';
+import { MembershipError, type TestCycle } from '@qcard/shared';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConflictError, PermissionError, RuleError } from '@qcard/data';
 import { createFirebaseApi, writeAll } from '@qcard/data/firebase';
@@ -129,7 +129,9 @@ describe('테스트 계정 (F-PF-08)', () => {
     const fb = apiAs(PEOPLE.lead);
     const got = await steps(fb as unknown as ReturnType<typeof memory>);
     expect(got).toEqual(await steps(memory()));
-    expect(got).toEqual([{ state: 'free', kind: '구독자', loginId: 'qa02@haru.test', note: undefined, usesTotp: false, by: PEOPLE.lead }]);
+    expect(got).toEqual([
+      { state: 'free', kind: '구독자', loginId: 'qa02@haru.test', note: undefined, usesTotp: false, by: PEOPLE.lead },
+    ]);
     expect(JSON.stringify(await fb.listAccounts('haru'))).not.toContain('pw-2');
   });
 
@@ -188,6 +190,30 @@ describe('QA 데이터 쓰기', () => {
     const c = before.cases[0]!;
     await fb.updateCase(ref, c.tcId, { ...c, title: '사이클 뒤에 고친 제목' }, c.rev);
     expect((await fb.getCycle(cref)).cases).toEqual(before.cases);
+  });
+
+  it('사이클 완료·다시 열기가 메모리 구현과 같고, 완료된 사이클은 Run 요청을 받지 않는다 (F-CY-09)', async () => {
+    const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
+    const fb = apiAs(PEOPLE.qa);
+    const mem = memory();
+    mem.switchUser(PEOPLE.qa);
+    const omitEnd = (c: TestCycle) => ({ ...c, period: { start: c.period.start, ended: Boolean(c.period.end) } });
+    const done = await fb.completeCycle(cref);
+    expect(omitEnd(done)).toEqual(omitEnd(await mem.completeCycle(cref)));
+    expect(done).toMatchObject({ completedBy: PEOPLE.qa, period: { end: expect.any(String) } });
+    expect((await fb.getCycle(cref)).cycle).toEqual(done);
+    await expect(fb.completeCycle(cref)).rejects.toBeInstanceOf(RuleError);
+    const run = { cycleId: cref.cycleId, deviceId: 'galaxy-s24-15' };
+    await expect(fb.requestRun('haru', run)).rejects.toBeInstanceOf(RuleError);
+    await expect(mem.requestRun('haru', run)).rejects.toBeInstanceOf(RuleError);
+    // Viewer는 완료·다시 열기를 못 한다
+    await expect(apiAs(PEOPLE.planner).reopenCycle(cref)).rejects.toBeInstanceOf(PermissionError);
+
+    const open = await fb.reopenCycle(cref);
+    expect(open).toEqual(await mem.reopenCycle(cref));
+    expect(open.period.end).toBeUndefined();
+    expect(open.completedBy).toBeUndefined();
+    await expect(fb.requestRun('haru', run)).resolves.toMatchObject({ kind: 'run_cycle' });
   });
 
   it('구독하면 다른 사람이 확정한 판정이 바로 들어오고, 끊으면 더 받지 않는다 (F-CY-05·F-DB-07)', async () => {

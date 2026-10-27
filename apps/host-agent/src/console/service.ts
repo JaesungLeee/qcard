@@ -171,7 +171,7 @@ export class ConsoleService implements ConsoleBackend {
     const out: ConsoleCycleOption[] = [];
     for (const { project } of await api.listMyProjects()) {
       for (const s of await api.listCycles(project.id)) {
-        if (s.cycle.origin === 'local_run') continue;
+        if (s.cycle.origin === 'local_run' || s.cycle.period.end) continue; // 완료된 사이클은 실행하지 않는다 (F-CY-09)
         const target = s.cycle.targets.find((t) => t.model === info.model && t.osMajor === info.osMajor);
         if (!target) continue;
         const d = await api.getCycle({ projectId: project.id, cycleId: s.cycle.id });
