@@ -12,7 +12,7 @@ import {
   textClass,
   token,
 } from '@qcard/ui';
-import { useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { PageHeader } from '../../components/PageHeader';
 import { fmtDateTime } from '../../components/format';
@@ -26,7 +26,7 @@ import {
   useQaDocs,
   useUploadBuild,
 } from '../../data/hooks';
-import { Mono, SERVER_ENV_LABEL } from './parts';
+import { KV, Mono, SERVER_ENV_LABEL } from './parts';
 import './qa-sheet.css';
 
 type Target = { model: string; osMajor: number; resolution?: string };
@@ -229,35 +229,42 @@ export function NewCyclePage() {
 }
 
 function BuildFacts({ build, projectPackage }: { build: Build; projectPackage?: string }) {
-  return (
-    <dl className={`${textClass('label2')} qs-kv`}>
-      <dt>패키지</dt>
-      <dd>
+  const items: [ReactNode, ReactNode][] = [
+    [
+      '패키지',
+      <>
         <Mono>{build.packageName}</Mono>
         {projectPackage && build.packageName !== projectPackage && (
           <span className="qs-faint"> · 프로젝트 패키지({projectPackage})와 다릅니다 (QA용 빌드면 괜찮습니다)</span>
         )}
-      </dd>
-      <dt>버전</dt>
-      <dd>
+      </>,
+    ],
+    [
+      '버전',
+      <>
         {build.version} ({build.buildNumber})
         {build.minSdk !== undefined && <span className="qs-faint"> · minSdk {build.minSdk}</span>}
-      </dd>
-      <dt>서명 SHA-1</dt>
-      <dd>
-        <Mono>{build.signingSha1}</Mono>
+      </>,
+    ],
+    [
+      '서명 SHA-1',
+      <>
+        {/* 바이트 중간이 아니라 콜론 뒤에서만 줄을 바꾼다 */}
+        <Mono className="qs-sha">
+          {build.signingSha1.split(':').map((b, i) => (
+            <Fragment key={i}>
+              {i > 0 && ':'}
+              {i > 0 && <wbr />}
+              {b}
+            </Fragment>
+          ))}
+        </Mono>
         {build.signingSchemes && <span className="qs-faint"> · {build.signingSchemes.join('·')}</span>}
-      </dd>
-      {build.uploadedBy && (
-        <>
-          <dt>올린 사람</dt>
-          <dd>
-            {build.uploadedBy} · {fmtDateTime(build.uploadedAt)}
-          </dd>
-        </>
-      )}
-    </dl>
-  );
+      </>,
+    ],
+  ];
+  if (build.uploadedBy) items.push(['올린 사람', `${build.uploadedBy} · ${fmtDateTime(build.uploadedAt)}`]);
+  return <KV items={items} />;
 }
 
 /** APK 올리기: 서명·패키지·버전은 파일에서 읽는다 */
