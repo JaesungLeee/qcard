@@ -8,7 +8,7 @@ import { setLogLevel, type Firestore } from 'firebase/firestore';
 import { GITHUB, PEOPLE } from '@qcard/fixtures';
 import { MembershipError, type TestCycle } from '@qcard/shared';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ConflictError, PermissionError, RuleError } from '@qcard/data';
+import { ConflictError, NotFoundError, PermissionError, RuleError } from '@qcard/data';
 import { createFirebaseApi, writeAll } from '@qcard/data/firebase';
 import { createMemoryApi } from '../../web/src/data/memory';
 import * as acc from '../src/accounts';
@@ -41,7 +41,12 @@ beforeEach(async () => {
 
 const CODE = { permission: 'permission-denied', rule: 'failed-precondition', not_found: 'not-found' } as const;
 
-const handlers = { ...h, ...acc };
+// Storage는 핸들러 테스트(handlers.test.ts)가 본다
+const handlers = {
+  ...h,
+  ...acc,
+  deleteCycle: (ctx: h.Ctx, data: unknown) => h.deleteCycle(ctx, data, async () => {}),
+};
 const box = localBox('test');
 
 /** 사람 이름(PEOPLE)으로 로그인한 Firestore 구현 */
@@ -263,6 +268,27 @@ describe('QA 데이터 쓰기', () => {
     expect(open.period.end).toBeUndefined();
     expect(open.completedBy).toBeUndefined();
     await expect(fb.requestRun('haru', run)).resolves.toMatchObject({ kind: 'run_cycle' });
+  });
+
+  it('사이클 삭제가 메모리 구현과 같고, 완료된 사이클·Viewer·틀린 이름은 거부한다 (F-CY-10)', async () => {
+    const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
+    const name = '1.3.0 (130) 1차 회귀';
+    const fb = apiAs(PEOPLE.qa);
+    const mem = memory();
+    mem.switchUser(PEOPLE.qa);
+    for (const api of [fb, mem]) {
+      await expect(api.deleteCycle(cref, '틀림')).rejects.toBeInstanceOf(RuleError);
+      await expect(api.deleteCycle({ ...cref, cycleId: 'cycle-121-1' }, '1.2.1 (121) 회귀')).rejects.toThrow('다시 연 뒤');
+    }
+    await expect(apiAs(PEOPLE.planner).deleteCycle(cref, name)).rejects.toBeInstanceOf(PermissionError);
+
+    await fb.deleteCycle(cref, name);
+    await mem.deleteCycle(cref, name);
+    const ids = async (api: typeof fb) => (await api.listCycles('haru')).map((s) => s.cycle.id).sort();
+    expect(await ids(fb)).toEqual(['cycle-121-1']);
+    expect(await ids(mem)).toEqual(await ids(fb));
+    await expect(fb.getCycle(cref)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(mem.getCycle(cref)).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('구독하면 다른 사람이 확정한 판정이 바로 들어오고, 끊으면 더 받지 않는다 (F-CY-05·F-DB-07)', async () => {

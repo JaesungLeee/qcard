@@ -583,6 +583,11 @@ export const TestCycle = z.object({
   defectSeq: z.number().optional(),
   /** local_run: 호스트에서 돌린 실행 결과를 사이클로 묶어 보여 주는 것 (개발용) */
   origin: z.enum(['cycle', 'local_run']).optional(),
+  /**
+   * 삭제 중 (F-CY-10): Functions가 하위 문서·증거를 지우기 전에 남긴다. 이 표시가 있으면 새 Run을 받지 않는다.
+   * 중간에 실패해 남았으면 다시 삭제하면 이어서 지운다
+   */
+  deletingAt: z.string().optional(),
 });
 export type TestCycle = z.infer<typeof TestCycle>;
 

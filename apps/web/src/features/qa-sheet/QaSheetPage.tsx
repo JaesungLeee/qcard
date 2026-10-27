@@ -8,6 +8,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
 import { CasesTab } from './CasesTab';
 import { CycleCompleteAction, CycleCompleteMessage, useCycleComplete } from './CycleComplete';
+import { CycleDeleteAction, CycleDeleteMessage, useCycleDelete } from './CycleDelete';
 import { DefectsTab } from './DefectsTab';
 import { EnvTab } from './EnvTab';
 import { fmtDateTime } from '../../components/format';
@@ -45,6 +46,7 @@ function Sheet({ d, projectId }: { d: CycleDetail; projectId: string }) {
       { replace: true },
     );
   const completion = useCycleComplete(d, projectId);
+  const deletion = useCycleDelete(d, projectId);
   const props: SheetProps = { d, index, projectId, projectName: project.data?.name ?? projectId };
   const check = d.results.filter((r) => r.verdict === 'check').length;
 
@@ -86,10 +88,12 @@ function Sheet({ d, projectId }: { d: CycleDetail; projectId: string }) {
           <>
             <RunLaunchActions d={d} projectId={projectId} />
             <CycleCompleteAction c={completion} />
+            <CycleDeleteAction c={deletion} />
           </>
         }
       />
       <CycleCompleteMessage c={completion} />
+      <CycleDeleteMessage c={deletion} />
       <RunLaunchMessage d={d} projectId={projectId} />
       <Tab value={tab} onValueChange={setTab}>
         <div className="qs-scroll-x">

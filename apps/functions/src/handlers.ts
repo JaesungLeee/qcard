@@ -3,6 +3,7 @@ import { FieldValue, type DocumentReference, type Firestore, type Transaction } 
 import {
   accepting,
   changeRole,
+  cycleDeletion,
   deletion,
   invitationState,
   leaving,
@@ -22,6 +23,8 @@ import {
   type Member,
   type NewProjectInput,
   type Project,
+  type Run,
+  type TestCycle,
 } from '@qcard/shared';
 import { z } from 'zod';
 import type { SecretBox } from './secretBox';
@@ -194,6 +197,28 @@ export async function purgeDeletedProjects(db: Firestore, now: string, removeFil
     }
   }
   return purged;
+}
+
+const CycleId = ProjectId.extend({ cycleId: z.string().min(1), confirmName: z.string() });
+
+/**
+ * 사이클 삭제 (F-CY-10): 유예 없이 사이클 문서·하위 문서(케이스 사본·결과·Run·이전 시도·결함·판정 이력)와
+ * Storage 증거를 지운다. 빌드·QA 문서는 남는다. 먼저 트랜잭션에서 규칙을 보고 삭제 중 표시를 남겨(새 Run을 막는다)
+ * 그 뒤에 지운다 — 중간에 실패하면 표시가 남은 사이클을 다시 삭제해 이어서 지운다
+ */
+export async function deleteCycle(ctx: Ctx, data: unknown, removeFiles: RemoveFiles): Promise<void> {
+  const { projectId, cycleId, confirmName } = parse(CycleId, data);
+  const ref = ctx.db.doc(`projects/${projectId}/cycles/${cycleId}`);
+  const now = nowOf(ctx);
+  await ctx.db.runTransaction(async (tx) => {
+    const cycle = await read<TestCycle>(tx, ref, '사이클');
+    const runs = (await tx.get(ref.collection('runs'))).docs.map((d) => d.data() as Run);
+    const members = await membersIn(tx, ctx.db, projectId);
+    cycleDeletion(members, await actorOf(ctx, tx), cycle, runs, confirmName, now);
+    if (!cycle.deletingAt) tx.update(ref, { deletingAt: now });
+  });
+  await removeFiles(`projects/${projectId}/cycles/${cycleId}/`);
+  await ctx.db.recursiveDelete(ref);
 }
 
 // ------------------------------------------------------------------ 멤버

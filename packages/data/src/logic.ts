@@ -264,8 +264,9 @@ export function reopenedCycle(c: TestCycle): TestCycle {
   return { ...rest, period: { start: c.period.start } };
 }
 
-/** 완료된 사이클은 새 Run을 받지 않는다 — 웹 요청·호스트가 함께 쓴다 (F-CY-09) */
+/** 완료(F-CY-09)·삭제 중(F-CY-10)인 사이클은 새 Run을 받지 않는다 — 웹 요청·호스트가 함께 쓴다 */
 export function requireOpenCycle(c: TestCycle): void {
+  if (c.deletingAt) throw new RuleError(`삭제 중인 사이클입니다 (${c.name}).`);
   if (c.period.end) throw new RuleError(`완료된 사이클입니다 (${c.name}). 다시 열어야 실행할 수 있습니다.`);
 }
 

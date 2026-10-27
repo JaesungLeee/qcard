@@ -170,6 +170,11 @@ export interface QcardApi {
   completeCycle(ref: CycleRef): Promise<TestCycle>;
   /** 완료 취소 (F-CY-09): 다시 Run을 받는다. 완료되지 않았으면 `RuleError`. Admin·QA만 */
   reopenCycle(ref: CycleRef): Promise<TestCycle>;
+  /**
+   * 사이클 삭제 (F-CY-10): 결과·Run·결함·판정 이력과 스크린샷 증거까지 바로 영구 삭제한다. 빌드·QA 문서는 남는다.
+   * 이름이 다르거나, 완료된 사이클이거나, 실행 중인 Run이 있으면 `RuleError`(`cycleDeleteBlocker`). Admin·QA만
+   */
+  deleteCycle(ref: CycleRef, confirmName: string): Promise<void>;
 
   /** Storage에 올린 스크린샷(`kind: 'storage'`)을 화면에 띄울 주소. 로그인 상태로 읽는다 */
   screenshotUrl(path: string): Promise<string>;

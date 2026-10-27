@@ -100,6 +100,18 @@
   border-color: var(--qc-line-neutral-primary);
   background: var(--qc-surface-neutral-secondary);
 }
+/* 카드의 [⋯] (F-CY-10): 카드 전체가 링크라 버튼을 그 위에 겹쳐 두고, 머리 오른쪽에 그만큼 자리를 비운다 */
+.qs-cycle-item {
+  position: relative;
+}
+.qs-cycle-menu {
+  position: absolute;
+  top: var(--qc-space-16);
+  right: var(--qc-space-16);
+}
+.qs-cycle-item:has(.qs-cycle-menu) .qs-cycle > .qs-card-head {
+  padding-right: var(--qc-space-40);
+}
 .qs-cycle-body {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr);

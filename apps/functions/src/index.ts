@@ -39,9 +39,9 @@ const toHttps = (e: unknown) => (e instanceof MembershipError ? new HttpsError(C
  */
 function call<T>(
   fn: (ctx: h.Ctx, data: unknown, req: CallableRequest) => Promise<T>,
-  opts: { allowHost?: boolean } = {},
+  opts: { allowHost?: boolean; timeoutSeconds?: number } = {},
 ) {
-  return onCall(async (req) => {
+  return onCall({ ...(opts.timeoutSeconds ? { timeoutSeconds: opts.timeoutSeconds } : {}) }, async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
     const host = typeof req.auth.token.host === 'string' ? req.auth.token.host : undefined;
     if (host && !opts.allowHost)
@@ -70,6 +70,12 @@ export const revokeInvitation = call(h.revokeInvitation);
 export const getInvitation = call(h.getInvitation);
 export const acceptInvitation = call(h.acceptInvitation);
 
+// 사이클 삭제 (F-CY-10): 하위 문서와 Storage 증거까지 지운다. 스크린샷이 많으면 오래 걸려 제한 시간을 늘린다
+export const deleteCycle = call(
+  (ctx, data) => h.deleteCycle(ctx, data, (prefix) => getStorage().bucket().deleteFiles({ prefix })),
+  { timeoutSeconds: 300 },
+);
+
 // 호스트 연결 (F-TM-14). hostToken은 로그인 전에 부른다 — 호스트 자격(비밀값)으로 확인한다
 export const pairHost = call(h.pairHost);
 export const revokeHost = call(h.revokeHost, { allowHost: true });
@@ -97,8 +103,6 @@ export const purgeDeletedProjects = onSchedule(
   { schedule: 'every day 04:00', timeZone: 'Asia/Seoul', timeoutSeconds: 540 },
   async () => {
     const bucket = getStorage().bucket();
-    await h.purgeDeletedProjects(getFirestore(), new Date().toISOString(), (prefix) =>
-      bucket.deleteFiles({ prefix }),
-    );
+    await h.purgeDeletedProjects(getFirestore(), new Date().toISOString(), (prefix) => bucket.deleteFiles({ prefix }));
   },
 );

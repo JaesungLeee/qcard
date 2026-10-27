@@ -278,6 +278,19 @@ export function useCycleCompletion(ref: CycleRef) {
   });
 }
 
+/** 사이클 삭제 (F-CY-10). 성공하면 화면이 사이클 목록으로 옮겨 간다 */
+export function useCycleDeletion(ref: CycleRef) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (confirmName: string) => api.deleteCycle(ref, confirmName),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: keys.cycles(ref.projectId) });
+      void qc.invalidateQueries({ queryKey: keys.projects }); // 진행 중 사이클 수
+    },
+  });
+}
+
 export function useUpdateDefect(ref: CycleRef) {
   const api = useApi();
   const qc = useQueryClient();

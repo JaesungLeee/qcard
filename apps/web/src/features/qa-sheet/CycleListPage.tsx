@@ -8,6 +8,7 @@ import { QueryState } from '../../components/QueryState';
 import { fmtDateTime, fmtPercent } from '../../components/format';
 import { Mono, RunState, SERVER_ENV_LABEL, VerdictBar, VerdictCountList, periodLabel, useNow } from './parts';
 import { isRunStale } from '@qcard/shared';
+import { CycleDeletedMessage, CycleMenu, DELETE_PARAM, useDeleteBlocker } from './CycleDelete';
 import './qa-sheet.css';
 
 export function CycleListPage() {
@@ -34,6 +35,7 @@ export function CycleListPage() {
           </Button>
         }
       />
+      <CycleDeletedMessage />
       <QueryState query={cycles}>
         {(list) =>
           list.length === 0 ? (
@@ -51,8 +53,9 @@ export function CycleListPage() {
                     b.cycle.period.start.localeCompare(a.cycle.period.start),
                 )
                 .map((s) => (
-                  <li key={s.cycle.id}>
+                  <li key={s.cycle.id} className="qs-cycle-item">
                     <CycleCard s={s} projectId={projectId} />
+                    {canEdit && s.cycle.origin !== 'local_run' && <CycleCardMenu s={s} projectId={projectId} />}
                   </li>
                 ))}
             </ul>
@@ -60,6 +63,20 @@ export function CycleListPage() {
         }
       </QueryState>
     </div>
+  );
+}
+
+/** 카드의 [⋯] (F-CY-10). 카드 전체가 링크라 그 위에 겹쳐 둔다. 확인은 QA 시트에서 지워질 건수를 보며 한다 */
+function CycleCardMenu({ s, projectId }: { s: CycleSummary; projectId: string }) {
+  const navigate = useNavigate();
+  const blocker = useDeleteBlocker(s.cycle, s.activeRuns);
+  return (
+    <span className="qs-cycle-menu">
+      <CycleMenu
+        blocker={blocker}
+        onDelete={() => void navigate(`/p/${projectId}/cycles/${s.cycle.id}?${DELETE_PARAM}=1`)}
+      />
+    </span>
   );
 }
 

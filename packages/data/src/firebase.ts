@@ -617,6 +617,8 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       ),
     completeCycle: (ref) => guard(() => updateCycle(ref, (c) => completedCycle(c, me(), now()))),
     reopenCycle: (ref) => guard(() => updateCycle(ref, reopenedCycle)),
+    // 하위 문서·Storage 증거까지 지워야 해서 Functions가 한다 (보안 규칙이 직접 삭제를 막는다)
+    deleteCycle: (ref, confirmName) => call<void>('deleteCycle', { ...ref, confirmName }),
 
     // ------------------------------------------------------------ QA 문서 생성 작업 (PRD §5.2, §6.2)
     requestQaDoc: (projectId, input) =>

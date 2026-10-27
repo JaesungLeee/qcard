@@ -6,6 +6,7 @@ import {
   accountDeletion,
   accountState,
   changeRole,
+  cycleDeletion,
   deletion,
   flagClearing,
   invitationState,
@@ -485,6 +486,15 @@ export function createMemoryApi(
       return rules(() => {
         requireEditor(membersOf(ref.projectId), actor().uid);
         return putCycle(ref, reopenedCycle(cycle(ref.cycleId)));
+      });
+    },
+    async deleteCycle(ref, confirmName) {
+      await ensureLocal();
+      return rules(() => {
+        const c = cycle(ref.cycleId);
+        cycleDeletion(membersOf(ref.projectId), actor(), c, db.runs[c.id] ?? [], confirmName, now());
+        db.cycles = db.cycles.filter((x) => x.id !== c.id);
+        for (const sub of [db.cycleCases, db.results, db.defects, db.runs]) delete sub[c.id];
       });
     },
 

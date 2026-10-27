@@ -291,7 +291,14 @@ describe('호스트 토큰 (F-TM-14)', () => {
 describe('결함 (F-RP-19)', () => {
   const C = 'projects/haru/cycles/c9';
   const asHost = (uid: string, host: string) => env.authenticatedContext(uid, { host }).firestore();
-  const defect = { id: 'D-1', title: '토스트가 겹쳐 쌓임', severity: 'minor', status: 'open', tcId: 'TC-1', deviceId: 'd' };
+  const defect = {
+    id: 'D-1',
+    title: '토스트가 겹쳐 쌓임',
+    severity: 'minor',
+    status: 'open',
+    tcId: 'TC-1',
+    deviceId: 'd',
+  };
   beforeEach(() =>
     env.withSecurityRulesDisabled(async (c) => {
       const db = c.firestore();
@@ -340,7 +347,9 @@ describe('사이클 완료 (F-CY-09)', () => {
   const run = { status: 'running', executorUid: 'u-qa', hostId: 'h-qa' };
   const done = { start: '2026-10-20T00:00:00Z', end: '2026-10-27T00:00:00Z' };
   beforeEach(() =>
-    env.withSecurityRulesDisabled((c) => setDoc(doc(c.firestore(), 'hostConnections/h-qa'), { id: 'h-qa', uid: 'u-qa' })),
+    env.withSecurityRulesDisabled((c) =>
+      setDoc(doc(c.firestore(), 'hostConnections/h-qa'), { id: 'h-qa', uid: 'u-qa' }),
+    ),
   );
 
   it('Admin·QA가 완료하고 다시 연다. Viewer·호스트는 못 한다', async () => {
@@ -361,6 +370,40 @@ describe('사이클 완료 (F-CY-09)', () => {
 
   it('없는 사이클에는 Run을 만들 수 없다', async () => {
     await assertFails(setDoc(doc(asHost('u-qa', 'h-qa'), 'projects/haru/cycles/nope/runs/r1'), run));
+  });
+});
+
+describe('사이클 삭제 (F-CY-10)', () => {
+  const C = 'projects/haru/cycles/c1';
+  const asHost = (uid: string, host: string) => env.authenticatedContext(uid, { host }).firestore();
+  const run = { status: 'running', executorUid: 'u-qa', hostId: 'h-qa' };
+  beforeEach(() =>
+    env.withSecurityRulesDisabled((c) =>
+      setDoc(doc(c.firestore(), 'hostConnections/h-qa'), { id: 'h-qa', uid: 'u-qa' }),
+    ),
+  );
+
+  it('사이클 문서는 Admin도 직접 지우지 못한다 (Functions만)', async () => {
+    await assertFails(deleteDoc(doc(as('u-admin'), C)));
+    await assertFails(deleteDoc(doc(as('u-qa'), C)));
+  });
+
+  it('삭제 중 표시는 사람이 남기거나 지우지 못한다', async () => {
+    await assertFails(updateDoc(doc(as('u-qa'), C), { deletingAt: '2026-10-28T00:00:00Z' }));
+    await assertFails(
+      setDoc(doc(as('u-qa'), 'projects/haru/cycles/c9'), { ...CYCLE, deletingAt: '2026-10-28T00:00:00Z' }),
+    );
+    await env.withSecurityRulesDisabled((c) =>
+      updateDoc(doc(c.firestore(), C), { deletingAt: '2026-10-28T00:00:00Z' }),
+    );
+    await assertFails(setDoc(doc(as('u-admin'), C), CYCLE));
+  });
+
+  it('삭제 중인 사이클에는 새 Run을 만들 수 없다', async () => {
+    await env.withSecurityRulesDisabled((c) =>
+      updateDoc(doc(c.firestore(), C), { deletingAt: '2026-10-28T00:00:00Z' }),
+    );
+    await assertFails(setDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), run));
   });
 });
 
