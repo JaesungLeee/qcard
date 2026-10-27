@@ -3,7 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useRef } from 'react';
 import type {
   ConfirmVerdictInput,
+  CycleRef,
+  DefectPatch,
   DocRef,
+  NewDefectInput,
   NewCycleInput,
   NewProjectInput,
   QcardApi,
@@ -245,6 +248,28 @@ export function useConfirmVerdict() {
       void qc.invalidateQueries({ queryKey: keys.cycle(input.projectId, input.cycleId) });
       void qc.invalidateQueries({ queryKey: ['cycles'] });
     },
+  });
+}
+
+/** 결함 등록·심각도·상태 변경 (F-RP-19) */
+export function useCreateDefect() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: NewDefectInput) => api.createDefect(input),
+    onSettled: (_r, _e, input) => {
+      void qc.invalidateQueries({ queryKey: keys.cycle(input.projectId, input.cycleId) });
+      void qc.invalidateQueries({ queryKey: keys.cycles(input.projectId) });
+    },
+  });
+}
+
+export function useUpdateDefect(ref: CycleRef) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { defectId: string; patch: DefectPatch }) => api.updateDefect(ref, v.defectId, v.patch),
+    onSettled: () => void qc.invalidateQueries({ queryKey: keys.cycle(ref.projectId, ref.cycleId) }),
   });
 }
 

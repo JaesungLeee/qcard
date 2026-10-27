@@ -35,6 +35,7 @@ import { QueryState } from '../../components/QueryState';
 import { fmtDateTime, fmtNumber } from '../../components/format';
 import { MockScreen } from '../../mock/MockScreen';
 import { ConfirmPanel } from './ConfirmPanel';
+import { DefectPanel } from './DefectPanel';
 import { EvidenceBand } from './EvidenceBand';
 import { autoConfirmChecks, decidedByLabel, isAutoPassReversal, neighbors, resultKey, shortId } from './model';
 import { Card, KV, Mono, RunState, traceUrl, useNow } from './parts';
@@ -243,6 +244,7 @@ function Trace({ d }: { d: CycleDetail }) {
 
         <aside className="qs-trace-side" aria-label="판정">
           <ConfirmPanel key={resultKey(r.tcId, r.deviceId)} cycleId={d.cycle.id} result={r} manual={manual} />
+          <DefectPanel key={`defect-${resultKey(r.tcId, r.deviceId)}`} d={d} r={r} tc={tc} projectId={projectId} />
           {!manual && !notRun && <ConditionsCard r={r} />}
           <HistoryCard r={r} manual={manual} />
         </aside>

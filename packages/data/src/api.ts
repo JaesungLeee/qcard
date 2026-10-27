@@ -156,6 +156,13 @@ export interface QcardApi {
   watchCycle(ref: CycleRef, onChange: (detail: CycleDetail) => void, onError?: (e: unknown) => void): () => void;
   /** 사람 확정·오버라이드 (F-RP-04). 판정 변경 이력이 쌓인다. */
   confirmVerdict(input: ConfirmVerdictInput): Promise<CaseResult>;
+  /**
+   * 결함 등록 (F-RP-19): Fail 칸에서 결함을 만들고 그 칸의 `defectId`로 연결한다. 번호(`D-1`)는 사이클 안에서 매긴다.
+   * Fail이 아니거나 이미 결함이 있는 칸, 제목·재현 절차가 비면 `RuleError`. Admin·QA만
+   */
+  createDefect(input: NewDefectInput): Promise<Defect>;
+  /** 결함의 심각도·상태 바꾸기 (F-RP-19). Admin·QA만 */
+  updateDefect(ref: CycleRef, defectId: string, patch: DefectPatch): Promise<Defect>;
 
   /** Storage에 올린 스크린샷(`kind: 'storage'`)을 화면에 띄울 주소. 로그인 상태로 읽는다 */
   screenshotUrl(path: string): Promise<string>;
@@ -185,6 +192,11 @@ export type NewCycleInput = {
   targets: { model: string; osMajor: number; resolution?: string }[];
   serverEnv: TestCycle['serverEnv'];
 };
+
+/** 결함 등록 폼에서 사람이 고치는 값 (`defectDraft`가 미리 채운다) */
+export type DefectDraft = Pick<Defect, 'title' | 'severity' | 'repro' | 'expected' | 'actual'>;
+export type NewDefectInput = DefectDraft & { projectId: string; cycleId: string; tcId: string; deviceId: string };
+export type DefectPatch = Partial<Pick<Defect, 'severity' | 'status'>>;
 
 /** QA 문서·사이클은 프로젝트 아래에 있다 (Firestore `projects/{p}/qaDocs/{d}`) */
 export type DocRef = { projectId: string; docId: string };
@@ -231,6 +243,8 @@ export type CycleSummary = {
   done: number;
   passRate: number;
   activeRuns: Run[];
+  /** 결함이 연결되지 않은 Fail 칸 (F-RP-19) — 결함 등록을 잊은 칸 */
+  unlinkedFails: number;
 };
 
 export type CycleDetail = {

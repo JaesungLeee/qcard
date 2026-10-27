@@ -280,6 +280,52 @@ describe('호스트 토큰 (F-TM-14)', () => {
   });
 });
 
+describe('결함 (F-RP-19)', () => {
+  const C = 'projects/haru/cycles/c9';
+  const asHost = (uid: string, host: string) => env.authenticatedContext(uid, { host }).firestore();
+  const defect = { id: 'D-1', title: '토스트가 겹쳐 쌓임', severity: 'minor', status: 'open', tcId: 'TC-1', deviceId: 'd' };
+  beforeEach(() =>
+    env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore();
+      await setDoc(doc(db, C), { name: 'c9', docId: 'doc-130', buildId: 'b', snapshot: [] });
+      await setDoc(doc(db, 'hostConnections/h-qa'), { id: 'h-qa', uid: 'u-qa' });
+    }),
+  );
+  /** 사이클 번호를 올리면서 결함을 만든다 (createDefect와 같은 쓰기) */
+  const create = (db: ReturnType<typeof as>, seq: number, d: Record<string, unknown> = defect) => {
+    const batch = writeBatch(db);
+    batch.update(doc(db, C), { defectSeq: seq });
+    batch.set(doc(db, `${C}/defects/${String(d.id)}`), d);
+    return batch.commit();
+  };
+
+  it('Admin·QA가 사이클 번호를 하나 올리면서 그 번호로 만든다', async () => {
+    await assertSucceeds(create(as('u-qa'), 1));
+    await assertSucceeds(create(as('u-admin'), 2, { ...defect, id: 'D-2' }));
+  });
+
+  it('번호를 올리지 않거나, 건너뛰거나, 다른 번호로는 만들지 못한다', async () => {
+    const qa = as('u-qa');
+    await assertFails(setDoc(doc(qa, `${C}/defects/D-1`), defect));
+    await assertFails(create(qa, 2, { ...defect, id: 'D-2' }));
+    await assertFails(create(qa, 1, { ...defect, id: 'D-7' }));
+  });
+
+  it('Viewer·호스트는 만들지 못한다', async () => {
+    await assertFails(create(as('u-viewer'), 1));
+    await assertFails(create(asHost('u-qa', 'h-qa'), 1));
+  });
+
+  it('만든 뒤에는 심각도·상태만 바꾸고 지우지 못한다', async () => {
+    await assertSucceeds(create(as('u-qa'), 1));
+    const at = doc(as('u-qa'), `${C}/defects/D-1`);
+    await assertSucceeds(updateDoc(at, { severity: 'major', status: 'fixed' }));
+    await assertFails(updateDoc(at, { title: '바꾼 제목' }));
+    await assertFails(updateDoc(doc(as('u-viewer'), `${C}/defects/D-1`), { status: 'closed' }));
+    await assertFails(deleteDoc(at));
+  });
+});
+
 describe('Agent 기록은 그 Run을 실행한 사용자의 호스트만 (PRD §8)', () => {
   const C = 'projects/haru/cycles/c1';
   const asHost = (uid: string, host: string) => env.authenticatedContext(uid, { host }).firestore();

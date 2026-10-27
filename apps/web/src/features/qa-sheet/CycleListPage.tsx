@@ -124,6 +124,11 @@ function CycleCard({ s, projectId }: { s: CycleSummary; projectId: string }) {
           </div>
           <VerdictBar counts={s.counts} total={s.total} label="판정 분포" />
           <VerdictCountList counts={s.counts} hideZero />
+          {s.unlinkedFails > 0 && (
+            <span className={textClass('label2', 'medium')} style={{ color: token('qcard-verdict-fail-fg') }}>
+              결함 없는 Fail {s.unlinkedFails}칸
+            </span>
+          )}
         </section>
 
         <section aria-label="통과율과 대상 디바이스">

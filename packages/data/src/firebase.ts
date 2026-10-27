@@ -60,6 +60,7 @@ import {
 import {
   approvalFor,
   caseReviseRequest,
+  changedDefect,
   closedRevision,
   confirmedResult,
   cycleSummary,
@@ -67,6 +68,7 @@ import {
   jobPartOrder,
   newBuild,
   newCycle,
+  newDefect,
   nextCase,
   qaDocRequest,
   qaDocSummary,
@@ -566,6 +568,35 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
             at: serverTimestamp(),
           });
           tx.set(ref, clean({ ...next, history: current.history, _i: snap.data()._i, _decision: log.id }));
+          return next;
+        }),
+      ),
+
+    // 결함 (F-RP-19): 결함·사이클 번호·결과 칸을 한 트랜잭션으로 쓴다 (보안 규칙이 번호가 함께 올랐는지 본다)
+    createDefect: (input) =>
+      guard(() =>
+        runTransaction(db, async (tx) => {
+          const cycleRef = doc(db, P(input.projectId), 'cycles', input.cycleId);
+          const resultRef = doc(cycleRef, 'results', resultId(input.tcId, input.deviceId));
+          const [cycle, result] = await Promise.all([tx.get(cycleRef), tx.get(resultRef)]);
+          if (!cycle.exists()) throw new NotFoundError(`사이클 없음: ${input.cycleId}`);
+          if (!result.exists()) throw new NotFoundError(`결과 없음: ${input.tcId} × ${input.deviceId}`);
+          const made = newDefect(strip<TestCycle>(cycle.data()), strip<CaseResult>(result.data()), input, me(), now());
+          const seq = made.cycle.defectSeq!;
+          tx.update(cycleRef, { defectSeq: seq });
+          tx.update(resultRef, { defectId: made.defect.id });
+          tx.set(doc(cycleRef, 'defects', made.defect.id), clean({ ...made.defect, _i: seq }));
+          return made.defect;
+        }),
+      ),
+    updateDefect: (ref, defectId, patch) =>
+      guard(() =>
+        runTransaction(db, async (tx) => {
+          const at = doc(db, P(ref.projectId), 'cycles', ref.cycleId, 'defects', defectId);
+          const snap = await tx.get(at);
+          if (!snap.exists()) throw new NotFoundError(`결함 없음: ${defectId}`);
+          const next = changedDefect(strip<Defect>(snap.data()), patch);
+          tx.update(at, { severity: next.severity, status: next.status });
           return next;
         }),
       ),

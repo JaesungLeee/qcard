@@ -43,6 +43,14 @@ service cloud.firestore {
     function runOf(p, c, run) {
       return /databases/$(database)/documents/projects/$(p)/cycles/$(c)/runs/$(run);
     }
+    // 새 결함의 번호: 이 요청에서 사이클의 defectSeq가 정확히 하나 올랐고, 결함 id가 그 번호다 (F-RP-19)
+    function defectNumbered(p, c, id) {
+      let path = /databases/$(database)/documents/projects/$(p)/cycles/$(c);
+      let seq = getAfter(path).data.get('defectSeq', 0);
+      return seq == get(path).data.get('defectSeq', 0) + 1
+        && id == 'D-' + string(seq)
+        && request.resource.data.id == id;
+    }
     function ownsRun(p, c, run) {
       return isHost() && exists(runOf(p, c, run))
         && get(runOf(p, c, run)).data.get('executorUid', '') == request.auth.uid;
@@ -167,10 +175,19 @@ service cloud.firestore {
         allow create: if canEdit(p) && isHost();
         allow update, delete: if false;
       }
-      // 결함 등 (cases·verdictLog·results·attempts·runs는 위 규칙만 — 여기서 쓰기를 열지 않는다)
+      // 결함 (F-RP-19): 사람만 만든다. 번호는 같은 요청에서 사이클의 defectSeq를 하나 올린 값이라 겹치지 않는다.
+      // 만든 뒤에는 심각도·상태만 바꾸고 지우지 않는다 (결과 칸의 defectId가 가리킨다)
+      match /cycles/{c}/defects/{id} {
+        allow read: if isMember(p);
+        allow create: if canEdit(p) && !isHost() && defectNumbered(p, c, id);
+        allow update: if canEdit(p) && !isHost()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['severity', 'status']);
+        allow delete: if false;
+      }
+      // 그 밖의 사이클 하위 문서 (cases·verdictLog·results·attempts·runs·defects는 위 규칙만 — 여기서 쓰기를 열지 않는다)
       match /cycles/{c}/{sub}/{rest=**} {
         allow read: if isMember(p);
-        allow write: if canEdit(p) && !(sub in ['cases', 'verdictLog', 'results', 'attempts', 'runs']);
+        allow write: if canEdit(p) && !(sub in ['cases', 'verdictLog', 'results', 'attempts', 'runs', 'defects']);
       }
       match /defects/{rest=**} {
         allow read: if isMember(p);
