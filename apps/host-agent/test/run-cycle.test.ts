@@ -405,7 +405,13 @@ describe('로컬 콘솔 서비스 (serve)', () => {
       await updateDoc(doc(db, `${C}/results/${tc}__${DEVICE}`), { verdict: 'nt' });
       await updateDoc(doc(db, `${C}/cases/${tc}`), { accountKind: '기본' });
       // 기본 계정은 하나 있고 비어 있다. 구독자 계정은 격리돼 배정할 수 없다
-      const base = { projectId: 'haru', usesTotp: false, createdAt: 'x', createdBy: 'x', secretUpdated: { by: 'x', at: 'x' } };
+      const base = {
+        projectId: 'haru',
+        usesTotp: false,
+        createdAt: 'x',
+        createdBy: 'x',
+        secretUpdated: { by: 'x', at: 'x' },
+      };
       await setDoc(doc(db, 'projects/haru/accounts/a1'), { ...base, id: 'a1', kind: '기본', loginId: 'a1' });
       await setDoc(doc(db, 'projects/haru/accounts/s1'), {
         ...base,
@@ -587,6 +593,21 @@ describe('로컬 콘솔 서비스 (serve)', () => {
       status: 'failed',
       error: { kind: 'failed', message: expect.stringMatching(/잠겨/) },
     });
+    expect(service.running).toBe(false);
+  });
+
+  it('완료된 사이클은 홈에서 빠지고, 시작·이어서 실행 요청도 받지 않는다 (F-CY-09)', async () => {
+    const { service, msgs, home } = await serviceFor(galaxy());
+    await env.withSecurityRulesDisabled((c) =>
+      updateDoc(doc(c.firestore() as unknown as Firestore, 'projects/haru/cycles/cycle-130-1'), {
+        'period.end': '2026-10-27T00:00:00Z',
+      }),
+    );
+    await service.refresh();
+    expect(home().cycles.some((c) => c.cycleId === 'cycle-130-1')).toBe(false);
+    service.handle({ type: 'start', projectId: 'haru', cycleId: 'cycle-130-1', resumeRunId: 'run-old' });
+    for (let i = 0; i < 50 && !msgs.some((m) => m.type === 'error'); i++) await new Promise((r) => setTimeout(r, 20));
+    expect(msgs.find((m) => m.type === 'error')).toMatchObject({ message: expect.stringMatching(/완료된 사이클/) });
     expect(service.running).toBe(false);
   });
 

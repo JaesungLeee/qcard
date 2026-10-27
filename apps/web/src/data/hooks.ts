@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useRef } from 'react';
 import type {
   ConfirmVerdictInput,
+  CycleRef,
   DocRef,
   NewCycleInput,
   NewProjectInput,
@@ -244,6 +245,20 @@ export function useConfirmVerdict() {
     onSettled: (_r, _e, input) => {
       void qc.invalidateQueries({ queryKey: keys.cycle(input.projectId, input.cycleId) });
       void qc.invalidateQueries({ queryKey: ['cycles'] });
+    },
+  });
+}
+
+/** 사이클 완료·다시 열기 (F-CY-09) */
+export function useCycleCompletion(ref: CycleRef) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (complete: boolean) => (complete ? api.completeCycle(ref) : api.reopenCycle(ref)),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: keys.cycle(ref.projectId, ref.cycleId) });
+      void qc.invalidateQueries({ queryKey: keys.cycles(ref.projectId) });
+      void qc.invalidateQueries({ queryKey: keys.projects }); // 진행 중 사이클 수
     },
   });
 }

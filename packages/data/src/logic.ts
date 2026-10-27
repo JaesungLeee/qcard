@@ -174,6 +174,38 @@ export function cycleSummary(
 /** 진행 중 사이클: 끝나지 않았고 로컬 실행 묶음이 아닌 것 */
 export const isActiveCycle = (c: TestCycle) => !c.period.end && c.origin !== 'local_run';
 
+/** 완료하기 전에 알릴 것 (F-CY-09): 남은 확인필요·N/T 칸, 아직 끝나지 않은 Run */
+export function completionWarnings(results: CaseResult[], runs: Run[]) {
+  const counts = countVerdicts(results);
+  return {
+    check: counts.check,
+    nt: counts.nt,
+    /** 실행 중인 Run은 끝까지 결과를 올린다 */
+    running: runs.filter((r) => r.status === 'running').length,
+    /** 일시정지된 Run은 완료 후 이어서 실행할 수 없다 */
+    paused: runs.filter((r) => r.status === 'paused').length,
+  };
+}
+
+/** 사이클 완료 (F-CY-09) */
+export function completedCycle(c: TestCycle, user: { name: string }, now: string): TestCycle {
+  if (c.origin === 'local_run') throw new RuleError('로컬 실행 묶음은 완료할 수 없습니다.');
+  if (c.period.end) throw new RuleError('이미 완료된 사이클입니다.');
+  return { ...c, period: { ...c.period, end: now }, completedBy: user.name };
+}
+
+/** 완료 취소 (F-CY-09) */
+export function reopenedCycle(c: TestCycle): TestCycle {
+  if (c.origin === 'local_run' || !c.period.end) throw new RuleError('완료된 사이클이 아닙니다.');
+  const { completedBy: _, ...rest } = c;
+  return { ...rest, period: { start: c.period.start } };
+}
+
+/** 완료된 사이클은 새 Run을 받지 않는다 — 웹 요청·호스트가 함께 쓴다 (F-CY-09) */
+export function requireOpenCycle(c: TestCycle): void {
+  if (c.period.end) throw new RuleError(`완료된 사이클입니다 (${c.name}). 다시 열어야 실행할 수 있습니다.`);
+}
+
 /**
  * QA 문서 생성 요청 (PRD §5.2) → 올릴 파일·스펙 묶음·Job. 메모리·Firestore 구현이 같이 쓴다.
  * `<스펙>/spec.md`만 올리고(F-IN-08), 스펙이 하나도 없거나 버전이 비면 `RuleError`.
@@ -257,9 +289,7 @@ export function caseReviseRequest(
 ): CaseReviseJob {
   const c = d.cases.find((x) => x.tcId === tcId);
   if (!c) throw new NotFoundError(`케이스 없음: ${tcId}`);
-  const questionIds = d.questions
-    .filter((q) => q.status === 'answered' && q.caseIds.includes(tcId))
-    .map((q) => q.id);
+  const questionIds = d.questions.filter((q) => q.status === 'answered' && q.caseIds.includes(tcId)).map((q) => q.id);
   if (!questionIds.length) throw new RuleError('이 케이스에 답변된 스펙 확인 질문이 없습니다.');
   const busy = existing.some(
     (j) =>
@@ -282,7 +312,12 @@ export function caseReviseRequest(
 }
 
 /** 수정안을 적용했거나 버렸다고 기록한다. 요청한 사람만, 완료된 수정안만 */
-export function closedRevision(job: Job, outcome: 'applied' | 'dismissed', user: { uid: string; name: string }, now: string): CaseReviseJob {
+export function closedRevision(
+  job: Job,
+  outcome: 'applied' | 'dismissed',
+  user: { uid: string; name: string },
+  now: string,
+): CaseReviseJob {
   if (job.kind !== 'case_revise') throw new RuleError('케이스 수정안 작업이 아닙니다.');
   if (job.requestedBy !== user.uid) throw new PermissionError('요청한 사람만 수정안을 처리할 수 있습니다.');
   if (job.status !== 'done') throw new RuleError('완료된 수정안만 처리합니다.');
