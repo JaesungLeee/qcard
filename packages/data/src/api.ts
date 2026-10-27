@@ -163,6 +163,13 @@ export interface QcardApi {
   createDefect(input: NewDefectInput): Promise<Defect>;
   /** 결함의 심각도·상태 바꾸기 (F-RP-19). Admin·QA만 */
   updateDefect(ref: CycleRef, defectId: string, patch: DefectPatch): Promise<Defect>;
+  /**
+   * 사이클 완료 (F-CY-09): 새 Run을 받지 않는다. 사람 확정은 계속 된다. 남은 확인필요·N/T 경고는 화면이 먼저 보인다
+   * (`completionWarnings`). 이미 완료됐거나 로컬 실행 묶음이면 `RuleError`. Admin·QA만
+   */
+  completeCycle(ref: CycleRef): Promise<TestCycle>;
+  /** 완료 취소 (F-CY-09): 다시 Run을 받는다. 완료되지 않았으면 `RuleError`. Admin·QA만 */
+  reopenCycle(ref: CycleRef): Promise<TestCycle>;
 
   /** Storage에 올린 스크린샷(`kind: 'storage'`)을 화면에 띄울 주소. 로그인 상태로 읽는다 */
   screenshotUrl(path: string): Promise<string>;

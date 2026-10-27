@@ -27,6 +27,7 @@ import {
   type HostConnection,
   type Member,
   type TestAccount,
+  type TestCycle,
 } from '@qcard/shared';
 import {
   ConflictError,
@@ -46,6 +47,7 @@ import {
   caseReviseRequest,
   changedDefect,
   closedRevision,
+  completedCycle,
   confirmedResult,
   cycleSummary,
   isActiveCycle,
@@ -57,6 +59,8 @@ import {
   qaDocRequest,
   runRequest,
   qaDocSummary,
+  reopenedCycle,
+  requireOpenCycle,
   resolveQuestionIn,
   retriedJob,
 } from '@qcard/data';
@@ -111,6 +115,11 @@ export function createMemoryApi(
     return c;
   };
   const build = (buildId: string) => db.builds.find((b) => b.id === buildId)!;
+  const putCycle = (ref: CycleRef, c: TestCycle) => {
+    db.cycles = db.cycles.map((x) => (x.id === c.id ? c : x));
+    notify(ref);
+    return clone(c);
+  };
 
   // ------------------------------------------------------------ 프로젝트·멤버·초대 (F-TM-09~13)
   // 규칙은 @qcard/shared membership — Cloud Functions도 같은 함수를 쓴다.
@@ -466,6 +475,18 @@ export function createMemoryApi(
         return clone(list[i]);
       });
     },
+    async completeCycle(ref) {
+      return rules(() => {
+        requireEditor(membersOf(ref.projectId), actor().uid);
+        return putCycle(ref, completedCycle(cycle(ref.cycleId), actor(), now()));
+      });
+    },
+    async reopenCycle(ref) {
+      return rules(() => {
+        requireEditor(membersOf(ref.projectId), actor().uid);
+        return putCycle(ref, reopenedCycle(cycle(ref.cycleId)));
+      });
+    },
 
     // ------------------------------------------------------------ QA 문서 생성 작업
     // 메모리 구현에는 호스트가 없어 요청한 작업은 "호스트 대기"로 남는다
@@ -484,6 +505,7 @@ export function createMemoryApi(
     async requestRun(projectId, input) {
       return rules(() => {
         requireEditor(membersOf(projectId), actor().uid);
+        requireOpenCycle(cycle(input.cycleId));
         const job = runRequest(projectId, input, actor(), now(), `job-m${db.jobs.length + 1}`);
         db.jobs.unshift(job);
         return job;

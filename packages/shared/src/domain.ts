@@ -571,7 +571,10 @@ export const TestCycle = z.object({
   docId: z.string(),
   buildId: z.string(),
   targets: z.array(TargetDevice),
+  /** end가 있으면 완료된 사이클 (F-CY-09): 새 Run을 받지 않는다. 사람 확정은 계속 된다 */
   period: z.object({ start: z.string(), end: z.string().optional() }),
+  /** 사이클을 완료한 사람 (다시 열면 지운다) */
+  completedBy: z.string().optional(),
   serverEnv: z.enum(['dev', 'stage', 'prod']),
   /** 케이스 스냅샷 (F-CY-02) */
   snapshot: z.array(z.object({ tcId: z.string(), contentHash: z.string() })),
@@ -915,7 +918,9 @@ export const TestAccount = z.object({
     })
     .optional(),
   /** 로그인 준비 플로우가 실패했다. 비밀번호를 고치거나 표시를 지우기 전까지 배정하지 않는다 */
-  loginFailed: z.object({ at: z.string(), cycleId: z.string(), runId: z.string(), tcId: z.string(), detail: z.string().optional() }).optional(),
+  loginFailed: z
+    .object({ at: z.string(), cycleId: z.string(), runId: z.string(), tcId: z.string(), detail: z.string().optional() })
+    .optional(),
   /** 격리: 원복 실패 또는 원복 중 끊김. 사람이 원복하고 해제하기 전까지 배정하지 않는다 */
   quarantine: z
     .object({

@@ -7,6 +7,7 @@
   { "name": "qa-sheet-traceability", "path": "/p/haru/cycles/cycle-130-1?tab=traceability", "waitFor": "요구사항별 연결 케이스" },
   { "name": "qa-sheet-env", "path": "/p/haru/cycles/cycle-130-1?tab=env", "waitFor": "서명 인증서 SHA-1" },
   { "name": "qa-sheet-done-summary", "path": "/p/haru/cycles/cycle-121-1?tab=summary", "waitFor": "진행 매트릭스" },
+  { "name": "qa-sheet-complete-confirm", "path": "/p/haru/cycles/cycle-130-1?tab=summary", "waitFor": "진행 매트릭스", "click": "사이클 완료", "then": "사이클을 완료할까요?" },
   { "name": "qa-sheet-trace-fail", "path": "/p/haru/cycles/cycle-130-1/results/TC-ONBOARDING-032/galaxy-s24-15", "waitFor": "테스트 동작 흐름" },
   { "name": "qa-sheet-trace-defect-form", "path": "/p/haru/cycles/cycle-130-1/results/TC-ONBOARDING-032/galaxy-s24-15", "waitFor": "테스트 동작 흐름", "click": "결함 등록", "then": "저장하면 D-3" },
   { "name": "qa-sheet-trace-check", "path": "/p/haru/cycles/cycle-130-1/results/TC-ONBOARDING-030/galaxy-s24-15", "waitFor": "테스트 동작 흐름" },

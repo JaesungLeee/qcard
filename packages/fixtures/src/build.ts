@@ -1192,6 +1192,7 @@ export const cycle121: TestCycle = {
   buildId: 'build-121',
   targets: devices,
   period: { start: T(3, 10), end: T(4, 18) },
+  completedBy: PEOPLE.lead,
   serverEnv: 'stage',
   snapshot: snapshot120.map((c) => ({ tcId: c.tcId, contentHash: c.contentHash })),
   createdBy: PEOPLE.lead,

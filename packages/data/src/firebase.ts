@@ -53,6 +53,7 @@ import {
   RuleError,
   type AccountView,
   type CycleDetail,
+  type CycleRef,
   type InvitationView,
   type ProjectSummary,
   type QcardApi,
@@ -62,6 +63,7 @@ import {
   caseReviseRequest,
   changedDefect,
   closedRevision,
+  completedCycle,
   confirmedResult,
   cycleSummary,
   isActiveCycle,
@@ -72,6 +74,8 @@ import {
   nextCase,
   qaDocRequest,
   qaDocSummary,
+  reopenedCycle,
+  requireOpenCycle,
   retriedJob,
   resolveQuestionIn,
   runRequest,
@@ -221,6 +225,17 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       runs: ordered<Run>(runs.docs),
       defects: ordered<Defect>(defects.docs),
     };
+  }
+  /** 사이클 문서를 읽어 바꾼다 (완료·다시 열기). 빠진 필드가 지워지도록 통째로 쓴다 */
+  function updateCycle({ projectId, cycleId }: CycleRef, change: (c: TestCycle) => TestCycle) {
+    return runTransaction(db, async (tx) => {
+      const ref = doc(db, P(projectId), 'cycles', cycleId);
+      const snap = await tx.get(ref);
+      if (!snap.exists()) throw new NotFoundError(`사이클 없음: ${cycleId}`);
+      const next = change(strip<TestCycle>(snap.data()));
+      tx.set(ref, clean(next));
+      return next;
+    });
   }
   async function loadBuild(p: string, id: string): Promise<Build> {
     const snap = await getDoc(doc(db, P(p), 'builds', id));
@@ -600,6 +615,8 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
           return next;
         }),
       ),
+    completeCycle: (ref) => guard(() => updateCycle(ref, (c) => completedCycle(c, me(), now()))),
+    reopenCycle: (ref) => guard(() => updateCycle(ref, reopenedCycle)),
 
     // ------------------------------------------------------------ QA 문서 생성 작업 (PRD §5.2, §6.2)
     requestQaDoc: (projectId, input) =>
@@ -627,6 +644,9 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       }),
     requestRun: (projectId, input) =>
       guard(async () => {
+        const cycle = await getDoc(doc(db, P(projectId), 'cycles', input.cycleId));
+        if (!cycle.exists()) throw new NotFoundError(`사이클 없음: ${input.cycleId}`);
+        requireOpenCycle(strip<TestCycle>(cycle.data()));
         const r = doc(collection(db, P(projectId), 'jobs'));
         const job = runRequest(projectId, input, me(), now(), r.id);
         await setDoc(r, clean(job));

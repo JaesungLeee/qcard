@@ -70,6 +70,10 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+/* 서명 지문: <wbr>을 넣은 콜론 뒤에서만 줄을 바꾼다 */
+.qs-kv .qs-sha {
+  overflow-wrap: normal;
+}
 
 /* 진행 막대: 판정별 구간. 숫자·범례를 함께 보여 색만으로 읽지 않게 한다. */
 .qs-bar {
