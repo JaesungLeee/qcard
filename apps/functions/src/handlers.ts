@@ -4,12 +4,15 @@ import {
   accepting,
   changeRole,
   cycleDeletion,
+  cycleUsesFlows,
   deletion,
   invitationState,
   leaving,
   MembershipError,
   newInvitation,
   newProject,
+  prepFlowDeletion,
+  prepFlowUses,
   projectIdFor,
   removal,
   requireAdmin,
@@ -23,7 +26,9 @@ import {
   type Member,
   type NewProjectInput,
   type Project,
+  type QADocument,
   type Run,
+  type TestCase,
   type TestCycle,
 } from '@qcard/shared';
 import { z } from 'zod';
@@ -219,6 +224,34 @@ export async function deleteCycle(ctx: Ctx, data: unknown, removeFiles: RemoveFi
   });
   await removeFiles(`projects/${projectId}/cycles/${cycleId}/`);
   await ctx.db.recursiveDelete(ref);
+}
+
+const FlowId = ProjectId.extend({ flowId: z.string().min(1) });
+
+/**
+ * 준비 플로우 삭제 (F-PF-01): 케이스가 참조 중이면 막는다(`prepFlowUses`). 보안 규칙으로는 참조를 질의할 수 없고
+ * 클라이언트 트랜잭션은 질의를 못 해서, 여기서 한 트랜잭션 안에 참조를 읽고 지운다
+ */
+export async function deletePrepFlow(ctx: Ctx, data: unknown): Promise<void> {
+  const { projectId, flowId } = parse(FlowId, data);
+  const project = projectRef(ctx.db, projectId);
+  await ctx.db.runTransaction(async (tx) => {
+    const ref = project.collection('prepFlows').doc(flowId);
+    await read(tx, ref, '준비 플로우');
+    const members = await membersIn(tx, ctx.db, projectId);
+    const casesOf = async (ref: DocumentReference) =>
+      (await tx.get(ref.collection('cases'))).docs.map((d) => d.data() as TestCase);
+    const metas = (await tx.get(project.collection('qaDocs'))).docs;
+    const docs = await Promise.all(
+      metas.map(async (d) => ({ ...(d.data() as QADocument), id: d.id, cases: await casesOf(d.ref) })),
+    );
+    const open = (await tx.get(project.collection('cycles'))).docs.filter((d) => cycleUsesFlows(d.data() as TestCycle));
+    const cycles = await Promise.all(
+      open.map(async (d) => ({ cycle: d.data() as TestCycle, cases: await casesOf(d.ref) })),
+    );
+    prepFlowDeletion(members, await actorOf(ctx, tx), prepFlowUses(docs, cycles)[flowId] ?? []);
+    tx.delete(ref);
+  });
 }
 
 // ------------------------------------------------------------------ 멤버

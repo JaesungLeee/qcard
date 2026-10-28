@@ -4,11 +4,11 @@ import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { FirebaseError } from 'firebase/app';
-import { setLogLevel, type Firestore } from 'firebase/firestore';
+import { collection, doc, getDocs, setDoc, setLogLevel, updateDoc, type Firestore } from 'firebase/firestore';
 import { GITHUB, PEOPLE } from '@qcard/fixtures';
-import { MembershipError, type TestCycle } from '@qcard/shared';
+import { MembershipError, type PrepFlow, type TestCycle } from '@qcard/shared';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ConflictError, NotFoundError, PermissionError, RuleError } from '@qcard/data';
+import { ConflictError, NotFoundError, PermissionError, PrepFlowConflictError, RuleError } from '@qcard/data';
 import { createFirebaseApi, writeAll } from '@qcard/data/firebase';
 import { createMemoryApi } from '../../web/src/data/memory';
 import * as acc from '../src/accounts';
@@ -291,6 +291,47 @@ describe('QA 데이터 쓰기', () => {
     expect(await ids(mem)).toEqual(await ids(fb));
     await expect(fb.getCycle(cref)).rejects.toBeInstanceOf(NotFoundError);
     await expect(mem.getCycle(cref)).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('준비 플로우 추가·편집·삭제가 메모리 구현과 같고, 충돌·참조·Viewer는 거부한다 (F-PF-01)', async () => {
+    const input = { name: '로그인 상태', kind: 'login' as const, check: '홈 탭이 보인다', steps: ['[로그인]'] };
+    const fb = apiAs(PEOPLE.qa);
+    const mem = memory();
+    mem.switchUser(PEOPLE.qa);
+    const noTime = ({ updatedAt: _, ...f }: PrepFlow) => f;
+    for (const api of [fb, mem]) {
+      expect(noTime(await api.createPrepFlow('haru', input))).toMatchObject({ id: 'pf-login', rev: 1 });
+      expect((await api.createPrepFlow('haru', input)).id).toBe('pf-login-2');
+      await api.updatePrepFlow('haru', 'pf-done', { ...input, kind: 'data_state', name: '먼저' }, 0);
+      const err = await api.updatePrepFlow('haru', 'pf-done', input, 0).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(PrepFlowConflictError);
+      expect((err as PrepFlowConflictError).latest).toMatchObject({ name: '먼저', rev: 1 });
+      await expect(api.createPrepFlow('haru', { ...input, check: ' ' })).rejects.toBeInstanceOf(RuleError);
+      await expect(api.deletePrepFlow('haru', 'pf-clean')).rejects.toThrow('케이스가 사용 중');
+      await api.deletePrepFlow('haru', 'pf-login-2');
+    }
+    expect((await fb.listPrepFlows('haru')).map(noTime)).toEqual((await mem.listPrepFlows('haru')).map(noTime));
+    expect(await fb.listPrepFlowUses('haru')).toEqual(await mem.listPrepFlowUses('haru'));
+
+    const viewer = apiAs(PEOPLE.planner);
+    await expect(viewer.createPrepFlow('haru', input)).rejects.toBeInstanceOf(PermissionError);
+    await expect(viewer.updatePrepFlow('haru', 'pf-login', input, 1)).rejects.toBeInstanceOf(PermissionError);
+    await expect(viewer.deletePrepFlow('haru', 'pf-login')).rejects.toBeInstanceOf(PermissionError);
+  });
+
+  it('완료되지 않은 사이클만 쓰는 플로우도 지우지 못하고, 사이클을 완료하면 지운다 (F-PF-01)', async () => {
+    const fb = apiAs(PEOPLE.qa);
+    // QA 문서에서는 빼고 사이클 사본(cycle-130-1)에만 남긴다
+    await env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore() as unknown as Firestore;
+      await setDoc(doc(db, 'projects/haru/prepFlows/pf-only-cycle'), { id: 'pf-only-cycle', name: 'x', kind: 'data_state', check: 'x', steps: ['x'] });
+      const copy = (await getDocs(collection(db, 'projects/haru/cycles/cycle-130-1/cases'))).docs[0]!;
+      await updateDoc(copy.ref, { prepFlowIds: ['pf-only-cycle'] });
+    });
+    await expect(fb.deletePrepFlow('haru', 'pf-only-cycle')).rejects.toThrow('사이클');
+    await fb.completeCycle({ projectId: 'haru', cycleId: 'cycle-130-1' });
+    await fb.deletePrepFlow('haru', 'pf-only-cycle');
+    expect((await fb.listPrepFlows('haru')).map((f) => f.id)).not.toContain('pf-only-cycle');
   });
 
   it('구독하면 다른 사람이 확정한 판정이 바로 들어오고, 끊으면 더 받지 않는다 (F-CY-05·F-DB-07)', async () => {

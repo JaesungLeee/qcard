@@ -126,9 +126,13 @@ service cloud.firestore {
         allow read: if isMember(p);
         allow write: if canEdit(p);
       }
-      match /prepFlows/{rest=**} {
+      // 준비 플로우 (F-PF-01). 호스트는 QA 문서 생성 때 새 플로우를 만들기만 한다. 편집은 웹의 사람만.
+      // 삭제는 Functions만 — 참조하는 케이스가 있는지 규칙으로는 질의할 수 없다
+      match /prepFlows/{id} {
         allow read: if isMember(p);
-        allow write: if canEdit(p);
+        allow create: if canEdit(p);
+        allow update: if canEdit(p) && !isHost();
+        allow delete: if false;
       }
       // 빌드: 올린 APK는 바꾸지 않는다 (모든 실행자가 같은 파일을 설치, F-DV-05)
       match /builds/{id} {

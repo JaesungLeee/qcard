@@ -1,7 +1,11 @@
 import { createFixtureDb, type ConsoleSession } from '@qcard/fixtures';
 import {
   accountState,
+  cycleUsesFlows,
   leaseLive,
+  newPrepFlow,
+  prepFlowChange,
+  prepFlowUses,
   type Build,
   type CaseResult,
   type CaseReviseJob,
@@ -51,7 +55,9 @@ import {
   ConflictError,
   NotFoundError,
   PermissionError,
+  PrepFlowConflictError,
   RuleError,
+  toApiError,
   type AccountView,
   type CycleDetail,
   type CycleRef,
@@ -186,7 +192,7 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
     try {
       return await fn();
     } catch (e) {
-      throw fromFirebase(e);
+      throw fromFirebase(toApiError(e));
     }
   };
   // callable은 undefined를 null로 바꿔 보내므로 빈 필드는 빼고 보낸다
@@ -240,6 +246,27 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       tx.set(ref, clean(next));
       return next;
     });
+  }
+  const flowRef = (p: string, id: string) => doc(db, P(p), 'prepFlows', id);
+  const membersOf = async (p: string) =>
+    (await getDocs(collection(db, P(p), 'members'))).docs.map((d) => d.data() as Member);
+  /** 준비 플로우 사용처: 모든 QA 문서 + 완료되지 않은 사이클의 케이스 사본 */
+  async function flowUses(p: string) {
+    const [metas, cycles] = await Promise.all([
+      getDocs(collection(db, P(p), 'qaDocs')),
+      getDocs(collection(db, P(p), 'cycles')),
+    ]);
+    const open = cycles.docs.map((d) => strip<TestCycle>(d.data())).filter(cycleUsesFlows);
+    const [docs, copies] = await Promise.all([
+      Promise.all(metas.docs.map((d) => loadQaDoc(p, d.id))),
+      Promise.all(
+        open.map(async (cycle) => ({
+          cycle,
+          cases: ordered<TestCase>((await getDocs(collection(db, P(p), 'cycles', cycle.id, 'cases'))).docs),
+        })),
+      ),
+    ]);
+    return prepFlowUses(docs, copies);
   }
   async function loadBuild(p: string, id: string): Promise<Build> {
     const snap = await getDoc(doc(db, P(p), 'builds', id));
@@ -389,6 +416,39 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       ),
     listPrepFlows: (projectId) =>
       guard(async () => ordered<PrepFlow>((await getDocs(collection(db, P(projectId), 'prepFlows'))).docs)),
+    listPrepFlowUses: (projectId) => guard(() => flowUses(projectId)),
+    createPrepFlow: (projectId, input) =>
+      guard(async () => {
+        const [members, existing] = await Promise.all([
+          membersOf(projectId),
+          getDocs(collection(db, P(projectId), 'prepFlows')),
+        ]);
+        const flow = newPrepFlow(members, me(), input, ordered<PrepFlow>(existing.docs), now());
+        const last = Math.max(-1, ...existing.docs.map((d) => (d.data()._i as number | undefined) ?? 0));
+        await runTransaction(db, async (tx) => {
+          // 목록을 읽은 뒤 다른 사람이 같은 id로 만들었으면 덮어쓰지 않는다
+          const ref = flowRef(projectId, flow.id);
+          if ((await tx.get(ref)).exists()) throw new RuleError('다른 사람이 방금 플로우를 추가했습니다. 다시 저장하세요.');
+          tx.set(ref, clean({ ...flow, _i: last + 1 }));
+        });
+        return flow;
+      }),
+    updatePrepFlow: (projectId, flowId, input, expectedRev) =>
+      guard(async () => {
+        const members = await membersOf(projectId);
+        return runTransaction(db, async (tx) => {
+          const ref = flowRef(projectId, flowId);
+          const snap = await tx.get(ref);
+          if (!snap.exists()) throw new NotFoundError(`준비 플로우 없음: ${flowId}`);
+          const current = strip<PrepFlow>(snap.data());
+          if ((current.rev ?? 0) !== expectedRev) throw new PrepFlowConflictError(current);
+          const next = prepFlowChange(members, me(), current, input, now());
+          tx.set(ref, clean({ ...next, _i: snap.data()._i }));
+          return next;
+        });
+      }),
+    // 참조 확인은 질의가 필요해 Functions 트랜잭션에서 한다 (클라이언트는 플로우를 지우지 못한다)
+    deletePrepFlow: (projectId, flowId) => call<void>('deletePrepFlow', { projectId, flowId }),
 
     // ------------------------------------------------------------ 테스트 계정 (F-PF-04·08·09)
     // 쓰기는 Functions만 (비밀값 봉인·배정 규칙). 배정이 살아 있는지는 그 Run의 연결 신호로 본다
