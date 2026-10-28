@@ -26,6 +26,7 @@ import type {
   Role,
   QADocument,
   Run,
+  Screenshot,
   TestCase,
   TestAccount,
   TestCycle,
@@ -278,7 +279,15 @@ export type ConfirmVerdictInput = {
   verdict: Verdict;
   note?: string;
   actualSummary?: string;
+  /**
+   * 첨부 스크린샷 (F-RP-05, 선택). 주면 칸의 첨부를 남길 기존 첨부(`keep`) + 새로 올릴 파일(`add`)로 바꾼다.
+   * 없으면 기존 첨부를 그대로 둔다. 개수·형식·크기는 `attachmentProblem`
+   */
+  attachments?: { keep: Screenshot[]; add: AttachmentFile[] };
 };
+
+/** 새로 올릴 첨부 이미지. w·h는 이미지 px (화면 비율용) */
+export type AttachmentFile = { name: string; type: string; bytes: Uint8Array; w?: number; h?: number };
 
 export class ConflictError extends Error {
   constructor(readonly latest: TestCase) {

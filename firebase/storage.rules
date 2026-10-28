@@ -42,6 +42,22 @@ service firebase.storage {
         && request.resource.size < 20 * 1024 * 1024;
     }
 
+    // 사람이 결과를 입력하며 첨부한 스크린샷 (F-RP-05): 웹에서 Admin·QA가 올린다. 한 번 올린 파일은 덮어쓰지 않는다.
+    // 완료된 사이클도 사람 확정은 계속 되므로 막지 않고, 삭제 중인 사이클(deletingAt)만 막는다.
+    // 형식·크기는 packages/data/src/logic.ts의 attachmentProblem과 같다
+    match /projects/{p}/cycles/{c}/manual/{result}/{file} {
+      allow read: if signedIn() && firestore.exists(member(p));
+      allow create: if signedIn()
+        && request.auth.token.get('host', null) == null
+        && resource == null
+        && firestore.exists(member(p))
+        && firestore.get(member(p)).data.role in ['admin', 'qa']
+        && firestore.exists(/databases/(default)/documents/projects/$(p)/cycles/$(c))
+        && firestore.get(/databases/(default)/documents/projects/$(p)/cycles/$(c)).data.get('deletingAt', null) == null
+        && request.resource.contentType.matches('image/(png|jpeg|webp)')
+        && request.resource.size <= 10 * 1024 * 1024;
+    }
+
     // 스펙 스냅샷은 변경 불가 (F-IN-03). 업로드마다 묶음 id가 새로 생기므로 덮어쓸 일이 없다
     match /projects/{p}/specBundles/{bundle}/{rest=**} {
       allow read: if signedIn() && firestore.exists(member(p));

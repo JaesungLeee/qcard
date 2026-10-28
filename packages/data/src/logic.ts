@@ -15,6 +15,7 @@ import {
   type SpecBundle,
   type QADocument,
   type Run,
+  type Screenshot,
   type TestCase,
   type TestCycle,
   type Verdict,
@@ -26,6 +27,7 @@ import {
   NotFoundError,
   PermissionError,
   RuleError,
+  type AttachmentFile,
   type ConfirmVerdictInput,
   type DefectDraft,
   type DefectPatch,
@@ -134,20 +136,66 @@ export function resolveQuestionIn(
   return { questions, released };
 }
 
-/** 사람 확정·오버라이드 (F-RP-04)가 남기는 판정 기록 한 건. 판정이 같아도 사람이 확정했다는 기록으로 남긴다 */
-export function verdictChange(r: CaseResult, input: ConfirmVerdictInput, user: string, now: string): VerdictChange {
-  return { at: now, by: user, from: r.verdict, to: input.verdict, ...(input.note ? { note: input.note } : {}) };
+// 첨부 스크린샷 (F-RP-05). storage.rules의 manual 경로 규칙과 같은 값이다
+export const MAX_ATTACHMENTS = 5;
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const ATTACHMENT_EXT: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
+
+/** 첨부를 받을 수 없는 이유. 없으면 undefined */
+export function attachmentProblem(a: NonNullable<ConfirmVerdictInput['attachments']>): string | undefined {
+  if (a.keep.length + a.add.length > MAX_ATTACHMENTS) return `스크린샷은 ${MAX_ATTACHMENTS}장까지 첨부할 수 있습니다`;
+  for (const f of a.add) {
+    if (!ATTACHMENT_EXT[f.type]) return `${f.name}: PNG·JPEG·WebP 이미지만 첨부할 수 있습니다`;
+    if (f.bytes.length > MAX_ATTACHMENT_BYTES) return `${f.name}: 한 장에 10MB까지 첨부할 수 있습니다`;
+  }
+  return undefined;
 }
 
-/** 사람 확정·오버라이드 (F-RP-04): 판정 변경 이력을 남긴다 */
-export function confirmedResult(r: CaseResult, input: ConfirmVerdictInput, user: string, now: string): CaseResult {
+/** 첨부 파일의 Storage 경로. 사이클 폴더 아래라 사이클·프로젝트 삭제 때 함께 지워진다 */
+export function attachmentPath(input: ConfirmVerdictInput, id: string, file: AttachmentFile): string {
+  return `projects/${input.projectId}/cycles/${input.cycleId}/manual/${input.tcId}__${input.deviceId}/${id}.${ATTACHMENT_EXT[file.type] ?? 'png'}`;
+}
+
+/** 사람 확정·오버라이드 (F-RP-04)가 남기는 판정 기록 한 건. 판정이 같아도 사람이 확정했다는 기록으로 남긴다 */
+export function verdictChange(
+  r: CaseResult,
+  input: ConfirmVerdictInput,
+  user: string,
+  now: string,
+  attachments?: Screenshot[],
+): VerdictChange {
+  return {
+    at: now,
+    by: user,
+    from: r.verdict,
+    to: input.verdict,
+    ...(input.note ? { note: input.note } : {}),
+    ...(attachments?.length ? { attachments: attachments.length } : {}),
+  };
+}
+
+/**
+ * 사람 확정·오버라이드 (F-RP-04): 판정 변경 이력을 남긴다.
+ * `attachments`는 올린 뒤의 첨부 목록(F-RP-05) — 주면 칸의 첨부를 바꾸고, 없으면 그대로 둔다
+ */
+export function confirmedResult(
+  r: CaseResult,
+  input: ConfirmVerdictInput,
+  user: string,
+  now: string,
+  attachments?: Screenshot[],
+): CaseResult {
   const next: CaseResult = structuredClone(r);
-  next.history.push(verdictChange(r, input, user, now));
+  next.history.push(verdictChange(r, input, user, now, attachments));
   next.verdict = input.verdict;
   next.decidedBy = { kind: 'human', name: user };
   next.autoConfirmed = false;
   if (input.actualSummary !== undefined) next.actualSummary = input.actualSummary;
   if (input.note !== undefined) next.note = input.note;
+  if (attachments) {
+    if (attachments.length) next.attachments = attachments;
+    else delete next.attachments;
+  }
   if (!next.executedAt) {
     next.executedAt = now;
     next.executor = user;

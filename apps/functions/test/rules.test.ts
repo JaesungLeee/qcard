@@ -188,6 +188,16 @@ describe('쓰기', () => {
       await assertFails(deleteDoc(doc(as('u-qa'), LOG, first)));
     });
 
+    it('첨부 스크린샷은 판정을 확정하면서 5장까지만 바꾼다 (F-RP-05)', async () => {
+      const shot = (i: number) => ({ kind: 'storage', path: `projects/haru/cycles/c1/manual/TC-1__d/s${i}.png` });
+      const shots = (n: number) => Array.from({ length: n }, (_, i) => shot(i));
+      await assertSucceeds(confirm(log(), (id) => human(id, { attachments: shots(5) })));
+      await assertFails(confirm(log(), (id) => human(id, { attachments: shots(6) })));
+      await assertFails(confirm(log(), (id) => human(id, { attachments: 'projects/haru/x.png' })));
+      // 로그 없이 첨부만 바꾸지 못한다
+      await assertFails(updateDoc(doc(as('u-qa'), RESULT), { attachments: shots(1) }));
+    });
+
     it('판정을 건드리지 않는 메모·요약은 사람이 고치지만, Agent 증거는 못 고친다', async () => {
       await assertSucceeds(updateDoc(doc(as('u-qa'), RESULT), { actualSummary: '요약만 고침', note: '메모' }));
       await assertFails(updateDoc(doc(as('u-qa'), RESULT), { steps: [] }));

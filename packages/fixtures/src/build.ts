@@ -908,11 +908,22 @@ type Special = {
   history?: CaseResult['history'];
   previousAttempts?: CaseResult['previousAttempts'];
   note?: string;
+  attachments?: CaseResult['attachments'];
 };
 
 const src = (id: string) => `${SPEC}/${id}`;
 
 const SPECIAL_130: Record<string, Partial<Record<string, Special>>> = {
+  // 수동 케이스: 실행자가 결과와 함께 스크린샷을 첨부했다 (F-RP-05)
+  [src('TS-020')]: {
+    [S24.id]: {
+      verdict: 'pass',
+      attachments: [
+        { kind: 'mock', screen: 'mate-invite' },
+        { kind: 'mock', screen: 'share-sheet' },
+      ],
+    },
+  },
   [src('EC-009')]: {
     [S24.id]: {
       verdict: 'fail',
@@ -1077,6 +1088,7 @@ function result(
     points,
     history: sp?.history ?? [],
     ...(sp?.previousAttempts ? { previousAttempts: sp.previousAttempts } : {}),
+    ...(sp?.attachments ? { attachments: sp.attachments } : {}),
     tokens: tc.mode === 'manual' ? 0 : steps.length * 3800 + points.length * 1200,
     costUsd:
       tc.mode === 'manual' ? 0 : Math.round((steps.length * 3800 + points.length * 1200) * 0.0000042 * 1000) / 1000,
@@ -1558,7 +1570,8 @@ export const jobs: Job[] = [
     finishedAt: T(16, 9, 31),
     result: {
       kind: 'revise',
-      reason: 'Q-3 답변(터치 영역 48dp, dot 중심을 누르면 됨)에 맞춰 dot을 누르는 단계를 "중심을 누른다"로 바꾸고 사전조건에 터치 영역을 적었다.',
+      reason:
+        'Q-3 답변(터치 영역 48dp, dot 중심을 누르면 됨)에 맞춰 dot을 누르는 단계를 "중심을 누른다"로 바꾸고 사전조건에 터치 영역을 적었다.',
       body: revised039.body,
       guessed: [],
       tokens: 3_100,

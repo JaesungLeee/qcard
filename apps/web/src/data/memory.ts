@@ -45,6 +45,7 @@ import {
 import { localRunCycle, type LocalRun } from './localRuns';
 import {
   approvalFor,
+  attachmentProblem,
   caseReviseRequest,
   changedDefect,
   closedRevision,
@@ -69,6 +70,12 @@ import {
 export { countVerdicts, passRate } from '@qcard/data';
 
 const clone = <T>(v: T): T => structuredClone(v);
+
+function dataUrl(type: string, bytes: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return `data:${type};base64,${btoa(s)}`;
+}
 
 /** 메모리 구현은 로그인이 없으므로 개발용으로 사용자를 바꿀 수 있다 (초대 수락·권한 화면 확인용) */
 export type MemoryApi = QcardApi & { readonly users: string[]; switchUser(user: string): void };
@@ -445,7 +452,15 @@ export function createMemoryApi(
       const results = db.results[input.cycleId] ?? [];
       const i = results.findIndex((x) => x.tcId === input.tcId && x.deviceId === input.deviceId);
       if (i < 0) throw new NotFoundError(`결과 없음: ${input.tcId} × ${input.deviceId}`);
-      results[i] = confirmedResult(results[i]!, input, currentUser, now());
+      // 메모리 구현은 Storage가 없어 첨부를 data URL로 둔다
+      const a = input.attachments;
+      const problem = a && attachmentProblem(a);
+      if (problem) throw new RuleError(problem);
+      const attachments = a && [
+        ...a.keep,
+        ...a.add.map((f) => ({ kind: 'url' as const, url: dataUrl(f.type, f.bytes), w: f.w, h: f.h })),
+      ];
+      results[i] = confirmedResult(results[i]!, input, currentUser, now(), attachments);
       notify(input);
       return wait(results[i]);
     },
