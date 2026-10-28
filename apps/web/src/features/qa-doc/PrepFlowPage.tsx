@@ -1,124 +1,294 @@
-import type { PrepFlow, QADocument, TestCase } from '@qcard/shared';
-import { Button, Icons, textClass, token } from '@qcard/ui';
-import { useMemo } from 'react';
-import { Link, useParams } from 'react-router';
+import { prepFlowDeleteBlocker, type PrepFlow, type PrepFlowUse } from '@qcard/shared';
+import { Button, Icons, TextButton, textClass, token } from '@qcard/ui';
+import { useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
-import { usePrepFlows, useQaDoc, useQaDocs } from '../../data/hooks';
+import { useDeletePrepFlow, useMyRole, usePrepFlowUses, usePrepFlows } from '../../data/hooks';
+import { ErrorMessage } from '../projects/parts';
 import { Tag } from './Badges';
-import { prepFlowUsage } from './logic';
+import { PrepFlowForm } from './PrepFlowForm';
 import { RichText } from './RichText';
 import { PREP_KIND_LABEL } from './params';
 import './qa-doc.css';
 
-/** 준비 플로우 (PRD §5.3): 프로젝트 단위 공통 사전조건 */
+/**
+ * 준비 플로우 (PRD §5.3, F-PF-01): 프로젝트 단위 공통 사전조건. Admin·QA가 추가·편집·삭제하고 Viewer는 읽기만 한다.
+ * 주소: `?new=1`은 추가 폼, `?edit=<id>`는 그 플로우의 편집 폼, `?uses=<id>`는 그 플로우를 쓰는 케이스 목록을 연다
+ */
 export function PrepFlowPage() {
   const { projectId = '' } = useParams();
+  const role = useMyRole(projectId);
+  const editor = role.data === 'admin' || role.data === 'qa';
   const flows = usePrepFlows(projectId);
-  const docs = useQaDocs(projectId);
-  const latestId = useMemo(
-    () => [...(docs.data ?? [])].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0]?.id,
-    [docs.data],
-  );
+  const uses = usePrepFlowUses(projectId);
+  const [params, setParams] = useSearchParams();
+  const param = (key: string, value?: string) =>
+    setParams(
+      (p) => {
+        // 폼은 하나만 연다
+        if (value && key === 'new') p.delete('edit');
+        if (value && key === 'edit') p.delete('new');
+        if (value) p.set(key, value);
+        else p.delete(key);
+        return p;
+      },
+      { replace: true },
+    );
+  const adding = editor && params.get('new') !== null;
+  const editing = editor ? (params.get('edit') ?? undefined) : undefined;
   return (
     <div className="qc-page">
       <PageHeader
         title="준비 플로우"
         meta="“온보딩 완료” 같은 공통 사전조건입니다. Agent가 먼저 확인 조건을 보고, 충족되지 않으면 수행 스텝을 UI로 실행합니다. 준비에 실패한 케이스는 Blocked가 됩니다."
         actions={
-          <Button
-            variant="outlined"
-            color="assistive"
-            leadingContent={<Icons.IconPlus />}
-            disabled
-            title="서버 연결 후 사용할 수 있습니다"
-          >
-            준비 플로우 추가
-          </Button>
+          editor &&
+          !adding && (
+            <Button
+              variant="solid"
+              color="primary"
+              leadingContent={<Icons.IconPlus />}
+              onClick={() => param('new', '1')}
+            >
+              준비 플로우 추가
+            </Button>
+          )
         }
       />
       <QueryState query={flows}>
-        {(list) =>
-          latestId ? (
-            <FlowsWithDoc flows={list} docId={latestId} projectId={projectId} />
-          ) : (
-            <FlowCards flows={list} projectId={projectId} />
-          )
-        }
+        {(list) => {
+          const edited = list.find((f) => f.id === editing);
+          return (
+            <>
+              {/* 폼은 목록 위에 둔다 — 카드 칸에서는 좁고, 줄 끝으로 밀리면 어디를 고치는지 놓친다 */}
+              {(adding || edited) && (
+                <article className="qc-card qd-flow-form">
+                  <PrepFlowForm
+                    key={edited?.id ?? 'new'}
+                    projectId={projectId}
+                    flow={edited}
+                    onDone={() => param(edited ? 'edit' : 'new')}
+                  />
+                </article>
+              )}
+              <div className="qd-cards">
+                {list
+                  .filter((f) => f !== edited)
+                  .map((f) => (
+                    <FlowCard
+                      key={f.id}
+                      flow={f}
+                      projectId={projectId}
+                      uses={uses.data?.[f.id]}
+                      editor={editor}
+                      open={params.get('uses') === f.id}
+                      onOpen={(v) => param('uses', v ? f.id : undefined)}
+                      onEdit={() => param('edit', f.id)}
+                    />
+                  ))}
+                {list.length === 0 && !adding && (
+                  <p className={`${textClass('body2-reading')} qd-muted`}>
+                    아직 준비 플로우가 없습니다. QA 문서를 만들면 스펙의 사전조건에서 후보를 제안하고, 직접 추가할 수도
+                    있습니다.
+                  </p>
+                )}
+              </div>
+            </>
+          );
+        }}
       </QueryState>
     </div>
   );
 }
 
-function FlowsWithDoc({ flows, docId, projectId }: { flows: PrepFlow[]; docId: string; projectId: string }) {
-  const doc = useQaDoc(projectId, docId);
-  return <FlowCards flows={flows} doc={doc.data} projectId={projectId} />;
+function FlowCard({
+  flow: f,
+  projectId,
+  uses,
+  editor,
+  open,
+  onOpen,
+  onEdit,
+}: {
+  flow: PrepFlow;
+  projectId: string;
+  /** 계산 중이면 undefined */
+  uses?: PrepFlowUse[];
+  editor: boolean;
+  open: boolean;
+  onOpen: (open: boolean) => void;
+  onEdit: () => void;
+}) {
+  const del = useDeletePrepFlow(projectId);
+  const [confirm, setConfirm] = useState(false);
+  const list = uses ?? [];
+  const blocker = uses && prepFlowDeleteBlocker(uses);
+  return (
+    <article className="qc-card qd-stack" style={{ gap: token('space-16') }} aria-label={f.name}>
+      <div className="qd-stack" style={{ gap: token('space-6') }}>
+        <div className="qd-row" style={{ justifyContent: 'space-between' }}>
+          <Tag tone={f.kind === 'env' ? 'neutral' : f.kind === 'login' || f.kind === 'restore' ? 'blue' : 'violet'}>
+            {PREP_KIND_LABEL[f.kind]}
+          </Tag>
+          <span className={`${textClass('caption1')} qc-mono qd-faint`}>{f.id}</span>
+        </div>
+        <h2 className={textClass('headline2', 'bold')}>{f.name}</h2>
+      </div>
+
+      <div className="qd-block">
+        <h3 className={`${textClass('label2', 'medium')} qd-block-title`}>확인 조건</h3>
+        <div className={`${textClass('label1')} qd-source`}>
+          <span>
+            <RichText text={f.check} />
+          </span>
+        </div>
+      </div>
+
+      <div className="qd-block">
+        <h3 className={`${textClass('label2', 'medium')} qd-block-title`}>
+          수행 스텝 {f.steps.length}
+          {f.kind === 'env' && ' · 코드가 수행'}
+        </h3>
+        <ol className={`${textClass('label1')} qd-list`}>
+          {f.steps.map((s, i) => (
+            <li key={i}>
+              <RichText text={s} />
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <hr className="qd-divider" style={{ marginTop: 'auto' }} />
+      <div className="qd-row" style={{ justifyContent: 'space-between' }}>
+        <span className={textClass('label1')}>
+          {uses ? (
+            <>
+              <span className={`${textClass('label1', 'bold')} qc-mono`}>{list.length}</span>
+              <span className="qd-muted">개 케이스가 사용</span>
+            </>
+          ) : (
+            <span className="qd-faint">사용처 계산 중…</span>
+          )}
+        </span>
+        {list.length > 0 && (
+          <TextButton size="small" color="assistive" type="button" onClick={() => onOpen(!open)} aria-expanded={open}>
+            {open ? '접기' : '사용하는 케이스'}
+          </TextButton>
+        )}
+      </div>
+      {open && list.length > 0 && <UseList uses={list} projectId={projectId} />}
+      {f.updatedBy && f.updatedAt && (
+        <span className={`${textClass('caption1')} qd-faint`}>
+          {f.updatedBy} · {f.updatedAt.slice(0, 10)} 편집 · rev {f.rev ?? 0}
+        </span>
+      )}
+
+      {editor && (
+        <div className="qd-stack" style={{ gap: token('space-8') }}>
+          <ErrorMessage error={del.error} title="삭제할 수 없습니다" />
+          {confirm ? (
+            <div className="qd-row" style={{ justifyContent: 'flex-end' }}>
+              <span className={`${textClass('label2')} qd-muted`} style={{ marginRight: 'auto' }}>
+                이 플로우를 삭제할까요?
+              </span>
+              <Button size="small" variant="outlined" color="assistive" type="button" onClick={() => setConfirm(false)}>
+                취소
+              </Button>
+              <Button
+                size="small"
+                variant="solid"
+                color="negative"
+                type="button"
+                leadingContent={<Icons.IconTrash />}
+                loading={del.isPending}
+                onClick={() => del.mutate(f.id, { onSuccess: () => setConfirm(false) })}
+              >
+                삭제
+              </Button>
+            </div>
+          ) : (
+            <div className="qd-row" style={{ justifyContent: 'flex-end' }}>
+              {blocker && (
+                <span className={`${textClass('caption1')} qd-faint`} style={{ marginRight: 'auto' }}>
+                  사용 중이라 삭제할 수 없음
+                </span>
+              )}
+              <Button
+                size="small"
+                variant="outlined"
+                color="assistive"
+                type="button"
+                leadingContent={<Icons.IconTrash />}
+                disabled={!uses || !!blocker}
+                title={blocker}
+                onClick={() => setConfirm(true)}
+              >
+                삭제
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                color="primary"
+                type="button"
+                leadingContent={<Icons.IconPencil />}
+                onClick={onEdit}
+              >
+                편집
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </article>
+  );
 }
 
-function FlowCards({ flows, doc, projectId }: { flows: PrepFlow[]; doc?: QADocument; projectId: string }) {
-  const usage = useMemo(() => (doc ? prepFlowUsage(doc.cases) : new Map<string, TestCase[]>()), [doc]);
+/** 쓰는 곳(QA 문서 버전·사이클)별로 케이스를 묶어 보인다. 많으면 앞의 몇 개만 */
+function UseList({ uses, projectId }: { uses: PrepFlowUse[]; projectId: string }) {
+  const groups = new Map<string, PrepFlowUse[]>();
+  for (const u of uses) {
+    const k = u.in === 'doc' ? `doc:${u.docId}` : `cycle:${u.cycleId}`;
+    groups.set(k, [...(groups.get(k) ?? []), u]);
+  }
+  const SHOW = 5;
   return (
-    <div className="qd-cards">
-      {flows.map((f) => {
-        const cases = usage.get(f.id) ?? [];
+    <div className="qd-stack qd-uses" style={{ gap: token('space-12') }}>
+      {[...groups.values()].map((g) => {
+        const first = g[0]!;
+        const href = (u: PrepFlowUse) =>
+          u.in === 'doc' ? `/p/${projectId}/docs/${u.docId}?case=${u.tcId}` : `/p/${projectId}/cycles/${u.cycleId}`;
         return (
-          <article key={f.id} className="qc-card qd-stack" style={{ gap: token('space-16') }}>
-            <div className="qd-stack" style={{ gap: token('space-6') }}>
-              <div className="qd-row" style={{ justifyContent: 'space-between' }}>
-                <Tag tone={f.kind === 'env' ? 'neutral' : f.kind === 'login' || f.kind === 'restore' ? 'blue' : 'violet'}>
-                  {PREP_KIND_LABEL[f.kind]}
-                </Tag>
-                <span className={`${textClass('caption1')} qc-mono qd-faint`}>{f.id}</span>
-              </div>
-              <h2 className={textClass('headline2', 'bold')}>{f.name}</h2>
-            </div>
-
-            <div className="qd-block">
-              <h3 className={`${textClass('label2', 'medium')} qd-block-title`}>확인 조건</h3>
-              <div className={`${textClass('label1')} qd-source`}>
-                <span>
-                  <RichText text={f.check} />
-                </span>
-              </div>
-            </div>
-
-            <div className="qd-block">
-              <h3 className={`${textClass('label2', 'medium')} qd-block-title`}>수행 스텝 {f.steps.length}</h3>
-              <ol className={`${textClass('label1')} qd-list`}>
-                {f.steps.map((s, i) => (
-                  <li key={i}>
-                    <RichText text={s} />
-                  </li>
-                ))}
-              </ol>
-            </div>
-
-            <hr className="qd-divider" style={{ marginTop: 'auto' }} />
-            <div className="qd-row" style={{ justifyContent: 'space-between' }}>
-              <span className={textClass('label1')}>
-                {doc ? (
-                  <>
-                    <span className="qd-muted">QA 문서 {doc.appVersion}에서</span>{' '}
-                    <span className={`${textClass('label1', 'bold')} qc-mono`}>{cases.length}</span>
-                    <span className="qd-muted">개 케이스가 사용</span>
-                  </>
+          <div key={href(first)} className="qd-stack" style={{ gap: token('space-4') }}>
+            <span className={textClass('label2', 'bold')}>
+              {first.in === 'doc' ? `QA 문서 ${first.appVersion}` : `사이클 “${first.cycleName}”`}{' '}
+              <span className="qd-muted">· {g.length}개</span>
+            </span>
+            <span className={`${textClass('label2')} qd-row`} style={{ gap: token('space-8') }}>
+              {g.slice(0, SHOW).map((u) =>
+                u.in === 'doc' ? (
+                  <Link key={u.tcId} className="qd-link qc-mono" to={href(u)}>
+                    {u.tcId}
+                  </Link>
                 ) : (
-                  <span className="qd-faint">사용처 계산 중…</span>
-                )}
-              </span>
-              {doc && cases.length > 0 && (
-                <Link
-                  className={`${textClass('label2', 'medium')} qd-link`}
-                  to={`/p/${projectId}/docs/${doc.id}?case=${cases[0]!.tcId}`}
-                  title={cases.map((c) => c.tcId).join(', ')}
-                >
-                  첫 케이스 보기
+                  <span key={u.tcId} className="qc-mono">
+                    {u.tcId}
+                  </span>
+                ),
+              )}
+              {g.length > SHOW && <span className="qd-faint">외 {g.length - SHOW}개</span>}
+              {first.in === 'cycle' && (
+                <Link className="qd-link" to={href(first)}>
+                  사이클 보기
                 </Link>
               )}
-            </div>
-          </article>
+            </span>
+          </div>
         );
       })}
+      <span className={`${textClass('caption1')} qd-faint`}>
+        삭제하려면 케이스에서 이 플로우를 빼세요. 진행 중인 사이클의 케이스 사본은 사이클을 완료하면 풀립니다.
+      </span>
     </div>
   );
 }

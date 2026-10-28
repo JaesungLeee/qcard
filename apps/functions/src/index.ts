@@ -76,6 +76,9 @@ export const deleteCycle = call(
   { timeoutSeconds: 300 },
 );
 
+// 준비 플로우 삭제 (F-PF-01): 케이스 참조 확인은 질의가 필요해 Functions 트랜잭션에서 한다
+export const deletePrepFlow = call(h.deletePrepFlow);
+
 // 호스트 연결 (F-TM-14). hostToken은 로그인 전에 부른다 — 호스트 자격(비밀값)으로 확인한다
 export const pairHost = call(h.pairHost);
 export const revokeHost = call(h.revokeHost, { allowHost: true });

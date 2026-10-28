@@ -7,6 +7,8 @@ import type {
   CaseBody,
   CaseReviseJob,
   PrepFlow,
+  PrepFlowInput,
+  PrepFlowUse,
   CaseResult,
   Defect,
   Host,
@@ -85,6 +87,20 @@ export interface QcardApi {
   resolveQuestion(ref: DocRef, questionId: string, resolution: QuestionResolution): Promise<void>;
   commentQuestion(ref: DocRef, questionId: string, text: string): Promise<void>;
   listPrepFlows(projectId: string): Promise<PrepFlow[]>;
+  /**
+   * 플로우별 사용처 (F-PF-01): 모든 QA 문서 버전의 활성 케이스 + 완료되지 않은 사이클의 케이스 사본 (`prepFlowUses`).
+   * 사용처가 있으면 삭제할 수 없다
+   */
+  listPrepFlowUses(projectId: string): Promise<Record<string, PrepFlowUse[]>>;
+  /** 준비 플로우 추가 (F-PF-01). Admin·QA만. 이름·확인 조건이 비거나 `env`가 아닌데 스텝이 없으면 `RuleError` */
+  createPrepFlow(projectId: string, input: PrepFlowInput): Promise<PrepFlow>;
+  /**
+   * 준비 플로우 편집. `expectedRev`가 최신이 아니면 `PrepFlowConflictError`. 사이클에 고정되지 않아
+   * 진행 중인 사이클도 다음 Run부터 바뀐 내용으로 준비한다. Admin·QA만
+   */
+  updatePrepFlow(projectId: string, flowId: string, input: PrepFlowInput, expectedRev: number): Promise<PrepFlow>;
+  /** 준비 플로우 삭제. 케이스가 참조 중이면 `RuleError`(`prepFlowDeleteBlocker`). Admin·QA만 */
+  deletePrepFlow(projectId: string, flowId: string): Promise<void>;
 
   /** 테스트 계정 (F-PF-04·08). 상태(사용 중·로그인 실패·격리)와 함께, 로그인 ID 순. 비밀값은 없다 */
   listAccounts(projectId: string): Promise<AccountView[]>;
@@ -292,6 +308,13 @@ export type AttachmentFile = { name: string; type: string; bytes: Uint8Array; w?
 export class ConflictError extends Error {
   constructor(readonly latest: TestCase) {
     super(`${latest.tcId}: 다른 사람이 먼저 저장했습니다 (rev ${latest.rev}, ${latest.updatedBy ?? '알 수 없음'})`);
+  }
+}
+
+/** 준비 플로우를 다른 사람이 먼저 고쳤다. `latest`로 최신 내용을 보인다 */
+export class PrepFlowConflictError extends Error {
+  constructor(readonly latest: PrepFlow) {
+    super(`${latest.name}: 다른 사람이 먼저 저장했습니다 (rev ${latest.rev ?? 0}, ${latest.updatedBy ?? '알 수 없음'})`);
   }
 }
 
