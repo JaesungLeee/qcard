@@ -1193,6 +1193,24 @@ export const defects130: Defect[] = [
   },
 ];
 
+// ---------------------------------------------------------------- 시작 전 사이클 (1.3.0 Prod, Run·판정 없음)
+
+/** 회귀를 마치고 Prod에서 다시 볼 사이클을 미리 만들어 둔 것. 아직 아무도 실행하지 않았다 */
+export const cycle130Prod: TestCycle = {
+  id: 'cycle-130-2',
+  projectId: project.id,
+  name: '1.3.0 (130) Prod 확인',
+  docId: qaDocV130.id,
+  buildId: 'build-130',
+  targets: [S24],
+  period: { start: T(18, 9) },
+  serverEnv: 'prod',
+  snapshot: snapshotCases.map((c) => ({ tcId: c.tcId, contentHash: c.contentHash })),
+  createdBy: PEOPLE.lead,
+};
+
+const results130Prod: CaseResult[] = snapshotCases.map((tc) => ntResult(tc, S24));
+
 // ---------------------------------------------------------------- 이전 사이클 (1.2.1, 완료)
 
 const snapshot120 = qaDocV120.cases;
@@ -1623,12 +1641,16 @@ export function createFixtureDb(): FixtureDb {
     accounts,
     qaDocs: [qaDocV130, qaDocV120],
     builds,
-    cycles: [cycle130, cycle121],
+    cycles: [cycle130, cycle130Prod, cycle121],
     // QA 문서 케이스와 따로 복사한다 (한 번에 복사하면 같은 객체를 가리켜 문서를 고치면 사본도 바뀐다)
-    cycleCases: structuredClone({ [cycle130.id]: snapshotCases, [cycle121.id]: snapshot120 }),
-    results: { [cycle130.id]: results130, [cycle121.id]: results121 },
-    defects: { [cycle130.id]: defects130, [cycle121.id]: defects121 },
-    runs: { [cycle130.id]: runs130, [cycle121.id]: [] },
+    cycleCases: structuredClone({
+      [cycle130.id]: snapshotCases,
+      [cycle130Prod.id]: snapshotCases,
+      [cycle121.id]: snapshot120,
+    }),
+    results: { [cycle130.id]: results130, [cycle130Prod.id]: results130Prod, [cycle121.id]: results121 },
+    defects: { [cycle130.id]: defects130, [cycle130Prod.id]: [], [cycle121.id]: defects121 },
+    runs: { [cycle130.id]: runs130, [cycle130Prod.id]: [], [cycle121.id]: [] },
     prepFlows: PREP_FLOWS,
     jobs,
     jobParts,
