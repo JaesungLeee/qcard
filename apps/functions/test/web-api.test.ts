@@ -287,7 +287,7 @@ describe('QA 데이터 쓰기', () => {
     await fb.deleteCycle(cref, name);
     await mem.deleteCycle(cref, name);
     const ids = async (api: typeof fb) => (await api.listCycles('haru')).map((s) => s.cycle.id).sort();
-    expect(await ids(fb)).toEqual(['cycle-121-1']);
+    expect(await ids(fb)).toEqual(['cycle-121-1', 'cycle-130-2']);
     expect(await ids(mem)).toEqual(await ids(fb));
     await expect(fb.getCycle(cref)).rejects.toBeInstanceOf(NotFoundError);
     await expect(mem.getCycle(cref)).rejects.toBeInstanceOf(NotFoundError);
