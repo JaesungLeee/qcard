@@ -278,7 +278,9 @@ describe('QA 데이터 쓰기', () => {
     mem.switchUser(PEOPLE.qa);
     for (const api of [fb, mem]) {
       await expect(api.deleteCycle(cref, '틀림')).rejects.toBeInstanceOf(RuleError);
-      await expect(api.deleteCycle({ ...cref, cycleId: 'cycle-121-1' }, '1.2.1 (121) 회귀')).rejects.toThrow('다시 연 뒤');
+      await expect(api.deleteCycle({ ...cref, cycleId: 'cycle-121-1' }, '1.2.1 (121) 회귀')).rejects.toThrow(
+        '다시 연 뒤',
+      );
     }
     await expect(apiAs(PEOPLE.planner).deleteCycle(cref, name)).rejects.toBeInstanceOf(PermissionError);
 
@@ -328,6 +330,23 @@ describe('QA 데이터 쓰기', () => {
     expect(last).toMatchObject({ by: PEOPLE.qa, from: 'check', to: 'fail' });
     // 서버 시각 (에뮬레이터 시계와 몇 초 이내)
     expect(Math.abs(new Date(last.at).getTime() - before)).toBeLessThan(10_000);
+  });
+
+  it('첨부 스크린샷 경로가 판정과 함께 남고, 이력에 장수가 붙는다 (F-RP-05)', async () => {
+    const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
+    const qa = apiAs(PEOPLE.qa);
+    const r = (await qa.getCycle(cref)).results.find((x) => x.verdict === 'check')!;
+    const at = { ...cref, tcId: r.tcId, deviceId: r.deviceId };
+    const shot = { kind: 'storage' as const, path: `projects/haru/cycles/cycle-130-1/manual/x/a.png` };
+    await qa.confirmVerdict({ ...at, verdict: 'fail', actualSummary: '재현', attachments: { keep: [shot], add: [] } });
+    const after = (await qa.getCycle(cref)).results.find((x) => x.tcId === r.tcId && x.deviceId === r.deviceId)!;
+    expect(after.attachments).toEqual([shot]);
+    expect(after.history.at(-1)!.attachments).toBe(1);
+    // 이 테스트의 API에는 Storage가 없어 새 파일은 올리지 못한다
+    const png = { name: 'b.png', type: 'image/png', bytes: new Uint8Array([1]) };
+    await expect(
+      qa.confirmVerdict({ ...at, verdict: 'fail', actualSummary: '재현', attachments: { keep: [], add: [png] } }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('케이스 수정안: 요청·조회·처리가 메모리 구현과 같고, 처리는 요청한 사람만 한다 (F-QD-17)', async () => {

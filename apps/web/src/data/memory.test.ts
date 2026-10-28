@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GITHUB, PEOPLE } from '@qcard/fixtures';
-import { ConflictError, PermissionError, RuleError } from './api';
+import { ConflictError, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, PermissionError, RuleError } from './api';
 import type { LocalRun } from './localRuns';
 import { createMemoryApi, passRate } from './memory';
 
@@ -68,6 +68,44 @@ describe('사이클 판정', () => {
     });
     expect(r.decidedBy).toEqual({ kind: 'human', name: api.currentUser });
     expect(r.history.at(-1)).toMatchObject({ from: 'check', to: 'pass', by: api.currentUser });
+  });
+
+  it('수동 결과에 스크린샷을 첨부하고, 다시 확정할 때 남길 첨부만 남긴다 (F-RP-05)', async () => {
+    const api = createMemoryApi();
+    const r = (await api.getCycle(CYCLE)).results.find((x) => x.verdict === 'check')!;
+    const at = { ...CYCLE, tcId: r.tcId, deviceId: r.deviceId };
+    const png = { name: 'a.png', type: 'image/png', bytes: new Uint8Array([1, 2, 3]), w: 1080, h: 2340 };
+    const first = await api.confirmVerdict({
+      ...at,
+      verdict: 'fail',
+      actualSummary: '재현',
+      attachments: { keep: [], add: [png, { ...png, name: 'b.png' }] },
+    });
+    expect(first.attachments).toEqual([
+      { kind: 'url', url: 'data:image/png;base64,AQID', w: 1080, h: 2340 },
+      { kind: 'url', url: 'data:image/png;base64,AQID', w: 1080, h: 2340 },
+    ]);
+    expect(first.history.at(-1)!.attachments).toBe(2);
+    // 첨부를 주지 않으면 그대로, 주면 그 목록으로 바뀐다
+    expect((await api.confirmVerdict({ ...at, verdict: 'fail', actualSummary: '재현' })).attachments).toHaveLength(2);
+    const second = await api.confirmVerdict({ ...at, verdict: 'pass', attachments: { keep: [], add: [] } });
+    expect(second.attachments).toBeUndefined();
+    expect(second.history.at(-1)!.attachments).toBeUndefined();
+  });
+
+  it('첨부는 PNG·JPEG·WebP 이미지 5장, 한 장 10MB까지 (F-RP-05)', async () => {
+    const api = createMemoryApi();
+    const r = (await api.getCycle(CYCLE)).results.find((x) => x.verdict === 'check')!;
+    const at = { ...CYCLE, tcId: r.tcId, deviceId: r.deviceId, verdict: 'pass' as const };
+    const png = { name: 'a.png', type: 'image/png', bytes: new Uint8Array([1]) };
+    await expect(
+      api.confirmVerdict({ ...at, attachments: { keep: [], add: Array(MAX_ATTACHMENTS + 1).fill(png) } }),
+    ).rejects.toBeInstanceOf(RuleError);
+    await expect(
+      api.confirmVerdict({ ...at, attachments: { keep: [], add: [{ ...png, type: 'image/gif' }] } }),
+    ).rejects.toThrow('PNG·JPEG·WebP');
+    const big = { ...png, bytes: new Uint8Array(MAX_ATTACHMENT_BYTES + 1) };
+    await expect(api.confirmVerdict({ ...at, attachments: { keep: [], add: [big] } })).rejects.toThrow('10MB');
   });
 
   it('통과율은 N/T를 분모에서 뺀다', () => {

@@ -87,3 +87,40 @@ describe('Run 스크린샷', () => {
     await assertFails(put('u-admin', SHOT, { host: 'h-admin' })); // 다른 사용자의 Run
   });
 });
+
+describe('수동 결과 첨부 스크린샷 (F-RP-05)', () => {
+  const MANUAL = 'projects/haru/cycles/c1/manual/TC-001__d';
+  const image = (uid: string | null, path: string, type = 'image/png', claims?: Record<string, unknown>) =>
+    uploadString(ref(storage(uid, claims), path), 'x', 'raw', { contentType: type });
+  beforeEach(() =>
+    env.withSecurityRulesDisabled(async (c) => {
+      await setDoc(doc(c.firestore(), 'projects/haru/cycles/c1'), { name: 'c1' });
+      await setDoc(doc(c.firestore(), 'projects/haru/cycles/gone'), {
+        name: 'gone',
+        deletingAt: '2026-10-28T00:00:00Z',
+      });
+    }),
+  );
+
+  it('웹에서 Admin·QA가 이미지를 올리고, 올린 파일은 덮어쓰지 못한다', async () => {
+    await assertSucceeds(image('u-qa', `${MANUAL}/a.png`));
+    await assertSucceeds(image('u-admin', `${MANUAL}/b.jpg`, 'image/jpeg'));
+    await assertFails(image('u-qa', `${MANUAL}/a.png`));
+    await assertFails(image('u-viewer', `${MANUAL}/c.png`));
+    await assertFails(image('u-qa', `${MANUAL}/d.png`, 'image/png', { host: 'h-qa' })); // 호스트는 못 쓴다
+  });
+
+  it('이미지가 아니거나, 없는 사이클·삭제 중인 사이클이면 못 올린다', async () => {
+    await assertFails(image('u-qa', `${MANUAL}/x.html`, 'text/html'));
+    await assertFails(image('u-qa', 'projects/haru/cycles/none/manual/TC-001__d/a.png'));
+    await assertFails(image('u-qa', 'projects/haru/cycles/gone/manual/TC-001__d/a.png'));
+  });
+
+  it('멤버만 읽는다', async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      await uploadString(ref(c.storage(), `${MANUAL}/r.png`), 'x');
+    });
+    await assertSucceeds(getBytes(ref(storage('u-viewer'), `${MANUAL}/r.png`)));
+    await assertFails(getBytes(ref(storage('u-outsider'), `${MANUAL}/r.png`)));
+  });
+});

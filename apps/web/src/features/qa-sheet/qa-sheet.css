@@ -383,3 +383,20 @@
   gap: var(--qc-space-6);
   min-width: 0;
 }
+
+/* 첨부 스크린샷 (F-RP-05) */
+.qs-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--qc-space-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.qs-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--qc-space-4);
+}

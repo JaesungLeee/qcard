@@ -19,6 +19,7 @@ import {
   type QaDocJobEvent,
   type QaDocJobSpec,
   type Run,
+  type Screenshot,
   type TestAccount,
   type TestCase,
   type TestCycle,
@@ -60,6 +61,8 @@ import {
 } from './api';
 import {
   approvalFor,
+  attachmentPath,
+  attachmentProblem,
   caseReviseRequest,
   changedDefect,
   closedRevision,
@@ -145,12 +148,13 @@ function withHistory(results: DocumentData[], logs: { data: () => DocumentData }
     const mine = (byResult.get(resultId(rest.tcId, rest.deviceId)) ?? []).sort(
       (a, b) => ms(a) - ms(b) || (a._i ?? 0) - (b._i ?? 0),
     );
-    const history = mine.map(({ at, by, from, to, note }) => ({
+    const history = mine.map(({ at, by, from, to, note, attachments }) => ({
       at: logTime(at),
       by,
       from,
       to,
       ...(note ? { note } : {}),
+      ...(attachments ? { attachments } : {}),
     }));
     return { ...rest, history: [...(rest.history ?? []), ...history] };
   });
@@ -550,8 +554,24 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       };
     },
     confirmVerdict: (input) =>
-      guard(() =>
-        runTransaction(db, async (tx) => {
+      guard(async () => {
+        // 첨부(F-RP-05)는 먼저 올리고 판정과 함께 경로를 남긴다. 판정 저장이 실패하면 올린 파일은 사이클 삭제 때 지워진다
+        const a = input.attachments;
+        let attachments: Screenshot[] | undefined;
+        if (a) {
+          const problem = attachmentProblem(a);
+          if (problem) throw new RuleError(problem);
+          if (a.add.length && !deps.storage) throw new NotFoundError('스크린샷 저장소가 연결되지 않았습니다');
+          const added = await Promise.all(
+            a.add.map(async (f) => {
+              const path = attachmentPath(input, doc(collection(db, 'ids')).id, f);
+              await uploadBytes(ref(deps.storage!, path), f.bytes, { contentType: f.type });
+              return { kind: 'storage' as const, path, ...(f.w && f.h ? { w: f.w, h: f.h } : {}) };
+            }),
+          );
+          attachments = [...a.keep, ...added];
+        }
+        return runTransaction(db, async (tx) => {
           const ref = doc(
             db,
             P(input.projectId),
@@ -572,9 +592,9 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
               where('deviceId', '==', input.deviceId),
             ),
           );
-          const next = confirmedResult(withHistory([current], logs.docs)[0]!, input, user.name, now());
+          const next = confirmedResult(withHistory([current], logs.docs)[0]!, input, user.name, now(), attachments);
           const log = doc(collection(db, P(input.projectId), 'cycles', input.cycleId, 'verdictLog'));
-          const { at: _at, ...change } = verdictChange(current, input, user.name, now());
+          const { at: _at, ...change } = verdictChange(current, input, user.name, now(), attachments);
           tx.set(log, {
             ...clean(change),
             tcId: input.tcId,
@@ -584,8 +604,8 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
           });
           tx.set(ref, clean({ ...next, history: current.history, _i: snap.data()._i, _decision: log.id }));
           return next;
-        }),
-      ),
+        });
+      }),
 
     // 결함 (F-RP-19): 결함·사이클 번호·결과 칸을 한 트랜잭션으로 쓴다 (보안 규칙이 번호가 함께 올랐는지 본다)
     createDefect: (input) =>

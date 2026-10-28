@@ -34,6 +34,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
 import { fmtDateTime, fmtNumber } from '../../components/format';
 import { MockScreen } from '../../mock/MockScreen';
+import { AttachmentList } from './Attachments';
 import { ConfirmPanel } from './ConfirmPanel';
 import { DefectPanel } from './DefectPanel';
 import { EvidenceBand } from './EvidenceBand';
@@ -210,6 +211,11 @@ function Trace({ d }: { d: CycleDetail }) {
       <div className="qs-trace">
         <div className="qs-stack">
           <CaseCard tc={tc} />
+          {r.attachments?.length ? (
+            <Card title="첨부 스크린샷">
+              <AttachmentList shots={r.attachments} />
+            </Card>
+          ) : null}
           {notRun && !manual ? (
             <div className="qc-card qs-empty">
               <Icons.IconClock aria-hidden />
@@ -431,6 +437,7 @@ function HistoryCard({ r, manual }: { r: CaseResult; manual: boolean }) {
               </span>
               <span className={`${textClass('caption1')} qs-muted`}>
                 {fmtDateTime(h.at)} · {h.by}
+                {h.attachments ? ` · 스크린샷 ${h.attachments}장` : ''}
               </span>
               {h.note && <span className={textClass('label2')}>{h.note}</span>}
             </li>

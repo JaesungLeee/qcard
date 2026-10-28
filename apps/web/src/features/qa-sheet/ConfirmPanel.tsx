@@ -1,10 +1,12 @@
 // 판정 확정 패널 (F-RP-04): Fail·Blocked·확인필요는 사람이 확정, 자동 확정 Pass는 오버라이드.
-// 수동 케이스는 여기서 결과를 입력한다 (F-RP-05). 판정자는 로그인 사용자로 기록된다.
-import { VERDICT_LABEL, type CaseResult, type Verdict } from '@qcard/shared';
+// 수동 케이스는 여기서 결과를 입력한다 (F-RP-05, 스크린샷은 선택). 판정자는 로그인 사용자로 기록된다.
+import { VERDICT_LABEL, type CaseResult, type Screenshot, type Verdict } from '@qcard/shared';
 import { Button, SectionMessage, SegmentedControl, SegmentedControlItem, TextArea, textClass, token } from '@qcard/ui';
 import { useId, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
+import { MAX_ATTACHMENTS } from '../../data/api';
 import { useApi, useConfirmVerdict } from '../../data/hooks';
+import { AttachmentField, pastedImages, toPending, type PendingAttachment } from './Attachments';
 import { Card } from './parts';
 
 const CHOICES: Verdict[] = ['pass', 'fail', 'blocked', 'na'];
@@ -23,17 +25,35 @@ export function ConfirmPanel({ cycleId, result, manual }: { cycleId: string; res
   const [verdict, setVerdict] = useState<Verdict | ''>(CHOICES.includes(result.verdict) ? result.verdict : '');
   const [actual, setActual] = useState(result.actualSummary ?? '');
   const [note, setNote] = useState('');
+  // 첨부 스크린샷 (수동 케이스만): 남길 기존 첨부 + 아직 올리지 않은 파일
+  const [keep, setKeep] = useState<Screenshot[]>(result.attachments ?? []);
+  const [add, setAdd] = useState<PendingAttachment[]>([]);
   const [done, setDone] = useState<Verdict | null>(null);
   // 패널을 연 뒤(또는 내가 확정한 뒤) 다른 사람이 이 칸을 바꿨으면 알린다
   // ?demo=changed: 다른 사람이 바꾼 상태를 고정해 본다 (ui:snap)
   const [params] = useSearchParams();
   const [seen, setSeen] = useState(() => (params.get('demo') === 'changed' ? '' : stamp(result)));
   const changedByOther = open && stamp(result) !== seen && !confirm.isPending;
-  const takeLatest = () => {
-    setSeen(stamp(result));
+  /** 입력을 버리고 칸의 지금 값으로 되돌린다 */
+  const reset = () => {
     setVerdict(CHOICES.includes(result.verdict) ? result.verdict : '');
     setActual(result.actualSummary ?? '');
+    setNote('');
+    setKeep(result.attachments ?? []);
+    clearAdd();
+  };
+  const takeLatest = () => {
+    setSeen(stamp(result));
+    reset();
     setDone(null);
+  };
+  const cancel = () => {
+    reset();
+    setOpen(false);
+  };
+  const clearAdd = () => {
+    for (const p of add) URL.revokeObjectURL(p.preview);
+    setAdd([]);
   };
 
   if (result.verdict === 'nt' && !manual) return null;
@@ -53,10 +73,13 @@ export function ConfirmPanel({ cycleId, result, manual }: { cycleId: string; res
         verdict,
         note: note.trim() || undefined,
         actualSummary: actual.trim() || undefined,
+        ...(manual ? { attachments: { keep, add: add.map((p) => p.file) } } : {}),
       },
       {
         onSuccess: (saved) => {
           setSeen(stamp(saved));
+          setKeep(saved.attachments ?? []);
+          clearAdd();
           setDone(verdict);
           setNote('');
           if (!needsHuman) setOpen(false);
@@ -110,6 +133,15 @@ export function ConfirmPanel({ cycleId, result, manual }: { cycleId: string; res
           onSubmit={(e) => {
             e.preventDefault();
             submit();
+          }}
+          onPaste={async (e) => {
+            if (!manual) return;
+            const room = MAX_ATTACHMENTS - keep.length - add.length;
+            const files = pastedImages(e.clipboardData).slice(0, Math.max(0, room));
+            if (!files.length) return;
+            e.preventDefault();
+            const pending = await toPending(files);
+            setAdd((cur) => [...cur, ...pending]);
           }}
         >
           {result.verdict === 'check' && (
@@ -168,13 +200,20 @@ export function ConfirmPanel({ cycleId, result, manual }: { cycleId: string; res
             />
           </div>
           {manual && (
-            <span className={`${textClass('caption1')} qs-faint`}>스크린샷 첨부는 저장소 연결 후 지원합니다.</span>
+            <AttachmentField
+              keep={keep}
+              add={add}
+              onKeep={setKeep}
+              onAdd={setAdd}
+              disabled={confirm.isPending}
+              hint={needActual ? '스크린샷이 있으면 결함을 재현하기 쉽습니다.' : undefined}
+            />
           )}
           <div className="qs-row" style={{ justifyContent: 'space-between' }}>
             <span className={`${textClass('caption1')} qs-muted`}>판정자 {api.currentUser} · 시각은 서버 기준</span>
             <span className="qs-row">
               {!needsHuman && !(manual && result.verdict === 'nt') && (
-                <Button type="button" size="small" variant="outlined" color="assistive" onClick={() => setOpen(false)}>
+                <Button type="button" size="small" variant="outlined" color="assistive" onClick={cancel}>
                   취소
                 </Button>
               )}

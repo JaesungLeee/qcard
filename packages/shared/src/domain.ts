@@ -430,6 +430,8 @@ export const VerdictChange = z.object({
   from: Verdict,
   to: Verdict,
   note: z.string().optional(),
+  /** 이 판정과 함께 남긴 첨부 스크린샷 수 (F-RP-05) */
+  attachments: z.number().optional(),
 });
 export type VerdictChange = z.infer<typeof VerdictChange>;
 
@@ -467,6 +469,8 @@ export const CaseResult = z.object({
   runId: z.string().optional(),
   steps: z.array(ExecStep),
   points: z.array(PointResult),
+  /** 사람이 결과를 입력하며 첨부한 스크린샷 (F-RP-05, 선택) */
+  attachments: z.array(Screenshot).optional(),
   history: z.array(VerdictChange),
   /** 이전 시도 (오래된 것부터) */
   previousAttempts: z.array(AttemptSummary).optional(),
