@@ -1,7 +1,8 @@
 rules_version = '2';
 
 // qcard Cloud Storage 보안 규칙 — 스펙·빌드·증거(스크린샷·녹화)는 프로젝트 폴더 아래에 둔다
-//   projects/{p}/cycles/{c}/runs/{run}/{tc}/obs-NN.png
+//   projects/{p}/cycles/{c}/runs/{run}/{tc}/obs-NN.png   (호스트가 올리는 Run 스크린샷)
+//   projects/{p}/cycles/{c}/manual/{tc}__{device}/{id}.png  (사람이 올리는 수동 결과 첨부, F-RP-05)
 // 읽기는 멤버만, 쓰기는 Admin·QA만 (Firestore 멤버 문서를 본다). 프로젝트 간 증거는 서로 보이지 않는다.
 // 호스트 토큰은 그 연결(hostConnections)이 있는 동안만 통과한다 (F-TM-14, firestore.rules와 같은 규칙)
 service firebase.storage {

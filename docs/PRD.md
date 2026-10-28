@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 | --- | --- |
 | 문서 상태 | Draft v0.13 |
-| 작성일 | 2026-10-15 (v0.13 갱신 2026-10-27) |
+| 작성일 | 2026-10-15 (v0.13 갱신 2026-10-28) |
 | 작성자 | Jaesung Lee |
 | 개발 체계 | 1인 사이드 프로젝트 |
 | 제품 형태 | 여러 팀이 **앱 프로젝트마다 QA 대시보드를 만들어** 멤버를 초대해 쓰는 서비스. LLM 사용량은 각 사용자가 **본인의 Claude 플랜**으로 부담(§8). M1 이후 **공개 서비스로 출시**(§10) |
@@ -424,7 +424,7 @@ Project(name, created_by, deleted_at?) ← QA 대시보드 1개
                        ├─ CycleCase(tc_id, 승인된 케이스 내용 사본)          ← 변경 불가(F-CY-02)
                        ├─ Run(executor_user, host, device, status, pause_reason, progress, llm_usage(tokens, est_cost))
                        │     └─ RunCase(tc_id, content_hash, attempt, account, verdict, decided_by,
-                       │                auto_confirmed, unmet_conditions[], actual_summary)
+                       │                auto_confirmed, unmet_conditions[], actual_summary, attachments[]?)  ← 첨부는 사람이 올린 스크린샷(F-RP-05)
                        │           ├─ Step(action, target, input(masked), intent, screenshot, video_ts)
                        │           ├─ VerificationPoint(expected, method, observed, result, evidence)
                        │           └─ VerdictHistory(불변)
@@ -510,8 +510,9 @@ Host(user, machine, credential_hash, connected_at, last_seen_at, revoked_at?, jo
 - 스크린샷 내 지정 영역/요소 마스킹 규칙(예: 주민번호 입력란) 설정 가능 (P1)
 - LLM으로 전송한 데이터 감사 로그
 - 라이브 화면은 실시간으로 실행자 PC 밖으로 전송하지 않음. 클라우드에는 증거용 스크린샷·녹화만 저장(GCP 서울 리전)
+- 수동 결과에 사람이 첨부한 스크린샷(F-RP-05)은 웹에서 Storage로 바로 올라가고 LLM에는 보내지 않는다. 프로젝트 멤버 모두가 보므로 본인인증 화면처럼 개인정보가 보이는 화면은 올리지 않는다 — 첨부를 필수로 두지 않은 이유 중 하나
 - **호스트 자격**: 비밀값은 실행자 PC의 macOS 키체인에만 두고 서버에는 해시만 저장. 호스트 토큰은 짧은 수명이며, 보안 규칙이 호스트 쓰기마다 연결 상태를 확인해 해제된 PC의 쓰기를 즉시 막음(F-TM-14)
-- Agent 기록(Run, Agent 판정 결과, 이전 시도, 스크린샷)은 그 Run을 실행한 사용자의 호스트(호스트 토큰)만 쓸 수 있음. Run에 실행자 uid를 남기고 보안 규칙이 확인하며, 같은 사용자가 다시 연결한 PC는 이어서 쓸 수 있음. Run 상태(실행 중)는 보지 않음 — 업로드 큐로 늦게 도착한 결과를 받아야 하므로(F-EX-13). 사람은 결과 칸에서 판정·메모만 바꾸고 Agent 증거(단계·검증 포인트·Run)는 못 바꿈. 그래도 실행자가 자기 호스트를 통해 Agent 결과를 조작할 여지는 있음 — 프로젝트 멤버 간 신뢰를 전제로 감수하고(다른 프로젝트에는 영향 없음), 사람 판정만 보안 규칙(판정자 = 로그인 사용자, 서버 시각)과 변경 불가 이력으로 강제(F-RP-04)
+- Agent 기록(Run, Agent 판정 결과, 이전 시도, 스크린샷)은 그 Run을 실행한 사용자의 호스트(호스트 토큰)만 쓸 수 있음. Run에 실행자 uid를 남기고 보안 규칙이 확인하며, 같은 사용자가 다시 연결한 PC는 이어서 쓸 수 있음. Run 상태(실행 중)는 보지 않음 — 업로드 큐로 늦게 도착한 결과를 받아야 하므로(F-EX-13). 사람은 결과 칸에서 판정·메모와 첨부 스크린샷(F-RP-05, 판정 확정과 함께만)만 바꾸고 Agent 증거(단계·검증 포인트·Run)는 못 바꿈. 그래도 실행자가 자기 호스트를 통해 Agent 결과를 조작할 여지는 있음 — 프로젝트 멤버 간 신뢰를 전제로 감수하고(다른 프로젝트에는 영향 없음), 사람 판정만 보안 규칙(판정자 = 로그인 사용자, 서버 시각)과 변경 불가 이력으로 강제(F-RP-04)
 - 모든 통신 TLS, Firestore·Storage 접근은 보안 규칙으로 프로젝트 멤버·역할에 따라 제한. 여러 팀이 쓰므로 **프로젝트 간 격리**를 보안 규칙 테스트(에뮬레이터)로 검증
 - 사이클 삭제는 유예 없이 사이클의 Firestore 문서와 Storage 증거를 바로 지운다(F-CY-10).
 - 프로젝트 삭제 시 유예 기간 후 관련 데이터·비밀값·Storage 파일을 영구 삭제(F-TM-12). 지운 Storage 파일은 버킷 소프트 삭제 정책으로 최대 7일 더 복구 가능한 상태로 남는다. 실행자 PC의 빌드 캐시·업로드 큐와 Anthropic으로 보낸 데이터는 qcard가 지우지 못하므로 개인정보처리방침에 적는다. 탈퇴한 멤버는 즉시 접근 불가
