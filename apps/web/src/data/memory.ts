@@ -15,7 +15,11 @@ import {
   mergeSecret,
   newAccount,
   newInvitation,
+  newPrepFlow,
   newProject,
+  prepFlowChange,
+  prepFlowDeletion,
+  prepFlowUses,
   projectIdFor,
   removal,
   requireAdmin,
@@ -27,12 +31,14 @@ import {
   type CaseReviseJob,
   type HostConnection,
   type Member,
+  type PrepFlow,
   type TestAccount,
   type TestCycle,
 } from '@qcard/shared';
 import {
   ConflictError,
   NotFoundError,
+  PrepFlowConflictError,
   RuleError,
   toApiError,
   type ConfirmVerdictInput,
@@ -183,6 +189,20 @@ export function createMemoryApi(
     accounts = accounts.map((x) => (x.id === a.id ? a : x));
     return a;
   };
+
+  // 준비 플로우 (F-PF-01). fixture 플로우는 하루콩 프로젝트 것이다
+  const flows: Record<string, PrepFlow[]> = { haru: db.prepFlows };
+  const flowsOf = (projectId: string) => flows[projectId] ?? [];
+  const flow = (projectId: string, id: string) => {
+    const f = flowsOf(projectId).find((x) => x.id === id);
+    if (!f) throw new NotFoundError(`준비 플로우 없음: ${id}`);
+    return f;
+  };
+  const usesOf = (projectId: string) =>
+    prepFlowUses(
+      db.qaDocs.filter((d) => d.projectId === projectId),
+      db.cycles.filter((c) => c.projectId === projectId).map((c) => ({ cycle: c, cases: db.cycleCases[c.id] ?? [] })),
+    );
 
   // 사이클 구독 (watchCycle): 쓰기가 일어나면 그 사이클을 다시 읽어 알린다
   const watchers = new Map<string, Set<(d: CycleDetail) => void>>();
@@ -338,8 +358,34 @@ export function createMemoryApi(
       q.comments.push({ by: currentUser, at: now(), text });
       return wait(undefined);
     },
-    async listPrepFlows() {
-      return wait(db.prepFlows);
+    async listPrepFlows(projectId) {
+      return wait(flowsOf(projectId));
+    },
+    async listPrepFlowUses(projectId) {
+      await ensureLocal();
+      return wait(usesOf(projectId));
+    },
+    createPrepFlow: (projectId, input) =>
+      rules(() => {
+        const flow = newPrepFlow(membersOf(projectId), actor(), input, flowsOf(projectId), now());
+        flows[projectId] = [...flowsOf(projectId), flow];
+        return flow;
+      }),
+    updatePrepFlow: (projectId, flowId, input, expectedRev) =>
+      rules(() => {
+        const current = flow(projectId, flowId);
+        if ((current.rev ?? 0) !== expectedRev) throw new PrepFlowConflictError(clone(current));
+        const next = prepFlowChange(membersOf(projectId), actor(), current, input, now());
+        flows[projectId] = flowsOf(projectId).map((f) => (f.id === flowId ? next : f));
+        return next;
+      }),
+    async deletePrepFlow(projectId, flowId) {
+      await ensureLocal();
+      return rules(() => {
+        flow(projectId, flowId);
+        prepFlowDeletion(membersOf(projectId), actor(), usesOf(projectId)[flowId] ?? []);
+        flows[projectId] = flowsOf(projectId).filter((f) => f.id !== flowId);
+      });
     },
 
     // ------------------------------------------------------------ 테스트 계정 (F-PF-04·08·09)

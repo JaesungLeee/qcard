@@ -159,8 +159,13 @@ export const PrepFlow = z.object({
   kind: z.enum(['login', 'data_state', 'env', 'restore']),
   check: z.string(),
   steps: z.array(z.string()),
+  /** 낙관적 잠금 (웹 편집). QA 문서 생성이 만든 플로우는 없다(0으로 본다) */
+  rev: z.number().int().optional(),
+  updatedBy: z.string().optional(),
+  updatedAt: z.string().optional(),
 });
 export type PrepFlow = z.infer<typeof PrepFlow>;
+export type PrepFlowKind = PrepFlow['kind'];
 
 export const ApprovalStatus = z.enum(['pending', 'approved', 'rejected', 'held']);
 export type ApprovalStatus = z.infer<typeof ApprovalStatus>;

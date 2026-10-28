@@ -551,3 +551,49 @@ ol.qd-list {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* 준비 플로우 편집 폼: 목록 위에 두고, 폼이 짧아 저장 줄을 화면 아래에 붙이지 않는다 */
+.qd-flow-form {
+  margin-bottom: var(--qc-space-16);
+}
+.qd-flow-form .qd-form-actions {
+  position: static;
+}
+.qd-uses {
+  padding: var(--qc-space-12);
+  border-radius: var(--qc-radius-8);
+  background: var(--qc-surface-neutral-tertiary);
+}
+
+/* 끌어서 순서 바꾸기 (SortableSteps) */
+.qd-sortable[data-dragging] {
+  position: relative;
+  z-index: 1;
+  border-radius: var(--qc-radius-8);
+  background: var(--qc-surface-neutral-primary);
+  box-shadow: var(--qc-shadow-medium);
+}
+.qd-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--qc-radius-4);
+  background: none;
+  color: var(--qc-foreground-neutral-tertiary);
+  cursor: grab;
+  touch-action: none;
+}
+.qd-drag-handle:hover {
+  background: var(--qc-surface-neutral-tertiary);
+}
+.qd-drag-handle:active {
+  cursor: grabbing;
+}
+.qd-drag-handle:focus-visible {
+  outline: 3px solid var(--qc-line-brand-focus);
+}

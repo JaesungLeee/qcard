@@ -23,7 +23,6 @@ import {
   paginate,
   isSelectable,
   nextPointId,
-  prepFlowUsage,
   rebaseDraft,
   toBody,
   validateBody,
@@ -341,7 +340,7 @@ describe('낙관적 잠금 + 다시 적용 (F-QD-09)', () => {
   });
 });
 
-describe('coverage · prepFlowUsage', () => {
+describe('coverage', () => {
   it('요구사항마다 삭제 케이스를 뺀 케이스 수와 승인 수를 센다', async () => {
     const d = await doc130();
     const cov = coverage(d);
@@ -358,14 +357,6 @@ describe('coverage · prepFlowUsage', () => {
     const cov = coverage({ ...d, cases: d.cases.filter((c) => !c.requirementIds.includes('onboarding-flow/FR-024')) });
     expect(cov.rows.find((r) => r.requirement.id === 'onboarding-flow/FR-024')!.status).toBe('none');
     expect(cov.uncovered).toBe(1);
-  });
-
-  it('준비 플로우별 사용 케이스 (삭제 케이스 제외)', async () => {
-    const d = await doc130();
-    const usage = prepFlowUsage(d.cases);
-    expect(usage.get('pf-clean')).toHaveLength(61);
-    const total = ['pf-habit', 'pf-mate', 'pf-guide', 'pf-done'].reduce((n, id) => n + (usage.get(id)?.length ?? 0), 0);
-    expect(total).toBeLessThanOrEqual(61);
   });
 });
 

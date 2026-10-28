@@ -497,17 +497,3 @@ export function coverage(doc: Pick<QADocument, 'requirements' | 'cases' | 'quest
   return { rows, covered: rows.length - uncovered, uncovered };
 }
 
-// ---------------------------------------------------------------- 준비 플로우 사용처
-
-export function prepFlowUsage(cases: TestCase[]): Map<string, TestCase[]> {
-  const out = new Map<string, TestCase[]>();
-  for (const c of cases) {
-    if (!isActive(c)) continue;
-    for (const id of [...c.prepFlowIds, ...(c.restoreFlowId ? [c.restoreFlowId] : [])]) {
-      const list = out.get(id) ?? [];
-      list.push(c);
-      out.set(id, list);
-    }
-  }
-  return out;
-}
