@@ -87,6 +87,8 @@ export function onboardingScenario(connection: 'usb' | 'wifi' = 'usb'): FakeScen
       serial: connection === 'usb' ? 'FAKE-S24' : '192.168.0.24:5555',
       model: 'SM-S921N',
       osMajor: 15,
+      build: 'AP3A.240905.015.A2',
+      securityPatch: '2024-10-01',
       size: { w: DEVICE_SIZE.w, h: DEVICE_SIZE.h },
       density: 420,
       connection,

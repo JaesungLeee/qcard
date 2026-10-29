@@ -166,17 +166,25 @@ export class AdbDriver implements DeviceDriver {
 
   async info(): Promise<DeviceInfo> {
     if (this.cachedInfo) return this.cachedInfo;
-    const [model, release, size, density] = await Promise.all([
+    const [model, release, displayId, buildId, patch, size, density] = await Promise.all([
       this.shell('getprop', 'ro.product.model'),
       this.shell('getprop', 'ro.build.version.release'),
+      this.shell('getprop', 'ro.build.display.id'),
+      this.shell('getprop', 'ro.build.id'),
+      this.shell('getprop', 'ro.build.version.security_patch'),
       this.shell('wm', 'size'),
       this.shell('wm', 'density'),
     ]);
     const [w, h] = (parseWm(size) ?? '0x0').split('x').map(Number) as [number, number];
+    // 빌드 번호는 설정 화면에 보이는 display.id (제조사 펌웨어 버전까지 붙는다), 없으면 build.id
+    const build = displayId.trim() || buildId.trim();
+    const securityPatch = patch.trim();
     this.cachedInfo = {
       serial: this.serial,
       model: model.trim(),
       osMajor: parseInt(release, 10),
+      ...(build ? { build } : {}),
+      ...(securityPatch ? { securityPatch } : {}),
       size: { w, h },
       density: Number(parseWm(density) ?? 0),
       connection: isWifiSerial(this.serial) ? 'wifi' : 'usb',
@@ -287,7 +295,6 @@ export class AdbDriver implements DeviceDriver {
     const [power, window] = await Promise.all([this.shell('dumpsys', 'power'), this.shell('dumpsys', 'window')]);
     return parseScreenState(power, window);
   }
-
 
   async setNetwork(kind: NetworkKind, enabled: boolean) {
     if (!enabled && kind === 'wifi' && (await this.info()).connection === 'wifi') {

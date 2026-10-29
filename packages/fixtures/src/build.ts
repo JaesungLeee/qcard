@@ -1080,7 +1080,10 @@ function result(
     attempts: sp?.attempts ?? 1,
     executor,
     executedAt,
-    osBuild: device.id === S24.id ? '15 (AP3A.240905.015.A2)' : '16 (BP2A.250705.008)',
+    osBuild:
+      device.id === S24.id
+        ? 'Android 15 · AP3A.240905.015.A2 · 보안 패치 2024-10-01'
+        : 'Android 16 · BP2A.250705.008 · 보안 패치 2025-07-05',
     defectId: sp?.defectId,
     note: sp?.note,
     runId,

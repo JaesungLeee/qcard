@@ -28,6 +28,10 @@ export type DeviceInfo = {
   serial: string;
   model: string;
   osMajor: number;
+  /** 빌드 번호 (설정 > 휴대전화 정보의 빌드 번호, 예: AP3A.240905.015.A2). 결과에 기록한다 (F-CY-01) */
+  build?: string;
+  /** 보안 패치 수준 (예: 2025-09-01) */
+  securityPatch?: string;
   size: { w: number; h: number };
   /** dpi. dp = px × 160 / dpi */
   density: number;

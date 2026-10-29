@@ -19,7 +19,7 @@ import { fmtDateTime } from '../../components/format';
 import { useMyRole, useUpdateDefect } from '../../data/hooks';
 import { ErrorMessage } from '../projects/parts';
 import { resultKey } from './model';
-import { Mono, TabBody, traceUrl } from './parts';
+import { Mono, OsBuild, TabBody, traceUrl } from './parts';
 import type { SheetProps } from './QaSheetPage';
 import { DEFECT_STATUS_LABEL } from './SummaryTab';
 
@@ -65,6 +65,7 @@ export function DefectsTab({ d, index, projectId }: SheetProps) {
               {d.defects.map((df) => {
                 const device = d.cycle.targets.find((t) => t.id === df.deviceId);
                 const r = index.get(resultKey(df.tcId, df.deviceId));
+                const osBuild = df.osBuild ?? r?.osBuild;
                 return (
                   <TableRow key={df.id}>
                     <TableCell sx={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
@@ -102,11 +103,13 @@ export function DefectsTab({ d, index, projectId }: SheetProps) {
                         {r && <VerdictBadge verdict={r.verdict} />}
                       </span>
                     </TableCell>
-                    <TableCell sx={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
+                    <TableCell sx={{ verticalAlign: 'top' }}>
                       <span className="qs-stack" style={{ gap: token('space-2') }}>
                         <span style={{ whiteSpace: 'nowrap' }}>{device?.label ?? df.deviceId}</span>
-                        {(df.osBuild ?? r?.osBuild) && (
-                          <span className={`${textClass('caption1')} qs-muted qc-mono`}>{df.osBuild ?? r?.osBuild}</span>
+                        {osBuild && (
+                          <span className={`${textClass('caption1')} qs-muted`}>
+                            <OsBuild value={osBuild} />
+                          </span>
                         )}
                       </span>
                     </TableCell>

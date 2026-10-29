@@ -43,6 +43,9 @@
   overflow-x: auto;
   min-width: 0;
 }
+.qs-nowrap {
+  white-space: nowrap;
+}
 .qs-ellipsis {
   overflow: hidden;
   text-overflow: ellipsis;

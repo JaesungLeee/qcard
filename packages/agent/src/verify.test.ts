@@ -264,8 +264,8 @@ describe('판정 집계 (F-EX-04, F-RP-03)', () => {
 describe('runCase', () => {
   const tc = (id: string) => qaDocV130.cases.find((c) => c.tcId === id)!;
 
-  function env(replies: Parameters<typeof scriptedLlm>[0], start = 'launcher') {
-    const device = new FakeDevice({ ...onboardingScenario(), start });
+  function env(replies: Parameters<typeof scriptedLlm>[0], start = 'launcher', connection: 'usb' | 'wifi' = 'usb') {
+    const device = new FakeDevice({ ...onboardingScenario(connection), start });
     const llm = scriptedLlm(replies);
     const e: AgentEnv = { device, llm: llm.client, appPackage: 'com.example.harukong', clock: fakeClock(), vision: false };
     return { device, llm, env: e };
@@ -289,7 +289,12 @@ describe('runCase', () => {
     ]);
     const r = await runCase(e, { testCase: tc('TC-ONBOARDING-001'), prepFlows: PREP_FLOWS, deviceId: 'galaxy-s24-15' });
     expect(device.log.slice(0, 2)).toEqual(['clear com.example.harukong', 'launch com.example.harukong']);
-    expect(r).toMatchObject({ verdict: 'pass', autoConfirmed: true, decidedBy: { kind: 'agent' } });
+    expect(r).toMatchObject({
+      verdict: 'pass',
+      autoConfirmed: true,
+      decidedBy: { kind: 'agent' },
+      osBuild: 'Android 15 · AP3A.240905.015.A2 · 보안 패치 2024-10-01',
+    });
     expect(r.points.map((p) => p.result)).toEqual(['match', 'match']);
   });
 
@@ -328,6 +333,27 @@ describe('runCase', () => {
     expect(r.verdict).toBe('blocked');
     expect(device.state.network).toEqual({ wifi: true, data: true });
     expect(device.log.slice(-2)).toEqual(['network wifi on', 'network data on']);
+  });
+
+  it('Wi-Fi ADB 디바이스에서 네트워크를 끄는 케이스는 Blocked, 네트워크는 건드리지 않는다 (F-EX-16)', async () => {
+    const { device, env: e } = env(
+      [
+        [toolUse('wait', { seconds: 1, intent: '스플래시' })],
+        [toolUse('set_network', { wifi: true, data: false, intent: '데이터 끊기' })],
+      ],
+      'launcher',
+      'wifi',
+    );
+    const r = await runCase(
+      { ...e, allowNetworkToggle: true },
+      { testCase: tc('TC-ONBOARDING-001'), prepFlows: PREP_FLOWS, deviceId: 'd' },
+    );
+    expect(r).toMatchObject({
+      verdict: 'blocked',
+      agentVerdict: 'blocked',
+      blockedReason: expect.stringMatching(/^환경 조작 불가: Wi-Fi ADB/),
+    });
+    expect(device.log.some((l) => l.startsWith('network'))).toBe(false);
   });
 
   it('없는 준비 플로우를 가리키면 Blocked', async () => {

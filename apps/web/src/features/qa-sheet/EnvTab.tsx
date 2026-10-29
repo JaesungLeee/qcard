@@ -11,7 +11,7 @@ import {
   token,
 } from '@qcard/ui';
 import { fmtDateTime } from '../../components/format';
-import { Card, KV, Mono, SERVER_ENV_LABEL, TabBody } from './parts';
+import { Card, KV, Mono, OsBuild, SERVER_ENV_LABEL, TabBody } from './parts';
 import type { SheetProps } from './QaSheetPage';
 
 export function EnvTab({ d }: SheetProps) {
@@ -57,7 +57,7 @@ export function EnvTab({ d }: SheetProps) {
                     {osBuilds.length ? (
                       <span className="qs-stack" style={{ gap: token('space-2') }}>
                         {osBuilds.map((b) => (
-                          <Mono key={b}>{b}</Mono>
+                          <OsBuild key={b} value={b} />
                         ))}
                       </span>
                     ) : (
