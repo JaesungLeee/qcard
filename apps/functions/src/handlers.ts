@@ -18,6 +18,7 @@ import {
   requireAdmin,
   restoration,
   Role,
+  runLimitsChange,
   type Actor,
   type HostConnection,
   type HostCredential,
@@ -28,6 +29,7 @@ import {
   type Project,
   type QADocument,
   type Run,
+  type RunLimits,
   type TestCase,
   type TestCycle,
 } from '@qcard/shared';
@@ -253,6 +255,19 @@ export async function deletePrepFlow(ctx: Ctx, data: unknown): Promise<void> {
     const doc = { ...meta, id: docId, cases: await casesOf(qaDoc) };
     prepFlowDeletion(members, await actorOf(ctx, tx), prepFlowUses(doc, cycles)[flowId] ?? []);
     tx.delete(ref);
+  });
+}
+
+/** 실행 안전장치 저장 (F-EX-12). Admin만 */
+export async function setRunLimits(ctx: Ctx, data: unknown): Promise<Project> {
+  // 범위 검사는 runLimitsChange가 한다 (화면과 같은 문구로)
+  const { projectId, limits } = parse(ProjectId.extend({ limits: z.record(z.string(), z.number()) }), data);
+  return ctx.db.runTransaction(async (tx) => {
+    const project = await read<Project>(tx, projectRef(ctx.db, projectId), '프로젝트');
+    const members = await membersIn(tx, ctx.db, projectId);
+    const runLimits = runLimitsChange(members, await actorOf(ctx, tx), limits as RunLimits);
+    tx.update(projectRef(ctx.db, projectId), { runLimits });
+    return { ...project, runLimits };
   });
 }
 

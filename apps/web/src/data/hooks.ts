@@ -14,7 +14,7 @@ import type {
   RequestQaDocInput,
   RequestRunInput,
 } from './api';
-import type { Role } from '@qcard/shared';
+import type { Role, RunLimits } from '@qcard/shared';
 
 export const ApiContext = createContext<QcardApi | null>(null);
 
@@ -109,6 +109,8 @@ export const useLeaveProject = (projectId: string) => useProjectMutation((api) =
 export const useDeleteProject = (projectId: string) =>
   useProjectMutation((api, confirmName: string) => api.deleteProject(projectId, confirmName));
 export const useRestoreProject = (projectId: string) => useProjectMutation((api) => api.restoreProject(projectId));
+export const useSetRunLimits = (projectId: string) =>
+  useProjectMutation((api, limits: RunLimits) => api.setRunLimits(projectId, limits));
 
 export function useQaDocs(projectId: string) {
   const api = useApi();

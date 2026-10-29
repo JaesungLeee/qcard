@@ -157,11 +157,14 @@ describe('사용량·한도 (F-EX-12)', () => {
   });
 
   it('재생 모드에서도 녹화된 usage로 한도를 계산한다', async () => {
-    await createCassetteLlm({ dir, mode: 'record', inner: fakeLlm().client }).create(req('a'), { role: 'executor' });
-    const meter = new UsageMeter({ maxTokensPerRun: 100 });
+    await createCassetteLlm({ dir, mode: 'record', inner: fakeLlm().client }).create(req('a'), {
+      role: 'executor',
+      caseId: 'TC-1',
+    });
+    const meter = new UsageMeter({ maxTokensPerCase: 100 });
     const llm = createLlm({ mode: 'replay', cassetteDir: dir, meter });
-    await llm.create(req('a'), { role: 'executor' });
-    await expect(llm.create(req('a'), { role: 'executor' })).rejects.toThrow(LimitExceededError);
+    await llm.create(req('a'), { role: 'executor', caseId: 'TC-1' });
+    await expect(llm.create(req('a'), { role: 'executor', caseId: 'TC-1' })).rejects.toThrow(LimitExceededError);
   });
 });
 

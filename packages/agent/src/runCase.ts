@@ -67,7 +67,9 @@ export async function prepare(
       env,
       start,
       'system',
-      tc.cleanState || !resetApp ? '준비: 앱 데이터 초기화 후 실행' : '준비: 이전 테스트 계정을 지우려고 앱 데이터 초기화 후 실행',
+      tc.cleanState || !resetApp
+        ? '준비: 앱 데이터 초기화 후 실행'
+        : '준비: 이전 테스트 계정을 지우려고 앱 데이터 초기화 후 실행',
     );
     await d.clearAppData(env.appPackage);
   } else {
@@ -280,7 +282,7 @@ async function afterPrep(
         .join('\n'),
     });
     if (exec.status !== 'done') {
-      const j = judge(exec, []);
+      const j = judge(exec, [], env.limits?.retryLimit);
       const r = result({
         verdict: j.verdict,
         agentVerdict: j.agentVerdict,
@@ -297,7 +299,7 @@ async function afterPrep(
     const points = await verifyPoints(env, { caseId: tc.tcId, points: tc.verificationPoints, evidence });
     const start = clock.now();
     for (const p of points) thought(env, start, 'verify', `${p.pointId} ${p.result} · ${p.reason}`);
-    const j = judge(exec, points);
+    const j = judge(exec, points, env.limits?.retryLimit);
     const misses = points.filter((p) => p.result !== 'match');
     const r = result({
       verdict: j.verdict,
