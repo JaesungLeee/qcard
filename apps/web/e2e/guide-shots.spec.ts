@@ -30,6 +30,7 @@ export const GUIDE_SHOTS: Shot[] = [
   { name: 'new-cycle', path: '/p/haru/cycles/new', waitFor: '1. QA 문서' },
   { name: 'cycles', path: '/p/haru/cycles', waitFor: '1.3.0 (130) 1차 회귀' },
   { name: 'console-home', path: '/console/live?demo=home', waitFor: '일시정지된 Run이 있습니다' },
+  { name: 'case-pick', path: '/p/haru/cycles/cycle-130-1?tab=summary&pick=modal', waitFor: '모두 고르기' },
   { name: 'console-running', path: '/console/live?demo=running', waitFor: 'Agent 사고 로그' },
   { name: 'console-approval', path: '/console/live?demo=approval', waitFor: '위험 액션 — 승인이 필요합니다' },
   { name: 'sheet-summary', path: '/p/haru/cycles/cycle-130-1?tab=summary', waitFor: '진행 매트릭스' },
