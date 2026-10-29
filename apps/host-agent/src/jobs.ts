@@ -29,6 +29,7 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import { getBytes, ref, type FirebaseStorage } from 'firebase/storage';
+import { CLAUDE_SETUP_REASON } from './runCycle';
 
 /*
  * 호스트 에이전트의 작업 처리 (PRD §5.2, §6.2): 웹에서 요청한 "QA 문서 생성"·"케이스 수정안"(F-QD-17)을
@@ -120,9 +121,7 @@ const errorKind = (e: unknown): JobErrorKind | undefined =>
   e instanceof PlanLimitError
     ? 'plan_limit'
     : e instanceof ClaudeCodeSetupError
-      ? e.reason === 'outdated'
-        ? 'claude_outdated'
-        : 'not_logged_in'
+      ? CLAUDE_SETUP_REASON[e.reason]
       : undefined;
 
 /** 생성 중인 작업 하나를 끝까지 처리한다. 결과 작업 상태를 돌려준다 (완료·일시정지·실패) */

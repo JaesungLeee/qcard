@@ -6,9 +6,10 @@ import type { LlmRequest, LlmRetry } from './types';
 
 /**
  * 보낸 메시지를 기록하고, 정해진 result를 차례로 돌려주는 가짜 claude 프로세스. 'silent'면 답하지 않는다.
- * 'overloaded'면 서버 혼잡으로 다시 시도한다는 알림만 보내고 답하지 않는다
+ * 'overloaded'면 서버 혼잡으로 다시 시도한다는 알림만 보내고 답하지 않는다.
+ * { rejectedUntil }이면 한도 알림(rate_limit_event)을 보낸 뒤 한도 오류로 끝낸다
  */
-function fakeCli(results: (Partial<CliResult> | 'exit' | 'silent' | 'overloaded')[]) {
+function fakeCli(results: (Partial<CliResult> | 'exit' | 'silent' | 'overloaded' | { rejectedUntil: number })[]) {
   const procs: { args: string[]; sent: unknown[]; closed: boolean }[] = [];
   const spawn = (args: string[]): CliProcess => {
     const p = { args, sent: [] as unknown[], closed: false };
@@ -35,6 +36,14 @@ function fakeCli(results: (Partial<CliResult> | 'exit' | 'silent' | 'overloaded'
             return;
           }
           if (!r || r === 'exit') return onExit();
+          if ('rejectedUntil' in r) {
+            onMessage({
+              type: 'rate_limit_event',
+              rate_limit_info: { status: 'rejected', resetsAt: r.rejectedUntil, rateLimitType: 'five_hour' },
+            });
+            onMessage({ type: 'result', subtype: 'success', is_error: true, result: "You've hit your limit" });
+            return;
+          }
           onMessage({ type: 'result', subtype: 'success', is_error: false, ...r });
         });
       },
@@ -167,6 +176,13 @@ describe('createClaudeCliLlm', () => {
     expect(await run({ is_error: true, api_error_status: 429, result: 'limit' })).toBeInstanceOf(PlanLimitError);
     expect(await run({ is_error: true, result: '알 수 없음' })).toBeInstanceOf(LlmOutputError);
     expect(await run('exit')).toBeInstanceOf(LlmOutputError);
+  });
+
+  it('한도에 막히면 한도 알림(rate_limit_event)에서 풀리는 시각을 읽는다', async () => {
+    const llm = createClaudeCliLlm({ spawn: fakeCli([{ rejectedUntil: 1793260800 }]).spawn });
+    const e = await llm.create(execReq([{ role: 'user', content: 'x' }]), meta).catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(PlanLimitError);
+    expect((e as PlanLimitError).resetsAt).toBe(new Date(1793260800 * 1000).toISOString());
   });
 
   it('구조화 출력 요청에 결과가 없으면 응답 오류', async () => {

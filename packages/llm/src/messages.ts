@@ -29,6 +29,8 @@ export class ClaudeCodeSetupError extends Error {
   constructor(
     readonly reason: 'not_installed' | 'not_logged_in' | 'outdated',
     message: string,
+    /** outdated일 때 필요한 최소 버전 (알면) */
+    readonly requiredVersion?: string,
   ) {
     super(message);
   }
@@ -37,6 +39,13 @@ export class ClaudeCodeSetupError extends Error {
 /** 사용자 플랜의 사용 한도(5시간·주간)에 닿았다. 시간이 지나면 풀리므로 Run을 일시정지한다 (F-EX-17) */
 export class PlanLimitError extends Error {
   override name = 'PlanLimitError';
+  constructor(
+    message: string,
+    /** 한도가 풀리는 시각 (ISO). 오류 문구에 없으면 없음 */
+    readonly resetsAt?: string,
+  ) {
+    super(message);
+  }
 }
 
 export const textOf = (m: LlmResponse) =>

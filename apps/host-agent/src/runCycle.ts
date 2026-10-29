@@ -2,7 +2,7 @@ import { blockedCase, runCase, RunAbortedError, type AccountIssue, type AgentEnv
 import type { QcardApi } from '@qcard/data';
 import { ClaudeCodeSetupError, PlanLimitError, type UsageMeter } from '@qcard/llm';
 import { DeviceDisconnectedError } from '@qcard/device';
-import { RUN_HEARTBEAT_MS, type CaseResult, type PauseReason, type TestCase } from '@qcard/shared';
+import { RUN_HEARTBEAT_MS, type CaseResult, type JobErrorKind, type PauseReason, type TestCase } from '@qcard/shared';
 import { RunAccounts, type AccountLeaser } from './accounts';
 import type { RunSink } from './sink';
 
@@ -45,8 +45,17 @@ export type RunCycleInput = {
   log?: (line: string) => void;
 };
 
+/** Claude Code를 쓸 수 없는 이유 → Run 일시정지·작업 오류 사유 (F-EX-17) */
+export const CLAUDE_SETUP_REASON = {
+  not_installed: 'claude_not_installed',
+  not_logged_in: 'not_logged_in',
+  outdated: 'claude_outdated',
+} as const satisfies Record<ClaudeCodeSetupError['reason'], PauseReason & JobErrorKind>;
+
 export type RunCycleOutcome = (
-  { status: 'done' | 'aborted' } | { status: 'paused'; reason: PauseReason; message: string }
+  | { status: 'done' | 'aborted' }
+  /** limitedUntil: 플랜 한도가 풀리는 시각 (오류 문구에 있을 때만) */
+  | { status: 'paused'; reason: PauseReason; message: string; limitedUntil?: string }
 ) & {
   results: CaseResult[];
   /** 아직 보내지 못한 업로드 (로컬 큐에 남아 다음 실행이 보낸다) */ pendingUploads: number;
@@ -79,10 +88,10 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
 
   input.onQueue?.(cases);
   const results: CaseResult[] = [];
-  const paused = async (reason: PauseReason, message: string): Promise<RunCycleOutcome> => {
+  const paused = async (reason: PauseReason, message: string, limitedUntil?: string): Promise<RunCycleOutcome> => {
     await sink.pause(reason);
     const pendingUploads = await sink.drain(input.drainTimeoutMs);
-    return { status: 'paused', reason, message, results, pendingUploads };
+    return { status: 'paused', reason, message, ...(limitedUntil ? { limitedUntil } : {}), results, pendingUploads };
   };
   /** 디바이스를 쓸 수 없는 상태 (잠김·꺼짐·연결 끊김) */
   const deviceProblem = async (): Promise<{ reason: PauseReason; message: string } | undefined> => {
@@ -159,16 +168,14 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
           e instanceof PlanLimitError
             ? 'plan_limit'
             : e instanceof ClaudeCodeSetupError
-              ? e.reason === 'outdated'
-                ? 'claude_outdated'
-                : 'not_logged_in'
+              ? CLAUDE_SETUP_REASON[e.reason]
               : undefined;
         // 실행 중 연결이 끊김: 진행 중 케이스 결과는 쓰지 않는다 (이어서 실행하면 그 케이스부터)
         if (e instanceof DeviceDisconnectedError) {
           return paused('device_disconnected', `${testCase.tcId} 실행 중 ${DISCONNECTED}`);
         }
         if (!reason) throw e;
-        return paused(reason, (e as Error).message);
+        return paused(reason, (e as Error).message, e instanceof PlanLimitError ? e.resetsAt : undefined);
       }
     }
     await sink.finish();

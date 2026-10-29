@@ -25,6 +25,12 @@
     "waitFor": "Agent가 첫 액션을 준비하고 있습니다."
   },
   { "name": "console-live-home", "path": "/console/live?demo=home", "waitFor": "일시정지된 Run이 있습니다" },
+  {
+    "name": "console-live-home-outdated",
+    "path": "/console/live?demo=home-outdated",
+    "waitFor": "Claude Code를 업데이트해야 Run을 시작할 수 있습니다"
+  },
+  { "name": "console-live-home-limited", "path": "/console/live?demo=home-limited", "waitFor": "플랜 한도 도달" },
   { "name": "console-live-waiting", "path": "/console/live?demo=waiting", "waitFor": "Agent 응답을 기다리고 있습니다" },
   { "name": "console-open", "path": "/p/haru/console", "waitFor": "로컬 콘솔이 꺼져 있습니다" }
 ]
