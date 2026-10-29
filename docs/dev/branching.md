@@ -22,7 +22,7 @@
 
 SemVer를 따른다. 기능을 모은 release는 minor, hotfix는 patch를 올린다. 호스트 에이전트는 바뀐 릴리스에서만 버전을 올리고 `host-v*` 태그를 함께 단다.
 
-웹·Functions·보안 규칙이 이전 호스트와 호환되지 않게 바뀌면 `packages/shared`의 `MIN_HOST_VERSION`을 새 호스트 버전으로 올린다. 호스트는 연결 신호에 버전을 보내고, 웹은 그보다 낮은 호스트로 Run을 시작하지 않고 업데이트를 안내한다(연결된 PC 화면에도 표시). 그런 릴리스는 CHANGELOG에 `### ⚠ 호환되지 않는 변경`으로 적는다.
+웹·Functions·보안 규칙이 이전 호스트와 호환되지 않게 바뀌면 `packages/shared`의 `MIN_HOST_VERSION`을 새 호스트 버전으로 올린다. 호스트는 연결 신호에 버전을 보내고, 웹은 그보다 낮은 호스트로 Run을 시작하지 않고 업데이트를 안내한다(연결된 PC 화면에도 표시). 그런 릴리스는 CHANGELOG 항목 맨 위에 `> ⚠ **호스트 업데이트가 필요합니다.**`로 알린다.
 
 ## 흐름
 
@@ -65,9 +65,11 @@ back-merge PR까지 머지하면 `release/0.2.0`을 지운다.
 
 루트 `CHANGELOG.md`에 새 버전 항목을 맨 위에 더하고 release 브랜치에 함께 커밋한다. 태그를 단 뒤 그 항목으로 GitHub Release를 만든다(위 `gh release create`).
 
-- 형식은 Release Please와 같다: `## [버전](비교 링크) (날짜)` 아래 `### ⚠ 호환되지 않는 변경`·`### 새 기능`·`### 버그 수정`, 항목은 `* **scope:** 변경 요약(한국어) ([#PR](링크)) ([짧은 해시](링크))`. scope 알파벳 순.
-- 범위는 직전 태그 이후 커밋이다(`git log --no-merges <직전 태그>..release/<버전>`). `feat`·`fix`만 쓰고 `docs`·`chore`·`test`는 뺀다.
-- 호스트 버전을 올렸으면 항목 맨 위에 새 호스트 버전과 업데이트 방법(`npm i -g @qcard/host`)을 한 줄로 쓴다.
+- 형식은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/)를 따른다: `## [버전](비교 링크) - 날짜` 아래 `### Added`·`### Changed`·`### Removed`·`### Fixed`를 이 순서로 두고, 빈 섹션은 뺀다.
+- 읽는 사람은 qcard 사용자다. 커밋 메시지를 옮기지 말고 화면과 동작에서 달라진 점을 "~합니다"체로 쓴다. 경로·함수·보안 규칙 같은 구현, PRD 기능 ID, 커밋 해시는 쓰지 않고 항목 끝에 PR 링크 `([#PR](링크))`만 붙인다. 같은 기능의 커밋은 한 항목으로 묶는다.
+- 범위는 직전 태그 이후 커밋이다(`git log --no-merges <직전 태그>..release/<버전>`). `feat`·`fix`를 보고 `docs`·`chore`·`test`는 뺀다. 사용자가 느끼지 못하는 변경은 빼거나 효과만 한 줄로 쓴다.
+- 호스트 버전을 올렸으면 항목 맨 위 인용문(`>`)에 새 호스트 버전과 업데이트 방법(`npm i -g @qcard/host` → `qcard serve` 재시작)을 쓴다.
+- 데이터 이전처럼 운영자만 하는 작업은 CHANGELOG가 아니라 [deploy.md](deploy.md)에 쓴다.
 - 핫픽스도 같은 파일에 patch 버전 항목으로 더한다.
 
 ### 핫픽스
