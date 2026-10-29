@@ -25,6 +25,14 @@
     "waitFor": "Agent가 첫 액션을 준비하고 있습니다."
   },
   { "name": "console-live-home", "path": "/console/live?demo=home", "waitFor": "일시정지된 Run이 있습니다" },
+  { "name": "console-live-home-pick", "path": "/console/live?demo=home&pick=cycle-130-1", "waitFor": "모두 고르기" },
+  {
+    "name": "console-live-home-pick-all",
+    "path": "/console/live?demo=home&pick=cycle-130-1",
+    "waitFor": "모두 고르기",
+    "click": "전체",
+    "then": "0 / 13"
+  },
   {
     "name": "console-live-home-outdated",
     "path": "/console/live?demo=home-outdated",

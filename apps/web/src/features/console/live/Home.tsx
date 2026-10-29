@@ -6,8 +6,10 @@ import {
   type ConsoleHome,
   type PauseReason,
 } from '@qcard/shared';
-import { Button, Checkbox, Icons, SectionMessage, textClass, token } from '@qcard/ui';
-import { useState, type ReactNode } from 'react';
+import { Button, Icons, SectionMessage, textClass, token } from '@qcard/ui';
+import { useMemo, useState, type ReactNode } from 'react';
+import { CasePickModal } from '../../../components/case-pick/CasePickModal';
+import { pickRows } from '../../../components/case-pick/rules';
 import { useScreenWidth } from '../DeviceStage';
 import { DeviceInfo } from '../QueuePanel';
 import { TopBar } from '../TopBar';
@@ -28,6 +30,7 @@ export function Home({
   onStart,
   onRefresh,
   screen,
+  pickCycle,
 }: {
   home: ConsoleHome;
   link: HostLink;
@@ -41,6 +44,8 @@ export function Home({
   onRefresh: () => void;
   /** 화면을 바꿔 그린다 (데모) */
   screen?: (width: number) => ReactNode;
+  /** 이 사이클의 케이스 고르기를 연 채로 시작 (데모) */
+  pickCycle?: string;
 }) {
   const width = useScreenWidth();
   const { device } = home;
@@ -77,7 +82,7 @@ export function Home({
             </section>
           </div>
           <div className="qcc-col-detail">
-            <CycleList home={home} canStart={canStart} onStart={onStart} onRefresh={onRefresh} />
+            <CycleList home={home} canStart={canStart} onStart={onStart} onRefresh={onRefresh} pickCycle={pickCycle} />
           </div>
           <aside className="qcc-col-queue">{device && <DeviceInfo device={device} />}</aside>
         </div>
@@ -189,12 +194,15 @@ function CycleList({
   canStart,
   onStart,
   onRefresh,
+  pickCycle,
 }: {
   home: ConsoleHome;
   canStart: boolean;
   onStart: (r: StartRun) => void;
   onRefresh: () => void;
+  pickCycle?: string;
 }) {
+  const device = home.device && `${home.device.model} (Android ${home.device.osBuild.split(' ')[0]})`;
   return (
     <section className="qcc-card" aria-label="사이클 선택">
       <div className="qcc-card-head" style={{ justifyContent: 'space-between' }}>
@@ -224,12 +232,19 @@ function CycleList({
         <p className={`${textClass('label1')} qcc-muted`} style={{ margin: 0 }}>
           {home.loading
             ? '사이클을 불러오는 중입니다…'
-            : `${home.device.model} (Android ${home.device.osBuild.split(' ')[0]})가 대상인 사이클이 없습니다. 웹에서 사이클을 만들 때 대상에 이 디바이스를 넣으세요.`}
+            : `${device}가 대상인 사이클이 없습니다. 웹에서 사이클을 만들 때 대상에 이 디바이스를 넣으세요.`}
         </p>
       ) : (
         <div style={{ display: 'grid', gap: 12 }}>
           {home.cycles.map((c) => (
-            <CycleCard key={`${c.projectId}/${c.cycleId}`} cycle={c} canStart={canStart} onStart={onStart} />
+            <CycleCard
+              key={`${c.projectId}/${c.cycleId}`}
+              cycle={c}
+              device={device!}
+              canStart={canStart}
+              onStart={onStart}
+              picking={pickCycle === c.cycleId}
+            />
           ))}
         </div>
       )}
@@ -239,25 +254,24 @@ function CycleList({
 
 function CycleCard({
   cycle: c,
+  device,
   canStart,
   onStart,
+  picking: initialPicking = false,
 }: {
   cycle: ConsoleCycleOption;
+  /** 이 디바이스 칸 이름 (고르기 모달의 기준) */
+  device: string;
   canStart: boolean;
   onStart: (r: StartRun) => void;
+  picking?: boolean;
 }) {
   const remaining = c.cases.filter((x) => !x.done);
   const resumeLeft = c.pausedRun?.left ?? 0;
   const resumeTotal = c.pausedRun?.total;
-  const [picking, setPicking] = useState(false);
-  const [picked, setPicked] = useState<Set<string>>(() => new Set());
-  const toggle = (id: string, on: boolean) =>
-    setPicked((s) => {
-      const n = new Set(s);
-      if (on) n.add(id);
-      else n.delete(id);
-      return n;
-    });
+  // 케이스 고르기 (F-CY-07): 웹 QA 시트와 같은 모달·규칙. 판정은 이 디바이스 칸 기준
+  const [picking, setPicking] = useState(initialPicking);
+  const rows = useMemo(() => pickRows(c.cases, (x) => x.verdict), [c.cases]);
   const ref = { projectId: c.projectId, cycleId: c.cycleId };
   return (
     <article
@@ -317,44 +331,18 @@ function CycleCard({
         >
           {remaining.length ? `남은 ${remaining.length}건 실행` : '남은 케이스 없음'}
         </Button>
-        <Button size="small" variant="outlined" color="assistive" onClick={() => setPicking((v) => !v)}>
-          {picking ? '케이스 고르기 닫기' : '케이스 고르기'}
+        <Button size="small" variant="outlined" color="assistive" onClick={() => setPicking(true)}>
+          케이스 고르기
         </Button>
       </div>
-      {picking && (
-        <div style={{ display: 'grid', gap: 4 }}>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, maxHeight: 280, overflow: 'auto' }}>
-            {c.cases.map((x) => {
-              const id = `pick-${c.cycleId}-${x.tcId}`;
-              return (
-                <li key={x.tcId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0' }}>
-                  <Checkbox
-                    id={id}
-                    size="small"
-                    checked={picked.has(x.tcId)}
-                    onCheckedChange={(on) => toggle(x.tcId, on)}
-                  />
-                  <label htmlFor={id} className={textClass('label2')} style={{ minWidth: 0, flex: 1 }}>
-                    <span className="qcc-mono qcc-muted">{x.tcId}</span> {x.title}
-                    {x.done && <span className="qcc-faint"> · 결과 있음 (다시 실행)</span>}
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
-          <div>
-            <Button
-              size="small"
-              variant="solid"
-              color="primary"
-              disabled={!canStart || picked.size === 0}
-              onClick={() => onStart({ ...ref, tcIds: [...picked] })}
-            >
-              {`고른 ${picked.size}건 실행`}
-            </Button>
-          </div>
-        </div>
-      )}
+      <CasePickModal
+        open={picking}
+        onOpenChange={setPicking}
+        rows={rows}
+        device={device}
+        blocked={canStart ? undefined : '지금은 Run을 시작할 수 없습니다 — 위 안내를 확인하세요'}
+        onStart={(tcIds) => onStart({ ...ref, tcIds })}
+      />
     </article>
   );
 }

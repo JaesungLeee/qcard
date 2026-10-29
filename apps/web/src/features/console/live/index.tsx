@@ -1,8 +1,15 @@
 // 실시간 로컬 콘솔 (PRD §5.7): 호스트 에이전트(serve·run-cycle)가 띄운 127.0.0.1 서버에서 연다.
 // 개발 중에는 Vite 개발 서버가 /console-api를 호스트로 넘긴다. Run이 없으면 홈(사이클 골라 Run 시작),
 // Run 중이면 실행 화면. 상태는 호스트가 밀어 주고 화면은 제어·Run 시작만 보낸다.
-import { DEVICE_SIZE, SCREENS, type ConsoleSession } from '@qcard/fixtures';
-import type { ConsoleApproval, ConsoleHome, ConsolePhase, ExecStep, LiveConsole } from '@qcard/shared';
+import { DEVICE_SIZE, SCREENS, qaDocV130, type ConsoleSession } from '@qcard/fixtures';
+import type {
+  ConsoleApproval,
+  ConsoleCycleOption,
+  ConsoleHome,
+  ConsolePhase,
+  ExecStep,
+  LiveConsole,
+} from '@qcard/shared';
 import { Icons, SectionMessage, textClass, token } from '@qcard/ui';
 import { fmtTs } from '../../../components/format';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -24,7 +31,7 @@ import { useLiveConsole, type HostLink } from './useLiveConsole';
 export function LiveConsolePage() {
   const [params] = useSearchParams();
   const demo = params.get('demo');
-  return demo ? <Demo demo={demo} /> : <Connected />;
+  return demo ? <Demo demo={demo} pick={params.get('pick') ?? undefined} /> : <Connected />;
 }
 
 function Connected() {
@@ -57,11 +64,12 @@ function Connected() {
 /**
  * `?demo=running|manual|takeover`: 호스트 없이 fixture 세션으로 채운 화면 (UI 스냅샷용).
  * `?demo=start`: 케이스가 막 시작해 스텝이 아직 없는 상태 · `?demo=home`: Run이 없을 때 (사이클 고르기)
+ * `&pick=<사이클 ID>`: 홈에서 그 사이클의 케이스 고르기를 연 채로 (F-CY-07)
  * `?demo=home-outdated`: Claude Code 버전 미달로 시작을 막은 홈 · `?demo=home-limited`: 플랜 한도로 멈춘 뒤 (F-DB-09)
  * `?demo=waiting`: Agent가 모델 응답을 오래 기다리는 중
  * `?demo=approval`: 위험 액션 승인 대기 · `?demo=identity`: 사람 전용(본인인증) 대기 (F-EX-10)
  */
-function Demo({ demo }: { demo: string }) {
+function Demo({ demo, pick }: { demo: string; pick?: string }) {
   const query = useConsoleSession();
   return (
     <QueryState query={query}>
@@ -82,6 +90,7 @@ function Demo({ demo }: { demo: string }) {
               onDismissError={() => {}}
               onStart={() => {}}
               onRefresh={() => {}}
+              pickCycle={pick}
               screen={(width) => (
                 <MockScreen
                   screenshot={session.current.steps[0]!.screenshot}
@@ -137,9 +146,24 @@ function Demo({ demo }: { demo: string }) {
 }
 
 export function demoHome(session: ConsoleSession): ConsoleHome {
-  const cases = session.queue
+  // 케이스 고르기(F-CY-07)용 기능·세부 기능·우선순위는 QA 문서에서, 판정은 이 Run이 낸 결과
+  const doc = new Map(qaDocV130.cases.map((c) => [c.tcId, c]));
+  const cases: ConsoleCycleOption['cases'] = session.queue
     .filter((q) => q.mode === 'auto')
-    .map((q) => ({ tcId: q.tcId, title: q.title, done: q.status === 'done' }));
+    .map((q) => {
+      const tc = doc.get(q.tcId);
+      const verdict = q.status === 'done' ? (q.verdict ?? 'nt') : 'nt';
+      return {
+        tcId: q.tcId,
+        title: q.title,
+        done: verdict !== 'nt',
+        feature: tc?.feature ?? '',
+        subFeature: tc?.subFeature ?? '',
+        priority: tc?.priority ?? 'medium',
+        verdict,
+      };
+    });
+  const fresh = cases.map((c) => ({ ...c, done: false, verdict: 'nt' as const }));
   return {
     executor: session.run.executor,
     device: { ...session.device, status: 'idle' },
@@ -164,7 +188,7 @@ export function demoHome(session: ConsoleSession): ConsoleHome {
         build: { version: '1.3.1', buildNumber: 131 },
         docVersion: '1.3.0',
         deviceId: 'pixel-8-16',
-        cases: cases.map((c) => ({ ...c, done: false })),
+        cases: fresh,
       },
       // 로그인이 있는 가상 앱: 구독자 계정이 모두 격리돼 배정할 수 없다 (F-PF-08)
       {
@@ -175,7 +199,7 @@ export function demoHome(session: ConsoleSession): ConsoleHome {
         build: { version: '2.1.0', buildNumber: 210 },
         docVersion: '2.1.0',
         deviceId: 'pixel-8-16',
-        cases: cases.map((c) => ({ ...c, done: false })),
+        cases: fresh,
         accountShortage: [{ kind: '구독자', cases: 3 }],
       },
     ],

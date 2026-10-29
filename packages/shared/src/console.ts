@@ -1,5 +1,5 @@
 import type { RiskKind } from './agent';
-import type { Bounds, ExecStep, Run, TestCase, ThoughtEntry } from './domain';
+import type { Bounds, ExecStep, Priority, Run, TestCase, ThoughtEntry } from './domain';
 import type { Verdict } from './verdict';
 
 /*
@@ -132,8 +132,19 @@ export type ConsoleCycleOption = {
   docVersion: string;
   /** 이 디바이스의 대상 칸 */
   deviceId: string;
-  /** 자동 케이스 (수동 케이스는 웹·콘솔에서 사람이 입력한다) */
-  cases: { tcId: string; title: string; done: boolean }[];
+  /**
+   * 자동 케이스 (수동 케이스는 웹·콘솔에서 사람이 입력한다). 기능·세부 기능·우선순위와 이 기기 칸의 판정(결과 없으면 nt)은
+   * 케이스 고르기(F-CY-07)의 필터·기능 묶음에 쓴다. done = 판정이 nt가 아님
+   */
+  cases: {
+    tcId: string;
+    title: string;
+    done: boolean;
+    feature: string;
+    subFeature: string;
+    priority: Priority;
+    verdict: Verdict;
+  }[];
   /** 내가 이 디바이스로 돌리다 일시정지된 Run (이어서 실행) */
   /** total: 그 Run의 큐 크기 (예전 Run이면 없음), left: 이어서 실행할 케이스 수 */
   pausedRun?: { id: string; reason?: string; total?: number; left: number };

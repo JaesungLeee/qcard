@@ -6,6 +6,7 @@ import type { CycleDetail } from '../../data/api';
 import { useCycle, useProject } from '../../data/hooks';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
+import { RunCasePickAction } from './RunCasePick';
 import { CasesTab } from './CasesTab';
 import { CycleCompleteAction, CycleCompleteMessage, useCycleComplete } from './CycleComplete';
 import { CycleDeleteAction, CycleDeleteMessage, useCycleDelete } from './CycleDelete';
@@ -86,6 +87,7 @@ function Sheet({ d, projectId }: { d: CycleDetail; projectId: string }) {
         }
         actions={
           <>
+            <RunCasePickAction d={d} projectId={projectId} />
             <RunLaunchActions d={d} projectId={projectId} />
             <CycleCompleteAction c={completion} />
             <CycleDeleteAction c={deletion} />
