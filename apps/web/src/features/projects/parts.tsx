@@ -2,6 +2,7 @@
 import { DATA_NOTICE, ROLE_LABEL, type Role } from '@qcard/shared';
 import { ContentBadge, Icons, SectionMessage, textClass } from '@qcard/ui';
 import type { ReactNode } from 'react';
+import { Link } from 'react-router';
 import { CheckLabel } from '../../components/CheckLabel';
 
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: ReactNode }) {
@@ -36,7 +37,12 @@ export function DataNotice({ checked, onChange }: { checked: boolean; onChange: 
         <Icons.IconCircleInfo aria-hidden className="qp-notice-icon" />
         <div className="qp-stack" style={{ gap: 4 }}>
           <span className={textClass('label1', 'bold')}>데이터 처리 안내</span>
-          <span className={`${textClass('label2')} qp-muted`}>{DATA_NOTICE}</span>
+          <span className={`${textClass('label2')} qp-muted`}>
+            {DATA_NOTICE}{' '}
+            <Link to="/privacy" target="_blank" className="qp-link">
+              개인정보처리방침
+            </Link>
+          </span>
         </div>
       </div>
       <CheckLabel className={`${textClass('label1', 'medium')} qp-check`} checked={checked} onCheckedChange={onChange}>
