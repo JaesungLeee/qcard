@@ -69,6 +69,10 @@ export function AppShell() {
             </NavLink>
           ))}
           <ConsoleNavLink className={textClass('label1', 'medium')} />
+          <Link to="/guide" target="_blank" className={textClass('label1', 'medium')}>
+            <Icons.IconCircleInfo aria-hidden />
+            시작 가이드
+          </Link>
         </nav>
         <div className="qc-sidebar-foot">
           <ThemeSwitch />

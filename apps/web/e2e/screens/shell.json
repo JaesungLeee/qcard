@@ -2,6 +2,8 @@
   { "name": "shell-cycles", "path": "/p/haru/cycles", "waitFor": "하루콩" },
   { "name": "shell-login", "path": "/login", "waitFor": "qcard에 로그인" },
   { "name": "shell-privacy", "path": "/privacy", "waitFor": "이용자 PC에 남는 데이터" },
+  { "name": "shell-guide", "path": "/guide", "waitFor": "자주 막히는 곳" },
+  { "name": "shell-guide-spec", "path": "/guide/spec", "waitFor": "하루콩 예시 스펙 내려받기" },
   { "name": "shell-terms", "path": "/terms", "waitFor": "책임의 한계" },
   { "name": "shell-login-invite", "path": "/login?next=%2Finvite%2Fatlas-join", "waitFor": "초대를 수락하려면" }
 ]
