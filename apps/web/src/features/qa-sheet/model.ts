@@ -1,6 +1,7 @@
 // QA 시트 화면이 쓰는 순수 계산. 화면 코드와 분리해 단위 테스트한다.
 import {
   AUTO_CONFIRM_LABEL,
+  holdsCell,
   isRunStale,
   HOST_ONLINE_MS,
   type Host,
@@ -118,6 +119,18 @@ export type MatrixCell = {
 };
 export type MatrixRow = { device: TargetDevice; cells: MatrixCell[]; done: number; running: number; remaining: number };
 
+/**
+ * 그 칸의 실행 중·일시정지 Run. 일시정지된 Run도 멈춘 칸을 `currentTcId`로 남기는데, 그 칸은 다른 Run이 가져갈 수 있다(F-CY-06) —
+ * 둘이 겹치면 지금 칸을 잡고 있는 Run을 보인다
+ */
+export function cellRun(runs: Run[], deviceId: string, tcId: string, now = Date.now()): Run | undefined {
+  const here = runs.filter(
+    (r) => r.deviceId === deviceId && r.currentTcId === tcId && (r.status === 'running' || r.status === 'paused'),
+  );
+  const at = new Date(now).toISOString();
+  return here.find((r) => holdsCell(r, at)) ?? here[0];
+}
+
 /** 진행 매트릭스 (F-CY-05): 케이스 × 대상 디바이스 칸을 완료 / 실행 중(실행자) / 남은 칸으로 나눈다. */
 export function progressMatrix(
   cases: TestCase[],
@@ -127,12 +140,9 @@ export function progressMatrix(
   now = Date.now(),
 ): MatrixRow[] {
   return targets.map((device) => {
-    const active = runs.filter(
-      (r) => r.deviceId === device.id && (r.status === 'running' || r.status === 'paused') && r.currentTcId,
-    );
     const cells = cases.map((tc): MatrixCell => {
       const verdict = index.get(resultKey(tc.tcId, device.id))?.verdict ?? 'nt';
-      const run = active.find((r) => r.currentTcId === tc.tcId);
+      const run = cellRun(runs, device.id, tc.tcId, now);
       if (run)
         return {
           tcId: tc.tcId,
