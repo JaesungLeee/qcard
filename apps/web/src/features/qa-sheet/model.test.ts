@@ -6,6 +6,7 @@ import { consoleUrlOf } from '../console/Open';
 import {
   autoConfirmChecks,
   caseVerdictCounts,
+  cellRun,
   deviceStats,
   indexResults,
   maskAccount,
@@ -116,6 +117,20 @@ describe('progressMatrix', () => {
     expect(running.paused).toBe(true);
     expect(p8!.done + p8!.running + p8!.remaining).toBe(d.cases.length);
     expect(p8!.remaining).toBeGreaterThan(0);
+  });
+});
+
+describe('cellRun (F-CY-06)', () => {
+  const now = Date.parse('2026-10-23T10:00:00Z');
+  const base = { cycleId: 'c', deviceId: 'd1', currentTcId: 'TC-1', startedAt: '2026-10-23T09:00:00Z' };
+  const paused = { ...base, id: 'r-paused', executor: '이재성', status: 'paused' as const, heartbeatAt: '2026-10-23T09:59:50Z' };
+  const taker = { ...base, id: 'r-taker', executor: '김민지', status: 'running' as const, heartbeatAt: '2026-10-23T09:59:40Z' };
+  it('일시정지된 Run이 남긴 칸을 다른 Run이 가져갔으면 가져간 Run을 보인다', () => {
+    expect(cellRun([paused, taker], 'd1', 'TC-1', now)?.id).toBe('r-taker');
+    expect(cellRun([paused], 'd1', 'TC-1', now)?.id).toBe('r-paused');
+    // 가져간 Run도 끊겼으면 먼저 있던 Run 그대로
+    expect(cellRun([paused, { ...taker, heartbeatAt: '2026-10-23T09:00:00Z' }], 'd1', 'TC-1', now)?.id).toBe('r-paused');
+    expect(cellRun([paused, taker], 'd2', 'TC-1', now)).toBeUndefined();
   });
 });
 
