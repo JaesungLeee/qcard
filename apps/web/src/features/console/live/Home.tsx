@@ -1,4 +1,11 @@
-import { PAUSE_REASON_LABEL, type ConsoleCycleOption, type ConsoleHome, type PauseReason } from '@qcard/shared';
+import {
+  claudeCodeReady,
+  PAUSE_REASON_LABEL,
+  type ClaudeCodeState,
+  type ConsoleCycleOption,
+  type ConsoleHome,
+  type PauseReason,
+} from '@qcard/shared';
 import { Button, Checkbox, Icons, SectionMessage, textClass, token } from '@qcard/ui';
 import { useState, type ReactNode } from 'react';
 import { useScreenWidth } from '../DeviceStage';
@@ -37,7 +44,8 @@ export function Home({
 }) {
   const width = useScreenWidth();
   const { device } = home;
-  const canStart = link === 'open' && !!device && !home.deviceProblem && !starting;
+  // 설치·로그인·버전 문제를 알면 미리 막는다. 호스트도 시작 직전에 다시 점검한다 (F-EX-17)
+  const canStart = link === 'open' && !!device && !home.deviceProblem && !starting && claudeCodeReady(home.claudeCode);
   return (
     <div className="qcc">
       <TopBar
@@ -112,6 +120,7 @@ function Notices({
           </span>
         </SectionMessage>
       )}
+      <ClaudeCodeNotice state={home.claudeCode} />
       {starting && (
         <SectionMessage variant="info" description="사이클 빌드가 디바이스와 다르면 내려받아 설치합니다.">
           Run을 준비하고 있습니다
@@ -150,6 +159,28 @@ function Notices({
         </SectionMessage>
       )}
     </>
+  );
+}
+
+/** Claude Code를 쓸 수 없어 Run을 시작할 수 없을 때 해결 방법 (F-DB-09) */
+function ClaudeCodeNotice({ state }: { state: ClaudeCodeState }) {
+  if (claudeCodeReady(state)) return null;
+  const again = '30초 안에 다시 확인해 실행 버튼이 켜집니다.';
+  const [title, description] = !state.installed
+    ? [
+        'Claude Code를 설치해야 Run을 시작할 수 있습니다',
+        `https://claude.com/claude-code 에서 설치한 뒤 터미널에서 claude로 로그인하세요. ${again}`,
+      ]
+    : state.requiredVersion
+      ? [
+          'Claude Code를 업데이트해야 Run을 시작할 수 있습니다',
+          `Run에 쓰는 모델은 Claude Code ${state.requiredVersion} 이상이 필요합니다. 지금 ${state.version ?? '?'} — 터미널에서 claude update를 실행하세요. ${again}`,
+        ]
+      : ['Claude Code에 로그인해야 Run을 시작할 수 있습니다', `터미널에서 claude를 실행해 로그인하세요. ${again}`];
+  return (
+    <SectionMessage variant="cautionary" description={description}>
+      {title}
+    </SectionMessage>
   );
 }
 

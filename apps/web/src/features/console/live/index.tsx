@@ -57,6 +57,7 @@ function Connected() {
 /**
  * `?demo=running|manual|takeover`: 호스트 없이 fixture 세션으로 채운 화면 (UI 스냅샷용).
  * `?demo=start`: 케이스가 막 시작해 스텝이 아직 없는 상태 · `?demo=home`: Run이 없을 때 (사이클 고르기)
+ * `?demo=home-outdated`: Claude Code 버전 미달로 시작을 막은 홈 · `?demo=home-limited`: 플랜 한도로 멈춘 뒤 (F-DB-09)
  * `?demo=waiting`: Agent가 모델 응답을 오래 기다리는 중
  * `?demo=approval`: 위험 액션 승인 대기 · `?demo=identity`: 사람 전용(본인인증) 대기 (F-EX-10)
  */
@@ -65,10 +66,17 @@ function Demo({ demo }: { demo: string }) {
   return (
     <QueryState query={query}>
       {(session) => {
-        if (demo === 'home') {
+        if (demo === 'home' || demo.startsWith('home-')) {
+          const home = demoHome(session);
+          const claudeCode =
+            demo === 'home-outdated'
+              ? { ...home.claudeCode, version: '2.1.250', requiredVersion: '2.1.284' }
+              : demo === 'home-limited'
+                ? { ...home.claudeCode, limited: true }
+                : home.claudeCode;
           return (
             <Home
-              home={demoHome(session)}
+              home={{ ...home, claudeCode }}
               link="open"
               starting={false}
               onDismissError={() => {}}

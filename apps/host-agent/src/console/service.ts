@@ -28,6 +28,8 @@ export type ConsoleServiceDeps = {
   executor: string;
   account: RunAccount;
   claudeCode: () => ClaudeCodeState;
+  /** Run 시작 직전 Claude Code 점검 (F-EX-17). 쓸 수 없으면 해결 방법을 담아 던진다. 없으면 점검하지 않는다 */
+  checkClaudeCode?: () => Promise<void>;
   log: (line: string) => void;
   /** 빌드 파일이 없는 사이클(시드)에서 실행할 앱 */
   fallbackPackage?: string;
@@ -50,9 +52,18 @@ export class ConsoleService implements ConsoleBackend {
   private device: { driver: DeviceDriver; info: DeviceInfo } | undefined;
   private run: { hub: ConsoleHub; off: () => void; done: Promise<void>; runId: string } | undefined;
   private refreshing: Promise<void> | undefined;
+  /** 플랜 사용 한도에 닿아 멈춘 적이 있다 (실패해야만 알 수 있다). 다음 시작 때 푼다 */
+  private limit: { until?: string } | undefined;
 
   constructor(private readonly deps: ConsoleServiceDeps) {
     this.home = { executor: deps.executor, cycles: [], loading: false, claudeCode: deps.claudeCode() };
+  }
+
+  /** 호스트가 읽은 Claude Code 상태 + 플랜 한도. 풀리는 시각이 지났으면 한도 표시를 끈다 */
+  private claudeCode(): ClaudeCodeState {
+    if (this.limit?.until && Date.parse(this.limit.until) <= Date.now()) this.limit = undefined;
+    const s = this.deps.claudeCode();
+    return this.limit ? { ...s, limited: true, ...(this.limit.until ? { limitedUntil: this.limit.until } : {}) } : s;
   }
 
   // ------------------------------------------------------------ ConsoleBackend
@@ -103,8 +114,14 @@ export class ConsoleService implements ConsoleBackend {
 
   /** Claude Code 상태를 다시 읽었다 (연결 신호마다) — 로그인·한도가 바뀌었으면 홈에 알린다 */
   claudeCodeChanged() {
-    const claudeCode = this.deps.claudeCode();
+    const claudeCode = this.claudeCode();
     if (JSON.stringify(claudeCode) !== JSON.stringify(this.home.claudeCode)) this.setHome({ claudeCode });
+  }
+
+  /** 플랜 사용 한도에 닿아 Run·작업이 일시정지했다 (until: 풀리는 시각, 알면) — 콘솔 상단에 알린다 (F-DB-09) */
+  planLimited(until?: string) {
+    this.limit = until ? { until } : {};
+    this.claudeCodeChanged();
   }
 
   /** 연결된 디바이스가 바뀌었다 (없으면 undefined) */
@@ -128,7 +145,7 @@ export class ConsoleService implements ConsoleBackend {
 
   private async load() {
     const dev = this.device;
-    this.setHome({ loading: true, claudeCode: this.deps.claudeCode() });
+    this.setHome({ loading: true, claudeCode: this.claudeCode() });
     if (!dev) return this.setHome({ loading: false, cycles: [], deviceProblem: undefined });
     try {
       const problem = await this.screenProblem(dev.driver);
@@ -257,6 +274,16 @@ export class ConsoleService implements ConsoleBackend {
     if (screen && (!screen.awake || screen.locked)) {
       return this.fail(`디바이스 화면이 ${screen.awake ? '잠겨' : '꺼져'} 있습니다. 잠금을 풀고 다시 시작하세요`);
     }
+    // 설치·로그인·버전은 시작 직전에 다시 본다 (연결 신호의 상태는 30초까지 늦다). 디바이스·앱은 건드리기 전이다
+    try {
+      await this.deps.checkClaudeCode?.();
+    } catch (e) {
+      this.claudeCodeChanged();
+      return this.fail((e as Error).message);
+    }
+    // 플랜 한도는 미리 알 수 없다. 풀어 두고 시작해서 또 닿으면 다시 일시정지한다
+    this.limit = undefined;
+    this.claudeCodeChanged();
     let prepared: Awaited<ReturnType<typeof prepareCycleRun>>;
     try {
       prepared = await prepareCycleRun(
@@ -268,7 +295,7 @@ export class ConsoleService implements ConsoleBackend {
           info: dev.info,
           executor: this.deps.executor,
           account: this.deps.account,
-          claudeCode: this.deps.claudeCode(),
+          claudeCode: this.claudeCode(),
           log: this.deps.log,
           llm: this.deps.llm,
           env: this.deps.env,
@@ -303,6 +330,13 @@ export class ConsoleService implements ConsoleBackend {
             judged: out.results.length,
           },
         };
+        if (out.status === 'paused' && out.reason === 'plan_limit') {
+          this.planLimited(out.limitedUntil);
+          // 풀리는 시각 문구 형식을 확인할 수 있게 원문을 남긴다 (읽지 못하면 콘솔은 "한도 도달"로 보인다)
+          this.deps.log(
+            `플랜 한도 오류 원문: ${out.message}${out.limitedUntil ? ` → ${out.limitedUntil}` : ' (풀리는 시각 못 읽음)'}`,
+          );
+        }
         this.deps.log(
           `Run ${out.runId} ${out.status} · ${out.results.length}케이스 판정 · 환산 $${out.costUsd.toFixed(2)}`,
         );

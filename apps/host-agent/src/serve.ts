@@ -26,7 +26,15 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { AdbDriver, devAppPackage, listDevices } from '@qcard/device/node';
-import { claudeCodeStatus, createCassetteLlm, createLiveLlm, type ClaudeCodeStatus } from '@qcard/llm';
+import {
+  claudeCodeProblem,
+  claudeCodeStatus,
+  createCassetteLlm,
+  createLiveLlm,
+  MODELS_FOR,
+  versionShortfall,
+  type ClaudeCodeStatus,
+} from '@qcard/llm';
 import { collectionGroup, onSnapshot, query, where } from 'firebase/firestore';
 import { HostDisconnectedError, openHostSession, targetFromEnv } from './connect';
 import { attachScreen, ConsoleService, launchConsole, type OnDemandScreen } from './console';
@@ -76,11 +84,19 @@ async function devices() {
 }
 
 let claude: ClaudeCodeStatus | undefined;
-async function beat() {
-  const s = await claudeCodeStatus();
-  claude = s;
-  // 콘솔 홈은 디바이스가 바뀔 때만 다시 읽으므로, 디바이스가 없어도 Claude Code 상태는 따로 알린다
+/** Claude Code를 쓸 수 없어 작업을 대기열에 남겨 두었다 (해결되면 연결 신호가 다시 부른다) */
+let waitingForClaude = false;
+/** Claude Code 상태를 다시 읽는다. 콘솔 홈은 디바이스가 바뀔 때만 다시 읽으므로, Claude Code 상태는 따로 알린다 */
+async function readClaude() {
+  claude = await claudeCodeStatus();
   service.claudeCodeChanged();
+  return claude;
+}
+async function beat() {
+  const s = await readClaude();
+  // Claude Code 문제로 미뤄 둔 작업이 있으면, 해결됐는지 30초마다 본다
+  if (waitingForClaude && !claudeCodeProblem(s, MODELS_FOR.qadoc)) void drain();
+  const required = versionShortfall(s.version, MODELS_FOR.qadoc);
   const list = await devices();
   await useDevice(list.map((d) => d.serial));
   await service.checkDevice();
@@ -88,7 +104,12 @@ async function beat() {
     ...host,
     lastSeen: new Date().toISOString(),
     devices: list,
-    claudeCode: { version: s.version, loggedIn: s.loggedIn, subscriptionType: s.subscriptionType },
+    claudeCode: {
+      version: s.version,
+      loggedIn: s.loggedIn,
+      subscriptionType: s.subscriptionType,
+      ...(required ? { requiredVersion: required } : {}),
+    },
     jobs: HOST_JOBS,
     ...(consoleUi ? { consoleUrl: consoleUi.webUrl() } : {}),
   }).catch((e: Error) => console.error(`연결 신호 실패: ${e.message}`));
@@ -112,7 +133,15 @@ const service = new ConsoleService({
     loggedIn: claude?.loggedIn ?? false,
     ...(claude?.version ? { version: claude.version } : {}),
     ...(claude?.subscriptionType ? { plan: claude.subscriptionType } : {}),
+    ...(versionShortfall(claude?.version, MODELS_FOR.run)
+      ? { requiredVersion: versionShortfall(claude?.version, MODELS_FOR.run) }
+      : {}),
   }),
+  // 웹에서 요청한 Run도 같은 경로로 시작하므로 여기서 함께 막는다 (F-EX-17)
+  checkClaudeCode: async () => {
+    const problem = claudeCodeProblem(await readClaude(), MODELS_FOR.run);
+    if (problem) throw problem;
+  },
   log,
   // 로컬 설정(qcard.local.json)은 저장소에서 개발할 때만 본다
   fallbackPackage: values.package ?? (target.emulator ? devAppPackage() : undefined),
@@ -173,10 +202,11 @@ setInterval(async () => {
   }
 }, 5_000);
 console.log(`호스트 ${host.name} · ${user.name}(@${user.github})`);
+const problem = claudeCodeProblem(status, [...MODELS_FOR.run, ...MODELS_FOR.qadoc]);
 console.log(
-  status.loggedIn
-    ? `Claude Code ${status.version} · ${status.subscriptionType ?? status.authMethod} 플랜`
-    : '⚠ Claude Code에 로그인되어 있지 않습니다. 터미널에서 `claude`로 로그인하세요 (작업은 일시정지됩니다)',
+  problem
+    ? `⚠ ${problem.message} (해결할 때까지 Run·QA 문서 생성을 시작하지 않습니다)`
+    : `Claude Code ${status.version}${status.subscriptionType ? ` · ${status.subscriptionType} 플랜` : ''}`,
 );
 
 // ---------------------------------------------------------------- 작업 처리 (한 번에 하나)
@@ -194,6 +224,14 @@ async function drain() {
         if (again) continue;
         break;
       }
+      // 맡기 전에 점검한다: 쓸 수 없으면 작업을 대기열에 그대로 두고 웹에는 연결 신호로 이유를 알린다 (F-EX-17)
+      const problem = claudeCodeProblem(await readClaude(), MODELS_FOR.qadoc);
+      if (problem) {
+        if (!waitingForClaude) console.log(`\n작업을 시작하지 않고 기다립니다: ${problem.message}`);
+        waitingForClaude = true;
+        break;
+      }
+      waitingForClaude = false;
       const running = await claimJob(db, job, host.name, new Date().toISOString());
       if (!running) continue;
       const label =
@@ -219,8 +257,9 @@ async function drain() {
             }),
           log: (l: string) => console.log(l),
         };
-        if (running.kind === 'case_revise') await processReviseJob(deps, running);
-        else await processJob(deps, running);
+        const out =
+          running.kind === 'case_revise' ? await processReviseJob(deps, running) : await processJob(deps, running);
+        if (out.status === 'paused' && out.error?.kind === 'plan_limit') service.planLimited();
       } finally {
         live.close?.();
         awake?.kill();

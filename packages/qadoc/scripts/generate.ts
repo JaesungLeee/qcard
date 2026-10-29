@@ -20,6 +20,7 @@ import {
   createCassetteLlm,
   createLiveLlm,
   llmProviderFromEnv,
+  MODELS_FOR,
   UsageMeter,
   withUsage,
   type LlmClient,
@@ -77,7 +78,7 @@ type Saved = { doc: QADocument; prepFlows: PrepFlow[] };
 const prevSaved = values['prev-doc'] ? (JSON.parse(await readFile(values['prev-doc'], 'utf8')) as Saved) : undefined;
 
 if (llmProviderFromEnv() === 'claude-cli') {
-  const s = await assertClaudeCodeReady();
+  const s = await assertClaudeCodeReady(MODELS_FOR.qadoc);
   console.log(
     `LLM: Claude Code ${s.version} · ${s.authMethod}${s.subscriptionType ? ` · ${s.subscriptionType} 플랜` : ''}`,
   );

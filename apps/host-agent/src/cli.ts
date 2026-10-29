@@ -22,7 +22,7 @@
  */
 import { parseArgs } from 'node:util';
 import { AdbDriver, devAppPackage, listDevices } from '@qcard/device/node';
-import { assertClaudeCodeReady, llmProviderFromEnv } from '@qcard/llm';
+import { assertClaudeCodeReady, llmProviderFromEnv, MODELS_FOR } from '@qcard/llm';
 import type { ClaudeCodeState } from '@qcard/shared';
 import { HostDisconnectedError, openHostSession } from './connect';
 import { attachScreen, hubBackend, launchConsole } from './console';
@@ -68,7 +68,7 @@ const {
 // ---------------------------------------------------------------- LLM (본인 Claude Code)
 let claudeCode: ClaudeCodeState = { installed: true, loggedIn: true };
 if (llmProviderFromEnv() === 'claude-cli') {
-  const s = await assertClaudeCodeReady();
+  const s = await assertClaudeCodeReady(MODELS_FOR.run);
   claudeCode = { installed: true, loggedIn: true, version: s.version, plan: s.subscriptionType };
   log(`LLM: Claude Code ${s.version} · ${s.authMethod}${s.subscriptionType ? ` · ${s.subscriptionType} 플랜` : ''}`);
 }
