@@ -22,6 +22,8 @@ import {
   orderByGroup,
   paginate,
   isSelectable,
+  mergePageSelection,
+  selectionScopeLabel,
   nextPointId,
   rebaseDraft,
   toBody,
@@ -110,6 +112,22 @@ describe('paginate', () => {
     expect(paginate(items, 9, 10)).toMatchObject({ page: 3, start: 20 });
     expect(paginate(items, 0, 10)).toMatchObject({ page: 1 });
     expect(paginate([], 2, 10)).toMatchObject({ page: 1, pageCount: 1, items: [] });
+  });
+});
+
+describe('mergePageSelection · selectionScopeLabel', () => {
+  it('이 페이지의 선택만 바꾸고 다른 페이지에서 고른 케이스는 남긴다', () => {
+    expect(mergePageSelection(['a', 'b', 'x'], ['a', 'b', 'c'], ['b', 'c'])).toEqual(['x', 'b', 'c']);
+    expect(mergePageSelection(['a', 'x'], ['a', 'b'], [])).toEqual(['x']);
+  });
+
+  it('필터가 걸려 있으면 필터 결과, 아니면 분류 이름', () => {
+    const all = { feature: null, subFeature: null };
+    const none = { change: 'all' as const, unapprovedOnly: false, q: '' };
+    expect(selectionScopeLabel(all, none)).toBe('전체 케이스');
+    expect(selectionScopeLabel({ feature: '온보딩', subFeature: null }, none)).toBe('이 분류의 케이스');
+    expect(selectionScopeLabel(all, { ...none, unapprovedOnly: true })).toBe('조건에 맞는 케이스');
+    expect(selectionScopeLabel(all, { ...none, q: ' ' })).toBe('전체 케이스');
   });
 });
 
