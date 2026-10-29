@@ -98,7 +98,7 @@ import {
  * - 프로젝트·멤버·초대 쓰기: callable 함수 (apps/functions)
  * - QA 데이터 쓰기: 트랜잭션 (보안 규칙이 Admin·QA만 허용)
  *
- * 구조: projects/{p}/qaDocs/{d}(+cases/{tcId}) · prepFlows · builds · cycles/{c}(+results·runs·defects).
+ * 구조: projects/{p}/qaDocs/{d}(+cases/{tcId}·prepFlows/{id}) · builds · cycles/{c}(+results·runs·defects).
  * 목록 순서가 필요한 하위 문서는 `_i`(시드·생성 순서)로 정렬하고 읽을 때 뗀다.
  */
 
@@ -247,18 +247,16 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       return next;
     });
   }
-  const flowRef = (p: string, id: string) => doc(db, P(p), 'prepFlows', id);
+  const flowsCol = (p: string, d: string) => collection(db, P(p), 'qaDocs', d, 'prepFlows');
+  const flowRef = (p: string, d: string, id: string) => doc(flowsCol(p, d), id);
   const membersOf = async (p: string) =>
     (await getDocs(collection(db, P(p), 'members'))).docs.map((d) => d.data() as Member);
-  /** 준비 플로우 사용처: 모든 QA 문서 + 완료되지 않은 사이클의 케이스 사본 */
-  async function flowUses(p: string) {
-    const [metas, cycles] = await Promise.all([
-      getDocs(collection(db, P(p), 'qaDocs')),
-      getDocs(collection(db, P(p), 'cycles')),
-    ]);
-    const open = cycles.docs.map((d) => strip<TestCycle>(d.data())).filter(cycleUsesFlows);
-    const [docs, copies] = await Promise.all([
-      Promise.all(metas.docs.map((d) => loadQaDoc(p, d.id))),
+  /** 준비 플로우 사용처: 그 QA 문서 버전 + 그 버전으로 만든 완료되지 않은 사이클의 케이스 사본 */
+  async function flowUses(p: string, d: string) {
+    const cycles = await getDocs(query(collection(db, P(p), 'cycles'), where('docId', '==', d)));
+    const open = cycles.docs.map((x) => strip<TestCycle>(x.data())).filter(cycleUsesFlows);
+    const [qaDoc, copies] = await Promise.all([
+      loadQaDoc(p, d),
       Promise.all(
         open.map(async (cycle) => ({
           cycle,
@@ -266,7 +264,7 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
         })),
       ),
     ]);
-    return prepFlowUses(docs, copies);
+    return prepFlowUses(qaDoc, copies);
   }
   async function loadBuild(p: string, id: string): Promise<Build> {
     const snap = await getDoc(doc(db, P(p), 'builds', id));
@@ -414,30 +412,27 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
           tx.update(meta.ref, { questions: clean(next) });
         }),
       ),
-    listPrepFlows: (projectId) =>
-      guard(async () => ordered<PrepFlow>((await getDocs(collection(db, P(projectId), 'prepFlows'))).docs)),
-    listPrepFlowUses: (projectId) => guard(() => flowUses(projectId)),
-    createPrepFlow: (projectId, input) =>
+    listPrepFlows: ({ projectId, docId }) =>
+      guard(async () => ordered<PrepFlow>((await getDocs(flowsCol(projectId, docId))).docs)),
+    listPrepFlowUses: ({ projectId, docId }) => guard(() => flowUses(projectId, docId)),
+    createPrepFlow: ({ projectId, docId }, input) =>
       guard(async () => {
-        const [members, existing] = await Promise.all([
-          membersOf(projectId),
-          getDocs(collection(db, P(projectId), 'prepFlows')),
-        ]);
+        const [members, existing] = await Promise.all([membersOf(projectId), getDocs(flowsCol(projectId, docId))]);
         const flow = newPrepFlow(members, me(), input, ordered<PrepFlow>(existing.docs), now());
         const last = Math.max(-1, ...existing.docs.map((d) => (d.data()._i as number | undefined) ?? 0));
         await runTransaction(db, async (tx) => {
           // 목록을 읽은 뒤 다른 사람이 같은 id로 만들었으면 덮어쓰지 않는다
-          const ref = flowRef(projectId, flow.id);
+          const ref = flowRef(projectId, docId, flow.id);
           if ((await tx.get(ref)).exists()) throw new RuleError('다른 사람이 방금 플로우를 추가했습니다. 다시 저장하세요.');
           tx.set(ref, clean({ ...flow, _i: last + 1 }));
         });
         return flow;
       }),
-    updatePrepFlow: (projectId, flowId, input, expectedRev) =>
+    updatePrepFlow: ({ projectId, docId }, flowId, input, expectedRev) =>
       guard(async () => {
         const members = await membersOf(projectId);
         return runTransaction(db, async (tx) => {
-          const ref = flowRef(projectId, flowId);
+          const ref = flowRef(projectId, docId, flowId);
           const snap = await tx.get(ref);
           if (!snap.exists()) throw new NotFoundError(`준비 플로우 없음: ${flowId}`);
           const current = strip<PrepFlow>(snap.data());
@@ -448,7 +443,7 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
         });
       }),
     // 참조 확인은 질의가 필요해 Functions 트랜잭션에서 한다 (클라이언트는 플로우를 지우지 못한다)
-    deletePrepFlow: (projectId, flowId) => call<void>('deletePrepFlow', { projectId, flowId }),
+    deletePrepFlow: ({ projectId, docId }, flowId) => call<void>('deletePrepFlow', { projectId, docId, flowId }),
 
     // ------------------------------------------------------------ 테스트 계정 (F-PF-04·08·09)
     // 쓰기는 Functions만 (비밀값 봉인·배정 규칙). 배정이 살아 있는지는 그 Run의 연결 신호로 본다

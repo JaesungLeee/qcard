@@ -29,7 +29,7 @@ export function QaDocReviewPage() {
 function Review({ doc, projectId }: { doc: QADocument; projectId: string }) {
   const { tab, set } = useDocParams();
   const docs = useQaDocs(projectId);
-  const prepFlows = usePrepFlows(projectId);
+  const prepFlows = usePrepFlows(projectId, doc.id);
   const setApproval = useSetApproval(doc);
   const [selection, setSelection] = useState<CaseSelection>(NO_SELECTION);
   // 페이지 밖의 케이스까지 고른 채 일괄 처리하려 하면 한 번 더 묻는다

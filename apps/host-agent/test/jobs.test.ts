@@ -100,7 +100,7 @@ describe('QA 문서 생성 작업', () => {
     const done = await processJob(lead.deps(llm), running!);
     expect(done).toMatchObject({
       status: 'done',
-      result: { docId: 'doc-2.0.0', cases: 3, generated: 3, questions: 1, newPrepFlows: 2 },
+      result: { docId: 'doc-2.0.0', cases: 3, generated: 3, questions: 1, newPrepFlows: 3 },
     });
 
     // 웹(다른 멤버)에서 그대로 읽힌다
@@ -111,7 +111,9 @@ describe('QA 문서 생성 작업', () => {
       ['TC-SAMPLE-003', 'new'],
     ]);
     expect(doc.specs).toEqual([{ name: 'sample', feature: '샘플 기능', file: 'docs/specs/sample/spec.md' }]);
-    expect((await qa.api.listPrepFlows(PROJECT)).map((f) => f.id)).toEqual(expect.arrayContaining(['pf-home', 'pf-undo']));
+    // 첫 버전이라 준비 플로우를 모두 새로 만들어 이 문서 아래에 둔다 (F-PF-01)
+    const flows = await qa.api.listPrepFlows({ projectId: PROJECT, docId: 'doc-2.0.0' });
+    expect(flows.map((f) => f.id)).toEqual(['pf-clean', 'pf-home', 'pf-undo']);
     expect((await qa.api.listJobs(PROJECT))[0]).toMatchObject({
       id: job.id,
       status: 'done',
@@ -142,6 +144,9 @@ describe('QA 문서 생성 작업', () => {
     const lead = as(PEOPLE.lead);
     const first = await lead.api.requestQaDoc(PROJECT, { appVersion: '2.0.0', files: FILES });
     await processJob(lead.deps(fakeGeneratorLlm().llm), (await claimJob(lead.db, first, 'pc', 'now'))!);
+    const v200 = { projectId: PROJECT, docId: 'doc-2.0.0' };
+    const home = (await lead.api.listPrepFlows(v200)).find((f) => f.id === 'pf-home')!;
+    const edited = await lead.api.updatePrepFlow(v200, 'pf-home', { ...home, name: '홈 (사람이 고침)' }, 0);
 
     const changed = SPEC.replace('홈으로 이동한다', '오늘 탭이 선택된 채로 열린다');
     const next = await lead.api.requestQaDoc(PROJECT, {
@@ -158,6 +163,13 @@ describe('QA 문서 생성 작업', () => {
     const doc = await lead.api.getQaDoc({ projectId: PROJECT, docId: 'doc-2.1.0' });
     expect(doc.prevDocId).toBe('doc-2.0.0');
     expect(doc.cases.map((c) => c.change)).toEqual(['same', 'changed', 'same']);
+
+    // 준비 플로우는 이전 버전에서 사람이 고친 내용 그대로 이어받고, 이후 편집은 그 버전에만 적용된다 (F-QD-08)
+    const v210 = { projectId: PROJECT, docId: 'doc-2.1.0' };
+    expect(done.result).toMatchObject({ newPrepFlows: 0 });
+    expect((await lead.api.listPrepFlows(v210)).find((f) => f.id === 'pf-home')).toEqual(edited);
+    await lead.api.updatePrepFlow(v210, 'pf-home', { ...edited, name: '2.1.0에서 바꿈' }, edited.rev!);
+    expect((await lead.api.listPrepFlows(v200)).find((f) => f.id === 'pf-home')).toEqual(edited);
   });
 
   it('플랜 한도면 일시정지로 남기고, 요청자만 다시 시도할 수 있다 (F-EX-17)', async () => {

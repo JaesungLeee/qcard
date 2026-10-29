@@ -117,8 +117,8 @@ const result = await generateQaDoc({
 });
 live.close?.();
 
-const prepFlows = [...(prevSaved?.prepFlows ?? []), ...result.prepFlows];
-await writeFile(values.out, JSON.stringify({ ...result, prepFlows }, null, 2) + '\n');
+// prepFlows는 이 버전의 플로우(이어받은 것 + 새로 만든 것) — 다음 버전 생성의 --prev로 쓴다
+await writeFile(values.out, JSON.stringify(result, null, 2) + '\n');
 
 const { doc } = result;
 const n = (k: string) => doc.cases.filter((c) => c.change === k).length;
@@ -126,7 +126,7 @@ console.log(
   `\n케이스 ${doc.cases.length} (동일 ${n('same')} · 변경 ${n('changed')} · 신규 ${n('new')} · 삭제 ${n('removed')}) · 제외 ${result.skipped.length}`,
 );
 console.log(
-  `준비 플로우 +${result.prepFlows.length} · 질문 ${doc.questions.length} · 보강 제안 ${doc.suggestions.length} · Manual ${doc.cases.filter((c) => c.mode === 'manual').length}`,
+  `준비 플로우 ${result.prepFlows.length} (+${result.newPrepFlows.length}) · 질문 ${doc.questions.length} · 보강 제안 ${doc.suggestions.length} · Manual ${doc.cases.filter((c) => c.mode === 'manual').length}`,
 );
 for (const w of result.warnings) console.log(`  ⚠ ${w}`);
 console.log(

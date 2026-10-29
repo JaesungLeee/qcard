@@ -503,32 +503,43 @@ describe('테스트 계정 (F-PF-08, F-EX-09)', () => {
   });
 });
 
-describe('준비 플로우 (F-PF-01)', () => {
+describe('준비 플로우 (F-PF-01, QA 문서 버전마다)', () => {
   const asHost = (uid: string, host: string) => env.authenticatedContext(uid, { host }).firestore();
   const FLOW = { id: 'pf-a', name: '온보딩 완료', kind: 'data_state', check: '홈', steps: ['[건너뛰기]'] };
   beforeEach(async () => {
     await env.withSecurityRulesDisabled(async (c) => {
       await setDoc(doc(c.firestore(), 'hostConnections/h-qa'), { id: 'h-qa', uid: 'u-qa', name: 'mbp' });
-      await setDoc(doc(c.firestore(), 'projects/haru/prepFlows/pf-a'), FLOW);
+      await setDoc(doc(c.firestore(), 'projects/haru/qaDocs/doc-130/prepFlows/pf-a'), FLOW);
     });
   });
 
   it('Admin·QA는 만들고 고친다. Viewer는 못 한다', async () => {
-    await assertSucceeds(setDoc(doc(as('u-qa'), 'projects/haru/prepFlows/pf-b'), { ...FLOW, id: 'pf-b' }));
-    await assertSucceeds(updateDoc(doc(as('u-admin'), 'projects/haru/prepFlows/pf-a'), { name: '바꿈', rev: 1 }));
-    await assertSucceeds(getDoc(doc(as('u-viewer'), 'projects/haru/prepFlows/pf-a')));
-    await assertFails(setDoc(doc(as('u-viewer'), 'projects/haru/prepFlows/pf-c'), { ...FLOW, id: 'pf-c' }));
-    await assertFails(updateDoc(doc(as('u-viewer'), 'projects/haru/prepFlows/pf-a'), { name: 'x' }));
+    await assertSucceeds(
+      setDoc(doc(as('u-qa'), 'projects/haru/qaDocs/doc-130/prepFlows/pf-b'), { ...FLOW, id: 'pf-b' }),
+    );
+    await assertSucceeds(
+      updateDoc(doc(as('u-admin'), 'projects/haru/qaDocs/doc-130/prepFlows/pf-a'), { name: '바꿈', rev: 1 }),
+    );
+    await assertSucceeds(getDoc(doc(as('u-viewer'), 'projects/haru/qaDocs/doc-130/prepFlows/pf-a')));
+    await assertFails(
+      setDoc(doc(as('u-viewer'), 'projects/haru/qaDocs/doc-130/prepFlows/pf-c'), { ...FLOW, id: 'pf-c' }),
+    );
+    await assertFails(updateDoc(doc(as('u-viewer'), 'projects/haru/qaDocs/doc-130/prepFlows/pf-a'), { name: 'x' }));
   });
 
   it('호스트는 QA 문서 생성 때 새 플로우를 만들기만 하고, 고치지 못한다', async () => {
     const host = asHost('u-qa', 'h-qa');
-    await assertSucceeds(setDoc(doc(host, 'projects/haru/prepFlows/pf-new'), { ...FLOW, id: 'pf-new' }));
-    await assertFails(setDoc(doc(host, 'projects/haru/prepFlows/pf-a'), { ...FLOW, name: '덮어씀' }));
+    await assertSucceeds(setDoc(doc(host, 'projects/haru/qaDocs/doc-130/prepFlows/pf-new'), { ...FLOW, id: 'pf-new' }));
+    await assertFails(setDoc(doc(host, 'projects/haru/qaDocs/doc-130/prepFlows/pf-a'), { ...FLOW, name: '덮어씀' }));
+  });
+
+  it('프로젝트 공용 위치(v0.16까지)에는 아무도 읽고 쓰지 못한다', async () => {
+    await assertFails(getDoc(doc(as('u-qa'), 'projects/haru/prepFlows/pf-a')));
+    await assertFails(setDoc(doc(asHost('u-qa', 'h-qa'), 'projects/haru/prepFlows/pf-new'), { ...FLOW, id: 'pf-new' }));
   });
 
   it('아무도 직접 지우지 못한다 (참조 확인은 Functions)', async () => {
-    await assertFails(deleteDoc(doc(as('u-admin'), 'projects/haru/prepFlows/pf-a')));
-    await assertFails(deleteDoc(doc(asHost('u-qa', 'h-qa'), 'projects/haru/prepFlows/pf-a')));
+    await assertFails(deleteDoc(doc(as('u-admin'), 'projects/haru/qaDocs/doc-130/prepFlows/pf-a')));
+    await assertFails(deleteDoc(doc(asHost('u-qa', 'h-qa'), 'projects/haru/qaDocs/doc-130/prepFlows/pf-a')));
   });
 });

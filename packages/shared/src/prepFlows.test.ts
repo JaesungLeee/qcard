@@ -9,6 +9,8 @@ import {
   prepFlowIdFor,
   prepFlowProblem,
   prepFlowUses,
+  flowsUsedBy,
+  splitPrepFlowsByDoc,
 } from './prepFlows';
 
 const T0 = '2026-10-28T10:00:00.000Z';
@@ -80,24 +82,31 @@ describe('준비 플로우 편집 (F-PF-01)', () => {
 });
 
 describe('준비 플로우 사용처·삭제', () => {
-  const docs = [
-    { id: 'd2', appVersion: '1.1.0', createdAt: '2026-10-02', cases: [tc('TC-1', ['pf-a']), tc('TC-2', ['pf-a'], { change: 'removed' })] },
-    { id: 'd1', appVersion: '1.0.0', createdAt: '2026-10-01', cases: [tc('TC-9', ['pf-old'], { restoreFlowId: 'pf-undo' })] },
-  ];
+  const doc = {
+    id: 'd2',
+    appVersion: '1.1.0',
+    cases: [
+      tc('TC-1', ['pf-a']),
+      tc('TC-2', ['pf-gone'], { change: 'removed' }),
+      tc('TC-9', ['pf-old'], { restoreFlowId: 'pf-undo' }),
+    ],
+  };
   const cycles = [
-    { cycle: cycle('c-open'), cases: [tc('TC-5', ['pf-cycle', 'pf-cycle'])] },
-    { cycle: cycle('c-done', { period: { start: T0, end: T0 } }), cases: [tc('TC-6', ['pf-closed'])] },
-    { cycle: cycle('c-local', { origin: 'local_run' }), cases: [tc('TC-7', ['pf-local'])] },
+    { cycle: cycle('c-open', { docId: 'd2' }), cases: [tc('TC-5', ['pf-cycle', 'pf-cycle'])] },
+    { cycle: cycle('c-other', { docId: 'd1' }), cases: [tc('TC-8', ['pf-a'])] },
+    { cycle: cycle('c-done', { docId: 'd2', period: { start: T0, end: T0 } }), cases: [tc('TC-6', ['pf-closed'])] },
+    { cycle: cycle('c-local', { docId: 'd2', origin: 'local_run' }), cases: [tc('TC-7', ['pf-local'])] },
   ];
-  const uses = prepFlowUses(docs, cycles);
+  const uses = prepFlowUses(doc, cycles);
 
-  it('모든 QA 문서 버전의 활성 케이스와 원복 플로우를 본다 (삭제 케이스 제외)', () => {
+  it('그 버전의 활성 케이스와 원복 플로우를 본다 (삭제 케이스 제외)', () => {
     expect(uses['pf-a']).toEqual([{ tcId: 'TC-1', in: 'doc', docId: 'd2', appVersion: '1.1.0' }]);
     expect(uses['pf-old']).toHaveLength(1);
     expect(uses['pf-undo']).toHaveLength(1);
+    expect(uses['pf-gone']).toBeUndefined();
   });
 
-  it('완료되지 않은 사이클의 케이스 사본만 본다', () => {
+  it('그 버전으로 만든 완료되지 않은 사이클의 케이스 사본만 본다', () => {
     expect(uses['pf-cycle']).toEqual([{ tcId: 'TC-5', in: 'cycle', cycleId: 'c-open', cycleName: '사이클 c-open' }]);
     expect(uses['pf-closed']).toBeUndefined();
     expect(uses['pf-local']).toBeUndefined();
@@ -112,5 +121,30 @@ describe('준비 플로우 사용처·삭제', () => {
     expect(kind(() => prepFlowDeletion(members, qa, uses['pf-a']!))).toBe('rule');
     expect(kind(() => prepFlowDeletion(members, viewer, []))).toBe('permission');
     expect(kind(() => prepFlowDeletion(members, qa, []))).toBe('ok');
+  });
+});
+
+describe('QA 문서 버전별 사본 (F-PF-01, F-QD-08)', () => {
+  const f = (id: string): PrepFlow => ({ id, name: id, kind: 'data_state', check: '-', steps: ['-'] });
+  const flows = [f('pf-a'), f('pf-b'), f('pf-undo'), f('pf-manual'), f('pf-gone')];
+
+  it('이어받기: 활성 케이스가 참조하는 플로우만, 목록 순서대로', () => {
+    const cases = [
+      tc('TC-2', ['pf-b'], { restoreFlowId: 'pf-undo' }),
+      tc('TC-1', ['pf-a', 'pf-missing']),
+      tc('TC-3', ['pf-gone'], { change: 'removed' }),
+    ];
+    expect(flowsUsedBy(flows, cases).map((x) => x.id)).toEqual(['pf-a', 'pf-b', 'pf-undo']);
+  });
+
+  it('공용 목록 나누기: 참조하는 버전마다, 아무도 안 쓰는 플로우는 최신 버전에', () => {
+    const docs = [
+      { id: 'd1', createdAt: '2026-10-01', cases: [tc('TC-1', ['pf-a', 'pf-b'])] },
+      { id: 'd2', createdAt: '2026-10-02', cases: [tc('TC-1', ['pf-a'])] },
+    ];
+    const out = splitPrepFlowsByDoc(flows, docs);
+    expect(out['d1']!.map((x) => x.id)).toEqual(['pf-a', 'pf-b']);
+    expect(out['d2']!.map((x) => x.id)).toEqual(['pf-a', 'pf-undo', 'pf-manual', 'pf-gone']);
+    expect(splitPrepFlowsByDoc(flows, [])).toEqual({});
   });
 });

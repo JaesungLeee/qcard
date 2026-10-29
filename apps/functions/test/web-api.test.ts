@@ -86,7 +86,9 @@ describe('메모리 구현과 같은 결과', () => {
     const ref = { projectId: 'haru', docId: 'doc-130' };
     expect(await fb.getQaDoc(ref)).toEqual(await mem.getQaDoc(ref));
     expect(await fb.listQaDocs('haru')).toEqual(expect.arrayContaining(await mem.listQaDocs('haru')));
-    expect(await fb.listPrepFlows('haru')).toEqual(await mem.listPrepFlows('haru'));
+    for (const docId of ['doc-130', 'doc-120']) {
+      expect(await fb.listPrepFlows({ projectId: 'haru', docId })).toEqual(await mem.listPrepFlows({ projectId: 'haru', docId }));
+    }
     expect(byId(await fb.listCycles('haru'))).toEqual(byId(await mem.listCycles('haru')));
     const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
     expect(await fb.getCycle(cref)).toEqual(await mem.getCycle(cref));
@@ -294,44 +296,52 @@ describe('QA 데이터 쓰기', () => {
   });
 
   it('준비 플로우 추가·편집·삭제가 메모리 구현과 같고, 충돌·참조·Viewer는 거부한다 (F-PF-01)', async () => {
+    const ref = { projectId: 'haru', docId: 'doc-130' };
     const input = { name: '로그인 상태', kind: 'login' as const, check: '홈 탭이 보인다', steps: ['[로그인]'] };
     const fb = apiAs(PEOPLE.qa);
     const mem = memory();
     mem.switchUser(PEOPLE.qa);
     const noTime = ({ updatedAt: _, ...f }: PrepFlow) => f;
     for (const api of [fb, mem]) {
-      expect(noTime(await api.createPrepFlow('haru', input))).toMatchObject({ id: 'pf-login', rev: 1 });
-      expect((await api.createPrepFlow('haru', input)).id).toBe('pf-login-2');
-      await api.updatePrepFlow('haru', 'pf-done', { ...input, kind: 'data_state', name: '먼저' }, 0);
-      const err = await api.updatePrepFlow('haru', 'pf-done', input, 0).catch((e: unknown) => e);
+      expect(noTime(await api.createPrepFlow(ref, input))).toMatchObject({ id: 'pf-login', rev: 1 });
+      expect((await api.createPrepFlow(ref, input)).id).toBe('pf-login-2');
+      await api.updatePrepFlow(ref, 'pf-done', { ...input, kind: 'data_state', name: '먼저' }, 0);
+      const err = await api.updatePrepFlow(ref, 'pf-done', input, 0).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(PrepFlowConflictError);
       expect((err as PrepFlowConflictError).latest).toMatchObject({ name: '먼저', rev: 1 });
-      await expect(api.createPrepFlow('haru', { ...input, check: ' ' })).rejects.toBeInstanceOf(RuleError);
-      await expect(api.deletePrepFlow('haru', 'pf-clean')).rejects.toThrow('케이스가 사용 중');
-      await api.deletePrepFlow('haru', 'pf-login-2');
+      await expect(api.createPrepFlow(ref, { ...input, check: ' ' })).rejects.toBeInstanceOf(RuleError);
+      await expect(api.deletePrepFlow(ref, 'pf-clean')).rejects.toThrow('케이스가 사용 중');
+      await api.deletePrepFlow(ref, 'pf-login-2');
     }
-    expect((await fb.listPrepFlows('haru')).map(noTime)).toEqual((await mem.listPrepFlows('haru')).map(noTime));
-    expect(await fb.listPrepFlowUses('haru')).toEqual(await mem.listPrepFlowUses('haru'));
+    expect((await fb.listPrepFlows(ref)).map(noTime)).toEqual((await mem.listPrepFlows(ref)).map(noTime));
+    expect(await fb.listPrepFlowUses(ref)).toEqual(await mem.listPrepFlowUses(ref));
+    // 버전마다 사본이라 1.3.0에서 고친 플로우는 1.2.0에 영향이 없다
+    const older = { projectId: 'haru', docId: 'doc-120' };
+    for (const api of [fb, mem]) {
+      expect((await api.listPrepFlows(older)).find((f) => f.id === 'pf-done')?.name).not.toBe('먼저');
+      expect((await api.listPrepFlows(older)).map((f) => f.id)).not.toContain('pf-login');
+    }
 
     const viewer = apiAs(PEOPLE.planner);
-    await expect(viewer.createPrepFlow('haru', input)).rejects.toBeInstanceOf(PermissionError);
-    await expect(viewer.updatePrepFlow('haru', 'pf-login', input, 1)).rejects.toBeInstanceOf(PermissionError);
-    await expect(viewer.deletePrepFlow('haru', 'pf-login')).rejects.toBeInstanceOf(PermissionError);
+    await expect(viewer.createPrepFlow(ref, input)).rejects.toBeInstanceOf(PermissionError);
+    await expect(viewer.updatePrepFlow(ref, 'pf-login', input, 1)).rejects.toBeInstanceOf(PermissionError);
+    await expect(viewer.deletePrepFlow(ref, 'pf-login')).rejects.toBeInstanceOf(PermissionError);
   });
 
   it('완료되지 않은 사이클만 쓰는 플로우도 지우지 못하고, 사이클을 완료하면 지운다 (F-PF-01)', async () => {
     const fb = apiAs(PEOPLE.qa);
+    const ref = { projectId: 'haru', docId: 'doc-130' };
     // QA 문서에서는 빼고 사이클 사본(cycle-130-1)에만 남긴다
     await env.withSecurityRulesDisabled(async (c) => {
       const db = c.firestore() as unknown as Firestore;
-      await setDoc(doc(db, 'projects/haru/prepFlows/pf-only-cycle'), { id: 'pf-only-cycle', name: 'x', kind: 'data_state', check: 'x', steps: ['x'] });
+      await setDoc(doc(db, 'projects/haru/qaDocs/doc-130/prepFlows/pf-only-cycle'), { id: 'pf-only-cycle', name: 'x', kind: 'data_state', check: 'x', steps: ['x'] });
       const copy = (await getDocs(collection(db, 'projects/haru/cycles/cycle-130-1/cases'))).docs[0]!;
       await updateDoc(copy.ref, { prepFlowIds: ['pf-only-cycle'] });
     });
-    await expect(fb.deletePrepFlow('haru', 'pf-only-cycle')).rejects.toThrow('사이클');
+    await expect(fb.deletePrepFlow(ref, 'pf-only-cycle')).rejects.toThrow('사이클');
     await fb.completeCycle({ projectId: 'haru', cycleId: 'cycle-130-1' });
-    await fb.deletePrepFlow('haru', 'pf-only-cycle');
-    expect((await fb.listPrepFlows('haru')).map((f) => f.id)).not.toContain('pf-only-cycle');
+    await fb.deletePrepFlow(ref, 'pf-only-cycle');
+    expect((await fb.listPrepFlows(ref)).map((f) => f.id)).not.toContain('pf-only-cycle');
   });
 
   it('구독하면 다른 사람이 확정한 판정이 바로 들어오고, 끊으면 더 받지 않는다 (F-CY-05·F-DB-07)', async () => {

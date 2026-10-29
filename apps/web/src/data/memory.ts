@@ -46,6 +46,7 @@ import {
   type CycleDetail,
   type CycleRef,
   type CycleSummary,
+  type DocRef,
   type ProjectSummary,
   type QcardApi,
 } from './api';
@@ -191,17 +192,17 @@ export function createMemoryApi(
     return a;
   };
 
-  // 준비 플로우 (F-PF-01). fixture 플로우는 하루콩 프로젝트 것이다
-  const flows: Record<string, PrepFlow[]> = { haru: db.prepFlows };
-  const flowsOf = (projectId: string) => flows[projectId] ?? [];
-  const flow = (projectId: string, id: string) => {
-    const f = flowsOf(projectId).find((x) => x.id === id);
+  // 준비 플로우 (F-PF-01): QA 문서 버전마다 사본
+  const flows: Record<string, PrepFlow[]> = db.prepFlows;
+  const flowsOf = (docId: string) => flows[docId] ?? [];
+  const flow = (docId: string, id: string) => {
+    const f = flowsOf(docId).find((x) => x.id === id);
     if (!f) throw new NotFoundError(`준비 플로우 없음: ${id}`);
     return f;
   };
-  const usesOf = (projectId: string) =>
+  const usesOf = ({ projectId, docId }: DocRef) =>
     prepFlowUses(
-      db.qaDocs.filter((d) => d.projectId === projectId),
+      doc(docId),
       db.cycles.filter((c) => c.projectId === projectId).map((c) => ({ cycle: c, cases: db.cycleCases[c.id] ?? [] })),
     );
 
@@ -359,33 +360,34 @@ export function createMemoryApi(
       q.comments.push({ by: currentUser, at: now(), text });
       return wait(undefined);
     },
-    async listPrepFlows(projectId) {
-      return wait(flowsOf(projectId));
+    async listPrepFlows({ docId }) {
+      return wait(flowsOf(docId));
     },
-    async listPrepFlowUses(projectId) {
+    async listPrepFlowUses(ref) {
       await ensureLocal();
-      return wait(usesOf(projectId));
+      return wait(usesOf(ref));
     },
-    createPrepFlow: (projectId, input) =>
+    createPrepFlow: ({ projectId, docId }, input) =>
       rules(() => {
-        const flow = newPrepFlow(membersOf(projectId), actor(), input, flowsOf(projectId), now());
-        flows[projectId] = [...flowsOf(projectId), flow];
+        doc(docId);
+        const flow = newPrepFlow(membersOf(projectId), actor(), input, flowsOf(docId), now());
+        flows[docId] = [...flowsOf(docId), flow];
         return flow;
       }),
-    updatePrepFlow: (projectId, flowId, input, expectedRev) =>
+    updatePrepFlow: ({ projectId, docId }, flowId, input, expectedRev) =>
       rules(() => {
-        const current = flow(projectId, flowId);
+        const current = flow(docId, flowId);
         if ((current.rev ?? 0) !== expectedRev) throw new PrepFlowConflictError(clone(current));
         const next = prepFlowChange(membersOf(projectId), actor(), current, input, now());
-        flows[projectId] = flowsOf(projectId).map((f) => (f.id === flowId ? next : f));
+        flows[docId] = flowsOf(docId).map((f) => (f.id === flowId ? next : f));
         return next;
       }),
-    async deletePrepFlow(projectId, flowId) {
+    async deletePrepFlow(ref, flowId) {
       await ensureLocal();
       return rules(() => {
-        flow(projectId, flowId);
-        prepFlowDeletion(membersOf(projectId), actor(), usesOf(projectId)[flowId] ?? []);
-        flows[projectId] = flowsOf(projectId).filter((f) => f.id !== flowId);
+        flow(ref.docId, flowId);
+        prepFlowDeletion(membersOf(ref.projectId), actor(), usesOf(ref)[flowId] ?? []);
+        flows[ref.docId] = flowsOf(ref.docId).filter((f) => f.id !== flowId);
       });
     },
 

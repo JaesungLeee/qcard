@@ -3,7 +3,7 @@
  * 생성 품질을 웹 검토 화면에서 보기 위한 개발용 명령. 기존 시드는 지우지 않는다(같은 프로젝트만 덮어쓴다).
  *
  *   pnpm --filter @qcard/functions seed-generated <결과.json…> [--project haru-gen] [--name "하루콩 생성 결과"]
- *     결과 파일은 버전 순서대로 준다 (이전 버전 먼저). 준비 플로우는 마지막 파일의 것을 쓴다.
+ *     결과 파일은 버전 순서대로 준다 (이전 버전 먼저). 준비 플로우는 파일마다 그 버전 문서 아래에 넣는다.
  *     멤버는 fixture 하루콩 프로젝트와 같다.
  */
 import { readFile } from 'node:fs/promises';
@@ -11,7 +11,7 @@ import { parseArgs } from 'node:util';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { createFixtureDb } from '@qcard/fixtures';
-import type { PrepFlow, Project, QADocument } from '@qcard/shared';
+import { flowsUsedBy, type PrepFlow, type Project, type QADocument } from '@qcard/shared';
 
 const host = process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080';
 if (!/^(127\.0\.0\.1|localhost):/.test(host)) {
@@ -46,14 +46,15 @@ for (const m of fixture.members.filter((m) => m.projectId === 'haru')) {
   put(`projects/${projectId}/members/${m.uid}`, { ...m, projectId });
 }
 const docId = (d: QADocument) => `doc-${d.appVersion}`;
-results.forEach(({ doc }, i) => {
+results.forEach(({ doc, prepFlows }, i) => {
   const { cases, ...meta } = doc;
   const prev = i > 0 ? docId(results[i - 1]!.doc) : undefined;
   const base = `projects/${projectId}/qaDocs/${docId(doc)}`;
   put(base, { ...meta, id: docId(doc), projectId, ...(prev ? { prevDocId: prev } : {}) });
   cases.forEach((c, j) => put(`${base}/cases/${c.tcId}`, { ...c, _i: j }));
+  // 준비 플로우는 버전마다 (예전 결과 파일은 누적 목록이라 케이스가 참조하는 것만 남긴다)
+  flowsUsedBy(prepFlows, cases).forEach((f, j) => put(`${base}/prepFlows/${f.id}`, { ...f, _i: j }));
 });
-results.at(-1)!.prepFlows.forEach((f, i) => put(`projects/${projectId}/prepFlows/${f.id}`, { ...f, _i: i }));
 
 // 같은 프로젝트의 이전 시드는 지운다
 await db.recursiveDelete(db.doc(`projects/${projectId}`));
