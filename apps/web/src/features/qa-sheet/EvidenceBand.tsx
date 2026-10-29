@@ -24,7 +24,7 @@ import { useEffect, useRef, useState } from 'react';
 import { fmtDateTime, fmtNumber, fmtTs } from '../../components/format';
 import { MockScreen } from '../../mock/MockScreen';
 import { autoConfirmChecks, decidedByLabel, isAutoPassReversal } from './model';
-import { Mono } from './parts';
+import { Mono, OsBuild } from './parts';
 import './evidence-band.css';
 
 /** 증거 패널이 보여줄 대상: 스텝 직전 화면 또는 검증 포인트 증거 */
@@ -220,7 +220,7 @@ function ResultCard({
           <>
             <dt>OS 빌드</dt>
             <dd>
-              <Mono>{r.osBuild}</Mono>
+              <OsBuild value={r.osBuild} />
             </dd>
           </>
         )}

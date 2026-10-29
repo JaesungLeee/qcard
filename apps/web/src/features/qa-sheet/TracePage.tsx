@@ -39,7 +39,7 @@ import { ConfirmPanel } from './ConfirmPanel';
 import { DefectPanel } from './DefectPanel';
 import { EvidenceBand } from './EvidenceBand';
 import { autoConfirmChecks, cellRun, decidedByLabel, isAutoPassReversal, neighbors, resultKey, shortId } from './model';
-import { Card, KV, Mono, RunState, traceUrl, useNow } from './parts';
+import { Card, KV, Mono, OsBuild, RunState, traceUrl, useNow } from './parts';
 import './qa-sheet.css';
 
 export function TracePage() {
@@ -171,7 +171,7 @@ function Trace({ d }: { d: CycleDetail }) {
                   r.attempts > 0 ? `${r.attempts}회${r.attempts > 1 ? ` (재시도 ${r.attempts - 1}회)` : ''}` : '—',
                 ],
                 ['수행', r.executedAt ? `${fmtDateTime(r.executedAt)} · ${r.executor ?? ''}` : '—'],
-                ['OS 빌드', r.osBuild ? <Mono>{r.osBuild}</Mono> : '—'],
+                ['OS 빌드', r.osBuild ? <OsBuild value={r.osBuild} /> : '—'],
                 ['결함', r.defectId ? <Mono>{r.defectId}</Mono> : '—'],
                 ...(r.tokens
                   ? ([['토큰 · 환산 비용', `${fmtNumber(r.tokens)} · $${r.costUsd?.toFixed(3) ?? '0'}`]] as [

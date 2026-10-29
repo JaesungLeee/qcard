@@ -4,7 +4,7 @@ import { SecretVault, withSecretGuard } from '@qcard/llm';
 import type { PrepFlow, TestCase } from '@qcard/shared';
 import { describe, expect, it } from 'vitest';
 import { fakeClock, type AgentEnv } from './env';
-import { ACCOUNT_SECRET, runCase, type AccountIssue, type RunCaseInput } from './runCase';
+import { ACCOUNT_SECRET, osBuildOf, runCase, type AccountIssue, type RunCaseInput } from './runCase';
 import { scriptedLlm, toolUse } from './testing';
 
 /*
@@ -183,5 +183,15 @@ describe('테스트 계정으로 실행 (F-PF-04·08, F-EX-09)', () => {
     const last = JSON.stringify(llm.requests.at(-1));
     expect(last).toContain('알림 다시 켜기');
     expect(last).toContain('케이스가 바꾼 계정 상태를 되돌린다');
+  });
+});
+
+describe('osBuildOf (F-CY-01)', () => {
+  it('OS 메이저·빌드 번호·보안 패치를 한 줄로, 읽지 못한 값은 뺀다', () => {
+    expect(osBuildOf({ osMajor: 15, build: 'AP3A.240905.015.A2', securityPatch: '2024-10-01' })).toBe(
+      'Android 15 · AP3A.240905.015.A2 · 보안 패치 2024-10-01',
+    );
+    expect(osBuildOf({ osMajor: 14, securityPatch: '2024-03-01' })).toBe('Android 14 · 보안 패치 2024-03-01');
+    expect(osBuildOf({ osMajor: 16 })).toBe('Android 16');
   });
 });

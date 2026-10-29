@@ -1,4 +1,4 @@
-import { DeviceDisconnectedError, type NetworkKind } from '@qcard/device';
+import { DeviceDisconnectedError, type DeviceInfo, type NetworkKind } from '@qcard/device';
 import { ClaudeCodeSetupError, PlanLimitError, type UsageMeter } from '@qcard/llm';
 import type { CaseResult, PrepFlow, TestCase } from '@qcard/shared';
 import { clockOf, RunAbortedError, thought, type AgentEnv } from './env';
@@ -170,6 +170,16 @@ export async function runCase(env: AgentEnv, input: RunCaseInput): Promise<CaseR
   }
 }
 
+/**
+ * 결과에 남길 OS 빌드 (F-CY-01): `Android 15 · AP3A.240905.015.A2 · 보안 패치 2024-10-01`.
+ * 대상은 모델 + OS 메이저로 맞추고, 정확한 빌드·보안 패치는 여기에 기록한다. 읽지 못한 값은 뺀다
+ */
+export function osBuildOf(info: Pick<DeviceInfo, 'osMajor' | 'build' | 'securityPatch'>): string {
+  return [`Android ${info.osMajor}`, info.build, info.securityPatch && `보안 패치 ${info.securityPatch}`]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 type ResultOf = (r: Partial<CaseResult> & Pick<CaseResult, 'verdict'>) => CaseResult;
 
 /** 이 케이스의 결과를 만드는 함수 (시작 시각·디바이스 OS·사용량을 채운다) */
@@ -187,7 +197,7 @@ async function resultOf(env: AgentEnv, input: Pick<RunCaseInput, 'testCase' | 'd
       attempts: 1,
       executor: 'agent',
       executedAt: startedAt,
-      osBuild: `Android ${info.osMajor}`,
+      osBuild: osBuildOf(info),
       runId: input.runId,
       steps: [],
       points: [],
