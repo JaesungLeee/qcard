@@ -24,10 +24,14 @@ import type { RunSink } from './sink';
  * 칸을 잡으려면 온라인이어야 해서, 큐를 비우지 못하거나 잡기 호출이 네트워크 오류면 "네트워크 끊김"으로 일시정지한다.
  * 케이스 도중 연결 신호를 LEASE_LOST_MS 넘게 남기지 못했으면(네트워크 끊김·PC 절전) 다른 Run이 칸을 가져갔을 수 있어,
  * 다음 턴에서 멈추고 진행 중 케이스 결과를 버린 뒤 "호스트 연결 끊김"으로 일시정지한다 — 남이 가져간 칸에 플랜 사용량을 쓰지 않게.
+ * Run당 토큰 한도(F-EX-12)는 케이스를 끊지 않고 다음 케이스를 시작하기 전에 본다. 이어서 실행한 Run은 앞서 올린 결과의
+ * 토큰까지 더하므로, 한도에 닿아 멈춘 Run은 프로젝트 설정에서 한도를 올려야 이어 갈 수 있다.
  */
 
 const DISCONNECTED = '디바이스 연결이 끊겼습니다. USB를 다시 연결한 뒤 이어서 실행하세요';
 const OFFLINE = '네트워크가 끊겨 다음 칸을 잡지 못했습니다. 연결을 확인한 뒤 이어서 실행하세요';
+const runLimitText = (used: number, limit: number) =>
+  `이 Run이 토큰 ${used.toLocaleString('ko-KR')}개를 써서 Run당 한도(${limit.toLocaleString('ko-KR')})에 닿았습니다. 프로젝트 설정의 실행 안전장치에서 한도를 올린 뒤 이어서 실행하세요`;
 /** 칸을 잡기 전에 앞 케이스의 결과·증거를 올리며 기다리는 시간 */
 const CLAIM_DRAIN_MS = 60_000;
 const LEASE_LOST = `연결 신호가 ${LEASE_LOST_MS / 1000}초 넘게 끊겨(네트워크 끊김·PC 절전) 다른 실행자가 이 칸을 가져갔을 수 있습니다. 진행 중 케이스 결과는 버렸습니다. 이어서 실행하세요`;
@@ -50,6 +54,8 @@ export type RunCycleInput = {
   skipDone?: boolean;
   /** 사용량·실행 한도 (F-EX-12). 케이스별로 집계되고, env.llm도 같은 미터로 감싸야 한도가 걸린다 */
   meter?: UsageMeter;
+  /** Run당 토큰 한도. 이 Run이 쓴 토큰(meter + 이어서 실행 전 결과)이 넘으면 다음 케이스 전에 일시정지. 없으면 보지 않는다 */
+  tokensPerRun?: number;
   onCase?: (tc: TestCase, result: CaseResult) => void;
   /** 실행할 케이스가 정해졌을 때 (로컬 콘솔 큐) */
   onQueue?: (cases: TestCase[]) => void;
@@ -183,8 +189,14 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
         checkpoint: async () => (leaseLost() ? 'abort' : base ? base.checkpoint() : 'continue'),
       }
     : base;
+  // 이어서 실행하기 전까지 이 Run이 쓴 토큰 (올린 결과 기준)
+  const priorTokens = detail.results.filter((r) => r.runId === input.runId).reduce((n, r) => n + (r.tokens ?? 0), 0);
+  const runTokens = () => priorTokens + (input.meter?.run.tokens ?? 0);
   try {
     for (const testCase of cases) {
+      if (input.tokensPerRun !== undefined && runTokens() >= input.tokensPerRun) {
+        return paused('run_limit', runLimitText(runTokens(), input.tokensPerRun));
+      }
       const before = await deviceProblem();
       if (before) return paused(before.reason, before.message);
       const skip = await claimCell(testCase);

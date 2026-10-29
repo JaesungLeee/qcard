@@ -1,4 +1,4 @@
-import type { AutoConfirmCondition, PointResult, Verdict } from '@qcard/shared';
+import { DEFAULT_RUN_LIMITS, type AutoConfirmCondition, type PointResult, type Verdict } from '@qcard/shared';
 import type { ExecOutcome } from './executor';
 
 export type Judgement = {
@@ -18,7 +18,7 @@ export type Judgement = {
 export function judge(
   exec: Pick<ExecOutcome, 'status' | 'recoveries'> & { intervened?: boolean },
   points: PointResult[],
-  retryLimit = 3,
+  retryLimit = DEFAULT_RUN_LIMITS.retryLimit,
 ): Judgement {
   const unmet: AutoConfirmCondition[] = [];
   if (points.length === 0 || points.some((p) => p.result !== 'match')) unmet.push('all_match');

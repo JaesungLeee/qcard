@@ -27,8 +27,11 @@ export function costUsd(model: string, u: Usage): number {
 export type UsageTotals = { calls: number; tokens: number; costUsd: number; cacheReadTokens: number };
 const empty = (): UsageTotals => ({ calls: 0, tokens: 0, costUsd: 0, cacheReadTokens: 0 });
 
-/** 실행 안전장치 (F-EX-12). 값은 M0 실측 후 프로젝트 설정으로 보정한다. */
-export type UsageLimits = { maxCallsPerCase?: number; maxTokensPerCase?: number; maxTokensPerRun?: number };
+/**
+ * 실행 안전장치 중 케이스 단위 (F-EX-12). 값은 프로젝트 설정(`RunLimits`)에서 온다.
+ * Run당 토큰은 케이스 도중에 끊지 않고 케이스 사이에서 Run을 일시정지하므로 호스트가 따로 본다
+ */
+export type UsageLimits = { maxCallsPerCase?: number; maxTokensPerCase?: number };
 
 /** 한도 초과 → 해당 케이스 Blocked("실행 한도 초과") */
 export class LimitExceededError extends Error {
@@ -70,10 +73,7 @@ export class UsageMeter {
 
   /** 다음 호출 전에 확인한다. 이미 한도에 닿았으면 던진다. */
   check(meta: LlmCallMeta) {
-    const { maxCallsPerCase, maxTokensPerCase, maxTokensPerRun } = this.limits;
-    if (maxTokensPerRun !== undefined && this.run.tokens >= maxTokensPerRun) {
-      throw new LimitExceededError('maxTokensPerRun', `Run 토큰 한도 초과 (${this.run.tokens} ≥ ${maxTokensPerRun})`);
-    }
+    const { maxCallsPerCase, maxTokensPerCase } = this.limits;
     if (!meta.caseId) return;
     const c = this.forCase(meta.caseId);
     if (maxCallsPerCase !== undefined && c.calls >= maxCallsPerCase) {

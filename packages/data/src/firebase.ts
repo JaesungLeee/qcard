@@ -348,6 +348,7 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
     leaveProject: (projectId) => call<void>('leaveProject', { projectId }),
     deleteProject: (projectId, confirmName) => call<Project>('deleteProject', { projectId, confirmName }),
     restoreProject: (projectId) => call<Project>('restoreProject', { projectId }),
+    setRunLimits: (projectId, limits) => call<Project>('setRunLimits', { projectId, limits }),
 
     // ------------------------------------------------------------ QA 문서
     listQaDocs: (projectId) =>
@@ -423,7 +424,8 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
         await runTransaction(db, async (tx) => {
           // 목록을 읽은 뒤 다른 사람이 같은 id로 만들었으면 덮어쓰지 않는다
           const ref = flowRef(projectId, docId, flow.id);
-          if ((await tx.get(ref)).exists()) throw new RuleError('다른 사람이 방금 플로우를 추가했습니다. 다시 저장하세요.');
+          if ((await tx.get(ref)).exists())
+            throw new RuleError('다른 사람이 방금 플로우를 추가했습니다. 다시 저장하세요.');
           tx.set(ref, clean({ ...flow, _i: last + 1 }));
         });
         return flow;

@@ -20,7 +20,15 @@ import {
   parseToolUse,
   toolUses,
 } from '@qcard/llm';
-import { EXECUTOR_TOOL_INPUTS, RISK_KIND_LABEL, type CaseStep, type ExecStep, type ExecutorToolInput } from '@qcard/shared';
+import {
+  DEFAULT_RUN_LIMITS,
+  EXECUTOR_TOOL_INPUTS,
+  maxTurnsFor,
+  RISK_KIND_LABEL,
+  type CaseStep,
+  type ExecStep,
+  type ExecutorToolInput,
+} from '@qcard/shared';
 import {
   clockOf,
   imageBlock,
@@ -93,11 +101,11 @@ export type RunStepsInput = {
   steps: CaseStep[];
   /** 케이스 제목·사전조건·데이터 */
   context: string;
-  /** 최대 LLM 턴 (기본: 단계 수 × 3 + 10) */
+  /** 최대 LLM 턴 (기본: 단계 수 × env.limits.turnsPerStep + extraTurns) */
   maxTurns?: number;
   /** 첫 관찰 번호. 준비 플로우와 본 단계가 이어서 매겨 스크린샷이 겹치지 않게 한다 */
   firstIndex?: number;
-  /** 같은 화면 + 같은 액션 반복 한도 (기본 3) */
+  /** 같은 화면 + 같은 액션 반복 한도 (기본 env.limits.repeatLimit) */
   repeatLimit?: number;
 };
 
@@ -124,8 +132,9 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
   const clock = clockOf(env);
   const start = clock.now();
   const { caseId, steps } = input;
-  const maxTurns = input.maxTurns ?? steps.length * 3 + 10;
-  const repeatLimit = input.repeatLimit ?? 3;
+  const limits = { ...DEFAULT_RUN_LIMITS, ...env.limits };
+  const maxTurns = input.maxTurns ?? maxTurnsFor(limits, steps.length);
+  const repeatLimit = input.repeatLimit ?? limits.repeatLimit;
   const info = await env.device.info();
   const timeline: ExecStep[] = [];
   const repeats = new Map<string, number>();

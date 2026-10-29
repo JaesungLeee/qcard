@@ -130,6 +130,26 @@ describe('Executor 루프', () => {
     expect(r).toMatchObject({ status: 'blocked', reason: '실행 한도 초과: 최대 2턴' });
   });
 
+  it('턴·반복 한도는 프로젝트 설정(env.limits)을 따른다 (F-EX-12)', async () => {
+    const tapTitle = () => [toolUse('tap', { element_ref: 'nickname_title', intent: '제목 탭' })];
+    const twice = setup('nickname', [tapTitle(), tapTitle(), tapTitle()]);
+    const limits = { turnsPerStep: 1, extraTurns: 1, repeatLimit: 2, retryLimit: 3 };
+    expect(await runSteps({ ...twice.env, limits }, { caseId: 'TC-1', steps: steps('x'), context: '' })).toMatchObject({
+      status: 'blocked',
+      reason: expect.stringContaining('2회 반복'),
+    });
+    // 단계 1개 × 1 + 1 = 2턴
+    const waits = setup('nickname', [
+      [toolUse('wait', { seconds: 1, intent: '대기' })],
+      [toolUse('wait', { seconds: 2, intent: '대기' })],
+      [toolUse('wait', { seconds: 3, intent: '대기' })],
+    ]);
+    expect(await runSteps({ ...waits.env, limits }, { caseId: 'TC-1', steps: steps('x'), context: '' })).toMatchObject({
+      status: 'blocked',
+      reason: '실행 한도 초과: 최대 2턴',
+    });
+  });
+
   it('LLM 호출 한도에 닿으면 Blocked', async () => {
     const { env } = setup('nickname', [
       [toolUse('wait', { seconds: 1, intent: '' })],
@@ -383,7 +403,10 @@ describe('실행자 제어 (F-DB-05)', () => {
   it('중단하면 RunAbortedError를 던진다', async () => {
     const { env } = setup('nickname', []);
     await expect(
-      runSteps({ ...env, control: scriptedControl(['abort']) }, { caseId: 'TC-1', steps: steps('[저장]'), context: '' }),
+      runSteps(
+        { ...env, control: scriptedControl(['abort']) },
+        { caseId: 'TC-1', steps: steps('[저장]'), context: '' },
+      ),
     ).rejects.toBeInstanceOf(RunAbortedError);
   });
 });

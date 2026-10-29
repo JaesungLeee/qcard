@@ -1,12 +1,17 @@
 import {
+  DEFAULT_RUN_LIMITS,
   DELETE_GRACE_DAYS,
   INVITE_TTL_DAYS,
   Role,
   ROLE_DESCRIPTION,
   ROLE_LABEL,
+  RUN_LIMIT_LABEL,
+  runLimitsOf,
+  runLimitsProblem,
   type Invitation,
   type Member,
   type Project,
+  type RunLimits,
 } from '@qcard/shared';
 import { Button, Icons, Option, Select, SectionMessage, TextButton, TextField, textClass } from '@qcard/ui';
 import { useState, type ReactNode } from 'react';
@@ -27,11 +32,12 @@ import {
   useRestoreProject,
   useRevokeInvitation,
   useSetMemberRole,
+  useSetRunLimits,
 } from '../../data/hooks';
 import { ErrorMessage, Field, RoleBadge } from './parts';
 import './projects.css';
 
-/** 프로젝트 설정 (F-TM-03·10·11·12): 멤버 · 초대(Admin) · 탈퇴·삭제. Admin이 아니면 멤버 보기와 탈퇴만 */
+/** 프로젝트 설정 (F-TM-03·10·11·12, F-EX-12): 멤버 · 초대(Admin) · 실행 안전장치 · 탈퇴·삭제. Admin이 아니면 보기와 탈퇴만 */
 export function ProjectSettingsPage() {
   const { projectId = '' } = useParams();
   const project = useProject(projectId);
@@ -41,13 +47,18 @@ export function ProjectSettingsPage() {
     <div className="qc-page">
       <PageHeader
         title="프로젝트 설정"
-        meta={admin ? '멤버를 초대하고 역할을 정합니다.' : '멤버를 볼 수 있습니다. 초대와 역할 변경은 Admin이 합니다.'}
+        meta={
+          admin
+            ? '멤버를 초대하고 역할과 실행 안전장치를 정합니다.'
+            : '멤버와 실행 안전장치를 볼 수 있습니다. 초대와 변경은 Admin이 합니다.'
+        }
       />
       <QueryState query={project}>
         {(p) => (
           <>
             <MembersSection projectId={projectId} admin={admin} />
             {admin && <InvitationsSection projectId={projectId} />}
+            <RunLimitsSection project={p} admin={admin} />
             <DangerSection project={p} admin={admin} />
           </>
         )}
@@ -261,6 +272,129 @@ function InvitationsSection({ projectId }: { projectId: string }) {
           )
         }
       </QueryState>
+    </Section>
+  );
+}
+
+type LimitKey = keyof RunLimits;
+type LimitDraft = Record<LimitKey, string>;
+const fmtNum = (n: number) => n.toLocaleString('ko-KR');
+const draftOf = (l: RunLimits) => Object.fromEntries(Object.entries(l).map(([k, v]) => [k, fmtNum(v)])) as LimitDraft;
+/** 쉼표를 떼고 숫자로. 비었거나 숫자가 아니면 NaN (검사가 범위 문구로 알린다) */
+const limitsOf = (d: LimitDraft) =>
+  Object.fromEntries(
+    Object.entries(d).map(([k, v]) => [k, v.trim() === '' ? NaN : Number(v.replace(/[,\s]/g, ''))]),
+  ) as RunLimits;
+
+/** 실행 안전장치 (F-EX-08·12). Admin만 바꾸고, 다른 멤버는 값만 본다. 진행 중 사이클도 다음 Run부터 적용 */
+function RunLimitsSection({ project, admin }: { project: Project; admin: boolean }) {
+  const saved = runLimitsOf(project);
+  const save = useSetRunLimits(project.id);
+  const [draft, setDraft] = useState(() => draftOf(saved));
+  const [done, setDone] = useState(false);
+  const next = limitsOf(draft);
+  const problem = runLimitsProblem(next);
+  const changed = (Object.keys(saved) as LimitKey[]).some((k) => next[k] !== saved[k]);
+  const isDefault = (Object.keys(saved) as LimitKey[]).every((k) => next[k] === DEFAULT_RUN_LIMITS[k]);
+  const input = (k: LimitKey, unit?: string) => (
+    <TextField
+      aria-label={RUN_LIMIT_LABEL[k]}
+      inputMode="numeric"
+      value={draft[k]}
+      readOnly={!admin}
+      status={admin && Number.isNaN(next[k]) ? 'negative' : undefined}
+      trailingContent={unit ? <span className={`${textClass('label2')} qp-faint`}>{unit}</span> : undefined}
+      onChange={(e) => {
+        setDone(false);
+        setDraft({ ...draft, [k]: e.target.value });
+      }}
+    />
+  );
+  return (
+    <Section title="실행 안전장치" icon={<Icons.IconThunder aria-hidden style={icon} />}>
+      <span className={`${textClass('label2')} qp-muted`}>
+        Agent가 실행자의 Claude 플랜 사용량을 지나치게 쓰지 않도록 막습니다. 케이스 한도를 넘으면 그 케이스는
+        Blocked(실행 한도 초과)로 끝나고 다음 케이스로 넘어갑니다. 바꾼 값은 진행 중인 사이클에도 다음 Run부터
+        적용됩니다.
+      </span>
+      <div className="qp-limits">
+        <Field
+          label="케이스당 최대 턴"
+          hint="단계 수 × 단계당 턴 + 추가 턴. 준비·원복 플로우도 각자의 스텝 수로 셉니다"
+        >
+          <div className="qp-row qp-limit-turns" style={{ flexWrap: 'nowrap' }}>
+            <span className={`${textClass('label1')} qp-muted`}>단계 수 ×</span>
+            {input('turnsPerStep')}
+            <span className={`${textClass('label1')} qp-muted`}>+</span>
+            {input('extraTurns')}
+          </div>
+        </Field>
+        <Field label="같은 화면 · 같은 액션 반복" hint="이만큼 반복하면 Blocked">
+          {input('repeatLimit', '회')}
+        </Field>
+        <Field label="자가 복구" hint="액션 실패 후 다시 시도한 횟수가 이보다 많으면 Pass를 자동 확정하지 않습니다">
+          {input('retryLimit', '회')}
+        </Field>
+        <Field label="케이스당 LLM 호출" hint="준비·검증·원복 포함">
+          {input('callsPerCase', '회')}
+        </Field>
+        <Field label="케이스당 토큰" hint="입력(캐시 포함) + 출력">
+          {input('tokensPerCase', '토큰')}
+        </Field>
+        <Field label="Run당 토큰" hint="넘으면 다음 케이스 전에 Run을 일시정지합니다. 한도를 올린 뒤 이어서 실행합니다">
+          {input('tokensPerRun', '토큰')}
+        </Field>
+        <Field label="실행자 대기" hint="수동 스텝·위험 액션 승인을 기다리는 시간. 지나면 Blocked">
+          {input('waitTimeoutMin', '분')}
+        </Field>
+      </div>
+      {admin ? (
+        <>
+          {problem && (
+            <SectionMessage variant="negative" description={problem}>
+              저장할 수 없습니다
+            </SectionMessage>
+          )}
+          <ErrorMessage error={save.error} title="저장하지 못했습니다" />
+          {done && !changed && (
+            <SectionMessage variant="positive" description="다음 Run부터 적용됩니다.">
+              실행 안전장치를 저장했습니다
+            </SectionMessage>
+          )}
+          <div className="qp-row" style={{ justifyContent: 'flex-end' }}>
+            <Button
+              size="small"
+              variant="outlined"
+              color="assistive"
+              disabled={isDefault}
+              onClick={() => {
+                setDone(false);
+                setDraft(draftOf(DEFAULT_RUN_LIMITS));
+              }}
+            >
+              기본값으로
+            </Button>
+            <Button
+              size="small"
+              variant="solid"
+              color="primary"
+              disabled={!changed || !!problem || save.isPending}
+              onClick={() =>
+                save.mutate(next, {
+                  onSuccess: (p) => {
+                    setDraft(draftOf(runLimitsOf(p)));
+                    setDone(true);
+                  },
+                })
+              }
+            >
+              저장
+            </Button>
+          </div>
+        </>
+      ) : (
+        <span className={`${textClass('caption1')} qp-faint`}>실행 안전장치는 Admin이 바꿉니다.</span>
+      )}
     </Section>
   );
 }

@@ -4,7 +4,7 @@ import type { AgentEnv } from '@qcard/agent';
 import type { QcardApi } from '@qcard/data';
 import type { DeviceDriver, DeviceInfo } from '@qcard/device';
 import { createLlm, SecretVault, TURN_TIMEOUT_MS, UsageMeter, withSecretGuard, type LlmClient } from '@qcard/llm';
-import type { ClaudeCodeState } from '@qcard/shared';
+import { runLimitsOf, type ClaudeCodeState } from '@qcard/shared';
 import type { FirebaseStorage } from 'firebase/storage';
 import { holdAwake } from './awake';
 import { BuildInstallError, ensureBuild } from './build';
@@ -74,6 +74,8 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
   // 지난 Run에서 멈춘 업로드가 있으면 다시 보내 본다 (같은 오류면 이번 Run도 멈추고 알린다)
   deps.queue.retry();
   const { cycle, build, runs } = await api.getCycle({ projectId: req.projectId, cycleId: req.cycleId });
+  // 실행 안전장치 (F-EX-12): 사이클에 고정하지 않아 Run을 시작할 때마다 프로젝트 설정을 읽는다
+  const limits = runLimitsOf(await api.getProject(req.projectId));
   // 이어서 실행하면 그 Run의 큐를 그대로 쓴다 (남은 전체로 넓어지지 않게)
   const resumed = req.resumeRunId ? runs.find((r) => r.id === req.resumeRunId) : undefined;
   const tcIds = req.tcIds?.length ? req.tcIds : resumed?.tcIds?.length ? resumed.tcIds : undefined;
@@ -112,19 +114,22 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
   }
 
   const runId = req.resumeRunId ?? `run-${new Date().toISOString().replace(/[:.]/g, '-')}`;
-  const meter = new UsageMeter({ maxCallsPerCase: 40, maxTokensPerCase: 600_000 });
-  const hub = new ConsoleHub({
-    projectId: req.projectId,
-    cycleId: req.cycleId,
-    cycleName: cycle.name,
-    build: { version: build.version, buildNumber: build.buildNumber },
-    runId,
-    executor: deps.executor,
-    device: consoleDevice(info, 'running'),
-    screen: info.size,
-    claudeCode: deps.claudeCode,
-    caseTokenLimit: meter.limits.maxTokensPerCase ?? 600_000,
-  });
+  const meter = new UsageMeter({ maxCallsPerCase: limits.callsPerCase, maxTokensPerCase: limits.tokensPerCase });
+  const hub = new ConsoleHub(
+    {
+      projectId: req.projectId,
+      cycleId: req.cycleId,
+      cycleName: cycle.name,
+      build: { version: build.version, buildNumber: build.buildNumber },
+      runId,
+      executor: deps.executor,
+      device: consoleDevice(info, 'running'),
+      screen: info.size,
+      claudeCode: deps.claudeCode,
+      caseTokenLimit: limits.tokensPerCase,
+    },
+    { manualTimeoutMs: limits.waitTimeoutMin * 60_000 },
+  );
   log(`${cycle.name} · ${target.label} · ${deps.executor} · Run ${runId}`);
 
   const base = runSink(deps.queue, {
@@ -201,6 +206,7 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
         vault,
         appPackage,
         allowNetworkToggle: req.allowNetworkToggle,
+        limits,
         onThought: (t) => {
           if (t.kind !== 'observe') log(`  ${(t.at / 1000).toFixed(1).padStart(5)}s [${t.kind}] ${t.text}`);
           hub.thought(t);
@@ -225,6 +231,7 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
       // 고른 칸은 결과가 있어도 다시 돌린다. 고르지 않았으면(남은 전체) 결과가 있는 칸은 건너뛴다
       skipDone: Boolean(req.resumeRunId) || !tcIds,
       meter,
+      tokensPerRun: limits.tokensPerRun,
       onCase: (tc, r) => {
         log(`■ ${tc.tcId} ${tc.title}: ${r.verdict}${r.blockedReason ? ` — ${r.blockedReason}` : ''}`);
         hub.caseFinished(tc, r);

@@ -26,6 +26,7 @@ import type {
   NewProjectInput,
   Project,
   Role,
+  RunLimits,
   QADocument,
   Run,
   Screenshot,
@@ -76,6 +77,11 @@ export interface QcardApi {
   /** Admin만, 이름을 입력해 확인. 유예 기간 동안 삭제 예정으로 남는다 (F-TM-12) */
   deleteProject(projectId: string, confirmName: string): Promise<Project>;
   restoreProject(projectId: string): Promise<Project>;
+  /**
+   * 실행 안전장치 저장 (F-EX-12). Admin만, 범위를 벗어나면 `RuleError`. 사이클에 고정하지 않아
+   * 진행 중 사이클도 다음 Run부터 적용된다. 읽기는 `getProject` + `runLimitsOf`
+   */
+  setRunLimits(projectId: string, limits: RunLimits): Promise<Project>;
 
   listQaDocs(projectId: string): Promise<QaDocSummary[]>;
   getQaDoc(ref: DocRef): Promise<QADocument>;
@@ -315,7 +321,9 @@ export class ConflictError extends Error {
 /** 준비 플로우를 다른 사람이 먼저 고쳤다. `latest`로 최신 내용을 보인다 */
 export class PrepFlowConflictError extends Error {
   constructor(readonly latest: PrepFlow) {
-    super(`${latest.name}: 다른 사람이 먼저 저장했습니다 (rev ${latest.rev ?? 0}, ${latest.updatedBy ?? '알 수 없음'})`);
+    super(
+      `${latest.name}: 다른 사람이 먼저 저장했습니다 (rev ${latest.rev ?? 0}, ${latest.updatedBy ?? '알 수 없음'})`,
+    );
   }
 }
 

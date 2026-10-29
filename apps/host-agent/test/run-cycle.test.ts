@@ -6,7 +6,15 @@ import { createFirebaseApi, writeAll } from '@qcard/data/firebase';
 import { seedDocs } from '@qcard/data/seed';
 import { DeviceDisconnectedError, FakeDevice } from '@qcard/device';
 import { APP_PACKAGE, GITHUB, onboardingScenario, PEOPLE } from '@qcard/fixtures';
-import { ClaudeCodeSetupError, createLlm, PlanLimitError, SecretVault, UsageMeter, type LlmClient } from '@qcard/llm';
+import {
+  ClaudeCodeSetupError,
+  createLlm,
+  PlanLimitError,
+  SecretVault,
+  UsageMeter,
+  withUsage,
+  type LlmClient,
+} from '@qcard/llm';
 import { deleteDoc, doc, getDoc, setDoc, setLogLevel, updateDoc, type Firestore } from 'firebase/firestore';
 import { getBytes, ref, uploadBytes, type FirebaseStorage } from 'firebase/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -198,6 +206,45 @@ describe('runCycle → Firestore·Storage', () => {
     // 화면에 "일시정지 · 플랜 한도"로 보인다 (웹 API)
     const runs = (await api.getCycle(REF)).runs;
     expect(runs.find((r) => r.id === 'run-host-2')).toMatchObject({ status: 'paused', pauseReason: 'plan_limit' });
+  });
+
+  it('Run 토큰 한도에 닿으면 다음 케이스 전에 일시정지하고, 이어서 실행해도 앞서 쓴 토큰을 센다 (F-EX-12)', async () => {
+    const { db, api, sink } = await host(PEOPLE.lead, 'run-host-limit');
+    const tcIds = ['TC-ONBOARDING-004', 'TC-ONBOARDING-003'];
+    const start = (meter: UsageMeter) =>
+      runCycle({
+        api,
+        sink,
+        env: agentEnv(withUsage(replay, meter)),
+        ...REF,
+        deviceId: DEVICE,
+        runId: 'run-host-limit',
+        tcIds,
+        meter,
+        tokensPerRun: 1,
+      });
+    // 케이스 도중에는 끊지 않는다: 첫 케이스는 끝까지 돌고 결과를 올린 뒤, 두 번째를 시작하기 전에 멈춘다
+    const first = await start(new UsageMeter());
+    expect(first).toMatchObject({ status: 'paused', reason: 'run_limit' });
+    expect(first.results).toHaveLength(1);
+    expect((first as { message: string }).message).toMatch(/Run당 한도\(1\)/);
+    const run = (await getDoc(doc(db, 'projects/haru/cycles/cycle-130-1/runs/run-host-limit'))).data();
+    expect(run).toMatchObject({ status: 'paused', pauseReason: 'run_limit' });
+    // 새 미터로 이어서 실행해도 올린 결과의 토큰이 한도를 넘어 LLM을 부르지 않고 다시 멈춘다
+    const calls = vi.fn(replay.create);
+    const again = await runCycle({
+      api,
+      sink,
+      env: agentEnv({ create: calls }),
+      ...REF,
+      deviceId: DEVICE,
+      runId: 'run-host-limit',
+      tcIds,
+      skipDone: true,
+      tokensPerRun: 1,
+    });
+    expect(again).toMatchObject({ status: 'paused', reason: 'run_limit', results: [] });
+    expect(calls).not.toHaveBeenCalled();
   });
 
   it('실행 중 Claude Code가 없어지면 "설치 필요"로 일시정지한다 (로그인 필요와 구분)', async () => {
