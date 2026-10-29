@@ -1,5 +1,6 @@
 [
   { "name": "hosts-list", "path": "/hosts", "waitFor": "MacBook Pro" },
+  { "name": "hosts-list-outdated", "path": "/hosts?demo=host-outdated", "waitFor": "이전 버전이라" },
   {
     "name": "hosts-connect",
     "path": "/connect?port=51234&nonce=abcdefghijklmnopqrstuvwx&name=Jaesung%E2%80%99s%20MacBook%20Air",

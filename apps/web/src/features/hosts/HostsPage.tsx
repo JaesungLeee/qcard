@@ -7,7 +7,7 @@ import { useDisconnectHost, useHostConnections, useMyHosts } from '../../data/ho
 import { PlainShell } from '../../shell/PlainShell';
 import { ErrorMessage } from '../projects/parts';
 import '../projects/projects.css';
-import { CONNECT_COMMAND, connectedPcs, INSTALL_NOTE, type ConnectedPc } from './model';
+import { CONNECT_COMMAND, connectedPcs, INSTALL_COMMAND, INSTALL_NOTE, type ConnectedPc } from './model';
 import './hosts.css';
 
 /**
@@ -70,7 +70,13 @@ function PcRow({ pc }: { pc: ConnectedPc }) {
         <span className={`${textClass('label2')} qp-faint`}>
           {fmtDate(pc.connectedAt)} 연결
           {pc.lastSeen ? ` · 마지막 신호 ${fmtDateTime(pc.lastSeen)}` : ''}
+          {pc.version ? ` · 호스트 ${pc.version}` : ''}
         </span>
+        {pc.outdated && (
+          <span className={`${textClass('label2')} qp-muted`}>
+            이전 버전이라 Run을 실행할 수 없습니다. 그 PC에서 {INSTALL_COMMAND}로 업데이트한 뒤 다시 켜세요.
+          </span>
+        )}
         {confirm && (
           <span className={`${textClass('label2')} qp-muted`}>
             해제하면 이 PC는 바로 qcard에 접근할 수 없고, 아직 올리지 못한 결과는 올라가지 않습니다. 다시 쓰려면 그 PC에서 다시

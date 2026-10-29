@@ -874,7 +874,8 @@ export const Host = z.object({
    */
   consoleUrl: z.string().optional(),
   /** 이 호스트가 처리할 수 있는 작업 종류. 없으면 이 필드보다 오래된 호스트다 (QA 문서 생성·Run 시작만) */
-  jobs: z.array(z.string()).optional(),
+  jobs: z.array(z.string()).optional(),  /** 호스트 에이전트 버전 (`@qcard/host`). 없으면 이 필드보다 오래된 호스트다 (0.2.x 이하) */
+  version: z.string().optional(),
 });
 export type Host = z.infer<typeof Host>;
 
@@ -883,6 +884,24 @@ const LEGACY_HOST_JOBS: readonly string[] = ['qa_doc_generate', 'run_cycle'];
 /** 호스트가 이 종류의 작업을 처리하는가. 옛 호스트는 모르는 작업을 건너뛰어 영영 대기로 남는다 */
 export const hostHandles = (host: Pick<Host, 'jobs'>, kind: Job['kind']) =>
   (host.jobs ?? LEGACY_HOST_JOBS).includes(kind);
+/** "0.3.0"·"2.1.308" 같은 점 구분 버전끼리 비교. a가 낮으면 음수 */
+export function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+/**
+ * Run을 맡길 수 있는 가장 낮은 호스트 버전. 웹·Functions·보안 규칙과 호환되지 않게 바뀐 호스트 릴리스에서 올린다.
+ * 0.3.0: Run의 지금 칸(`currentTcId`)을 Functions(claimCell)만 정해서, 그 전 호스트는 첫 케이스에서 보안 규칙에 막힌다 (F-CY-06)
+ */
+export const MIN_HOST_VERSION = '0.3.0';
+/** 이 호스트로는 Run을 시작할 수 없다. 버전을 알리지 않는 호스트는 그 필드보다 오래된 것이다 */
+export const hostOutdated = (host: Pick<Host, 'version'>) =>
+  !host.version || compareVersions(host.version, MIN_HOST_VERSION) < 0;
 /** 이 시간 안에 신호가 있으면 연결된 것으로 본다 (호스트는 30초마다 갱신) */
 export const HOST_ONLINE_MS = 90_000;
 

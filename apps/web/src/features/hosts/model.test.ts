@@ -42,4 +42,26 @@ describe('connectedPcs', () => {
       ['c', false, undefined],
     ]);
   });
+
+  it('켜져 있는 호스트가 최소 버전보다 낮거나 버전을 알리지 않으면 업데이트가 필요하다', () => {
+    const now = Date.parse('2026-10-24T10:00:00Z');
+    const conn = (id: string) => ({ id, uid: 'u', name: id, connectedAt: '2026-10-20T00:00:00Z' });
+    const on = '2026-10-24T09:59:30Z';
+    const pcs = connectedPcs(
+      [conn('new'), conn('old'), conn('legacy'), conn('off')],
+      [
+        { id: 'new', name: 'new', lastSeen: on, version: '0.3.0' },
+        { id: 'old', name: 'old', lastSeen: on, version: '0.2.1' },
+        { id: 'legacy', name: 'legacy', lastSeen: on },
+        { id: 'off', name: 'off', lastSeen: '2026-10-24T09:00:00Z' },
+      ],
+      now,
+    );
+    expect(pcs.map((p) => [p.id, p.version, p.outdated])).toEqual([
+      ['new', '0.3.0', false],
+      ['old', '0.2.1', true],
+      ['legacy', undefined, true],
+      ['off', undefined, false],
+    ]);
+  });
 });

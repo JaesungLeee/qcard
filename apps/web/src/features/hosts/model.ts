@@ -1,4 +1,4 @@
-import { HOST_ONLINE_MS, type Host, type HostConnection } from '@qcard/shared';
+import { HOST_ONLINE_MS, hostOutdated, type Host, type HostConnection } from '@qcard/shared';
 
 /** 호스트 에이전트 설치 (npm 패키지 `@qcard/host`, 명령 `qcard`) */
 export const INSTALL_COMMAND = 'npm i -g @qcard/host';
@@ -23,17 +23,22 @@ export function parseConnectRequest(params: URLSearchParams): ConnectRequest | u
 /** 자격을 넘길 곳: 그 PC의 호스트 에이전트가 127.0.0.1에 잠깐 연 서버 (같은 PC의 브라우저만 닿는다) */
 export const pairEndpoint = (port: number) => `http://127.0.0.1:${port}/pair`;
 
-/** 연결된 PC + 지금 켜져 있는지 (호스트 연결 신호) */
-export type ConnectedPc = HostConnection & { online: boolean; lastSeen?: string };
+/**
+ * 연결된 PC + 지금 켜져 있는지 (호스트 연결 신호). outdated: 켜져 있는데 Run을 맡길 수 없는 이전 버전이다
+ */
+export type ConnectedPc = HostConnection & { online: boolean; lastSeen?: string; version?: string; outdated: boolean };
 
 export function connectedPcs(connections: HostConnection[], hosts: Host[], now = Date.now()): ConnectedPc[] {
-  const seen = new Map(hosts.map((h) => [h.id, h.lastSeen]));
+  const byId = new Map(hosts.map((h) => [h.id, h]));
   return connections.map((c) => {
-    const lastSeen = seen.get(c.id);
+    const host = byId.get(c.id);
+    const online = !!host && now - Date.parse(host.lastSeen) < HOST_ONLINE_MS;
     return {
       ...c,
-      online: !!lastSeen && now - Date.parse(lastSeen) < HOST_ONLINE_MS,
-      ...(lastSeen ? { lastSeen } : {}),
+      online,
+      ...(host ? { lastSeen: host.lastSeen } : {}),
+      ...(host?.version ? { version: host.version } : {}),
+      outdated: online && hostOutdated(host),
     };
   });
 }

@@ -1,12 +1,12 @@
 import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { compareVersions } from '@qcard/shared';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   assertClaudeCodeReady,
   claudeCodeStatus,
   cliError,
-  compareVersions,
   learnMinVersion,
   modelLabel,
   requiredClaudeCodeVersion,

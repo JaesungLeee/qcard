@@ -39,11 +39,16 @@ describe('worstVerdict', () => {
 });
 
 describe('웹에서 내 호스트로 Run 시작 (runLaunch)', () => {
-  const host = (devices: { model: string; osMajor: number }[], lastSeen = new Date().toISOString()) => ({
+  const host = (
+    devices: { model: string; osMajor: number }[],
+    lastSeen = new Date().toISOString(),
+    version: string | null = '0.3.0',
+  ) => ({
     id: 'h1',
     name: '내 맥',
     lastSeen,
     devices: devices.map((x, i) => ({ serial: `s${i}`, ...x })),
+    ...(version ? { version } : {}),
   });
   it('호스트가 꺼져 있거나 폰이 대상이 아니면 실행할 수 없다', async () => {
     const d = await load();
@@ -68,6 +73,15 @@ describe('웹에서 내 호스트로 Run 시작 (runLaunch)', () => {
     // 다른 사람의 일시정지 Run은 이어서 실행 대상이 아니다
     const other = runLaunch(d, [host([{ model: 'Pixel 8', osMajor: 16 }])], '김민지');
     expect(other.state === 'ready' && other.paused).toBeFalsy();
+  });
+  it('Run을 맡을 호스트가 최소 버전보다 낮거나 버전을 알리지 않으면 업데이트부터 안내한다', async () => {
+    const d = await load();
+    const p8 = [{ model: 'Pixel 8', osMajor: 16 }];
+    const at = new Date().toISOString();
+    expect(runLaunch(d, [host(p8, at, '0.2.1')], '이재성').state).toBe('outdated');
+    expect(runLaunch(d, [host(p8, at, null)], '이재성').state).toBe('outdated');
+    expect(runLaunch(d, [host(p8, at, '0.3.1')], '이재성').state).toBe('ready');
+    expect(runLaunch(d, [host(p8, at, '0.10.0')], '이재성').state).toBe('ready');
   });
 });
 
