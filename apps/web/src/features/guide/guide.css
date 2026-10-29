@@ -1,0 +1,105 @@
+/* 시작 가이드. 기본 문서 모양은 ../legal/legal.css, 색은 --qc-* 토큰만 쓴다. */
+.qg-doc {
+  max-width: 880px;
+}
+.qg-shot {
+  margin: var(--qc-space-4) 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--qc-space-6);
+}
+.qg-shot img {
+  /* 요소만 찍은 작은 그림은 원래 크기로, 첫 화면 그림은 본문 폭에 맞춘다 */
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--qc-line-neutral-secondary);
+  border-radius: var(--qc-radius-12);
+}
+.qg-shot-dark {
+  display: none;
+}
+:root[data-theme='dark'] .qg-shot-light {
+  display: none;
+}
+:root[data-theme='dark'] .qg-shot-dark {
+  display: block;
+}
+.qg-ui {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.qg-ui::before {
+  content: '[';
+  font-weight: 400;
+}
+.qg-ui::after {
+  content: ']';
+  font-weight: 400;
+}
+.ql-body ol.qg-steps {
+  margin: 0;
+  padding-left: var(--qc-space-20);
+  list-style: decimal;
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-6);
+}
+.qg-note {
+  padding: var(--qc-space-12) var(--qc-space-16);
+  border-radius: var(--qc-radius-12);
+  background: var(--qc-surface-neutral-tertiary);
+  color: var(--qc-foreground-neutral-secondary);
+}
+.qg-pre {
+  margin: 0;
+  padding: var(--qc-space-12) var(--qc-space-16);
+  border-radius: var(--qc-radius-12);
+  background: var(--qc-surface-neutral-tertiary);
+  overflow-x: auto;
+}
+.qg-pre code {
+  font-family: var(--qc-font-mono);
+}
+.qg-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.qg-table th,
+.qg-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--qc-space-8) var(--qc-space-12);
+  border-top: 1px solid var(--qc-line-neutral-tertiary);
+}
+.qg-table th {
+  white-space: nowrap;
+}
+.qg-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--qc-line-neutral-secondary);
+  border-radius: var(--qc-radius-12);
+}
+.qg-table tr:first-child th,
+.qg-table tr:first-child td {
+  border-top: 0;
+}
+
+@media (max-width: 600px) {
+  .qg-table tr {
+    display: flex;
+    flex-direction: column;
+    padding: var(--qc-space-8) var(--qc-space-12);
+    border-top: 1px solid var(--qc-line-neutral-tertiary);
+  }
+  .qg-table tr:first-child {
+    border-top: 0;
+  }
+  .qg-table th,
+  .qg-table td {
+    padding: 0;
+    border-top: 0;
+    white-space: normal;
+  }
+}

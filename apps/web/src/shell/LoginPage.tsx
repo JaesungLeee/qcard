@@ -86,6 +86,13 @@ export function LoginPage() {
           </Link>
           에 동의하게 됩니다.
         </span>
+        <span className={`${textClass('caption1')} qp-faint`}>
+          처음이라면{' '}
+          <Link to="/guide" className="qp-link">
+            시작 가이드
+          </Link>
+          에서 준비물과 순서를 볼 수 있습니다.
+        </span>
         {error && (
           <SectionMessage variant="negative" description={error}>
             로그인하지 못했습니다

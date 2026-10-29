@@ -50,6 +50,8 @@ callable 함수의 공개 호출 권한(Cloud Run Invoker `allUsers`)은 CLI가 
 
 개인정보처리방침 `/privacy`·이용약관 `/terms`는 로그인 없이 열린다. 시행일(`apps/web/src/features/legal/policy.ts`의 `EFFECTIVE_DATE`)이 비어 있으면 두 문서는 "초안"으로 보이므로 공개 출시 릴리스에서 채운다. 데이터 처리 방식(수집 항목·보관 위치·삭제)을 바꾸면 `PrivacyPage.tsx`도 함께 고친다.
 
+시작 가이드 `/guide`·스펙 작성 규칙 `/guide/spec`(`apps/web/src/features/guide/`)도 로그인 없이 열린다. 화면 흐름·버튼 이름을 바꾸면 가이드 문구와 스크린샷을 함께 고친다: `pnpm --filter @qcard/web guide:shots`가 `public/guide/*.jpg`를 다시 찍고(공개 화면이라 테스트 데이터의 운영자 실명은 가상 이름으로 바꿔 찍는다), 스펙 파서 형식을 바꾸면 `/guide/spec`을, 하루콩 스펙을 바꾸면 `guide:example`로 예시 ZIP을 다시 만든다.
+
 ## 데이터 옮기기
 
 ### 준비 플로우를 QA 문서 버전별로 (PRD v0.17)
