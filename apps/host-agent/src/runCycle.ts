@@ -2,16 +2,9 @@ import { blockedCase, runCase, RunAbortedError, type AccountIssue, type AgentEnv
 import type { QcardApi } from '@qcard/data';
 import { ClaudeCodeSetupError, PlanLimitError, type UsageMeter } from '@qcard/llm';
 import { DeviceDisconnectedError } from '@qcard/device';
-import {
-  RUN_HEARTBEAT_MS,
-  RUN_STALE_MS,
-  type CaseResult,
-  type CellSkip,
-  type PauseReason,
-  type TestCase,
-} from '@qcard/shared';
+import { RUN_HEARTBEAT_MS, type CaseResult, type CellSkip, type PauseReason, type TestCase } from '@qcard/shared';
 import { RunAccounts, type AccountLeaser } from './accounts';
-import { skipText, type CellClaimer } from './cells';
+import { CellLease, LEASE_LOST_MS, skipText, type CellClaimer } from './cells';
 import { isTransient } from './queue';
 import type { RunSink } from './sink';
 
@@ -30,11 +23,6 @@ const DISCONNECTED = '디바이스 연결이 끊겼습니다. USB를 다시 연�
 const OFFLINE = '네트워크가 끊겨 다음 칸을 잡지 못했습니다. 연결을 확인한 뒤 이어서 실행하세요';
 /** 칸을 잡기 전에 앞 케이스의 결과·증거를 올리며 기다리는 시간 */
 const CLAIM_DRAIN_MS = 60_000;
-/**
- * 마지막으로 보낸 연결 신호가 이만큼 지나면 칸을 잃은 것으로 본다. 다른 Run은 RUN_STALE_MS가 지나야 가져가지만,
- * 신호 한 번만큼 먼저 멈춘다 (PC 간 시계 차이·요청 지연 여유)
- */
-export const LEASE_LOST_MS = RUN_STALE_MS - RUN_HEARTBEAT_MS;
 const LEASE_LOST = `연결 신호가 ${LEASE_LOST_MS / 1000}초 넘게 끊겨(네트워크 끊김·PC 절전) 다른 실행자가 이 칸을 가져갔을 수 있습니다. 진행 중 케이스 결과는 버렸습니다. 이어서 실행하세요`;
 
 export type RunCycleInput = {
@@ -126,21 +114,11 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
       throw e;
     }
   };
-  // 칸 리스 (F-CY-06): 마지막으로 남긴 연결 신호(잡기 포함)의 시각. 한 번 잃으면 다음 칸을 잡을 때까지 잃은 채로 둔다 —
-  // 절전에서 깨어나 신호가 다시 성공해도, 자는 동안 다른 Run이 가져갔을 수 있다
+  // 칸 리스 (F-CY-06)
   const now = input.now ?? Date.now;
-  let signaledAt = now();
-  let lost = false;
-  const leaseLost = () => {
-    if (input.cells && !lost && now() - signaledAt > LEASE_LOST_MS) lost = true;
-    return lost;
-  };
-  const beat = async () => {
-    const at = now();
-    leaseLost();
-    await sink.heartbeat();
-    if (!lost) signaledAt = at;
-  };
+  const lease = input.cells ? new CellLease(now) : undefined;
+  const leaseLost = () => !!lease?.lost();
+  const beat = () => (lease ? lease.beat(() => sink.heartbeat()) : sink.heartbeat());
   /** 칸을 잡는다. 건너뛸 이유, 온라인이 아니면 'offline' */
   const claimCell = async (tc: TestCase): Promise<CellSkip | 'offline' | undefined> => {
     if (!input.cells) return undefined;
@@ -149,9 +127,7 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
     try {
       const at = now();
       const r = await input.cells.claim({ projectId, cycleId, runId: input.runId, tcId: tc.tcId, rerun: !!input.tcIds });
-      // 잡기는 서버가 연결 신호도 남긴다
-      signaledAt = at;
-      lost = false;
+      lease?.claimed(at);
       return r.claimed ? undefined : r.skip;
     } catch (e) {
       if (isTransient(e)) return 'offline';
