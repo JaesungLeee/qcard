@@ -3,7 +3,8 @@ import { MembershipError, requireEditor, type Actor } from './membership';
 
 /*
  * 준비 플로우 편집 규칙 (F-PF-01). 메모리 구현·Firestore 구현·Cloud Functions(삭제)가 같은 함수를 쓰고,
- * 화면은 삭제를 막는 이유를 미리 보인다. 준비 플로우는 사이클 스냅샷에 들어가지 않아 고친 내용은 다음 Run부터 적용된다.
+ * 화면은 삭제를 막는 이유를 미리 보인다. 플로우는 QA 문서 버전마다 사본을 두어 편집은 그 버전에만 적용되고,
+ * 사이클 스냅샷에는 들어가지 않아 그 버전으로 만든 사이클에는 다음 Run부터 적용된다.
  */
 
 const rule = (m: string) => new MembershipError('rule', m);
@@ -74,32 +75,55 @@ export function prepFlowChange(
 
 /** 플로우를 참조하는 케이스 하나: QA 문서의 케이스이거나, 완료되지 않은 사이클의 케이스 사본 */
 export type PrepFlowUse = { tcId: string } & (
-  | { in: 'doc'; docId: string; appVersion: string }
-  | { in: 'cycle'; cycleId: string; cycleName: string }
+  { in: 'doc'; docId: string; appVersion: string } | { in: 'cycle'; cycleId: string; cycleName: string }
 );
 
 const refs = (c: TestCase) => [...c.prepFlowIds, ...(c.restoreFlowId ? [c.restoreFlowId] : [])];
+const active = (cases: TestCase[]) => cases.filter((c) => c.change !== 'removed');
 
 /**
- * 플로우별 사용처: 모든 QA 문서 버전의 활성 케이스 + 완료되지 않은 사이클의 케이스 사본.
- * 옛 QA 문서로 사이클을 다시 만들거나 진행 중 사이클의 다음 Run이 플로우를 찾지 못하는 일이 없게 넓게 본다
+ * 새 QA 문서가 이전 버전에서 이어받을 플로우 (F-QD-08): 활성 케이스가 참조하는 것만, 목록 순서 그대로.
+ * 쓰이지 않게 된 플로우는 이전 버전에만 남는다
+ */
+export function flowsUsedBy(flows: PrepFlow[], cases: TestCase[]): PrepFlow[] {
+  const used = new Set(active(cases).flatMap(refs));
+  return flows.filter((f) => used.has(f.id));
+}
+
+/**
+ * 프로젝트 공용 목록(PRD v0.16까지)을 QA 문서 버전별 사본으로 나눈다: 그 버전의 케이스가 참조하는 플로우를 버전마다,
+ * 어느 케이스도 참조하지 않는 플로우(사람이 만들고 아직 연결하지 않은 것)는 최신 버전에. 문서가 없으면 빈 결과
+ */
+export function splitPrepFlowsByDoc(
+  flows: PrepFlow[],
+  docs: { id: string; createdAt: string; cases: TestCase[] }[],
+): Record<string, PrepFlow[]> {
+  const latest = [...docs].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  if (!latest) return {};
+  const out: Record<string, PrepFlow[]> = Object.fromEntries(docs.map((d) => [d.id, flowsUsedBy(flows, d.cases)]));
+  const used = new Set(Object.values(out).flatMap((fs) => fs.map((f) => f.id)));
+  const own = out[latest.id]!;
+  out[latest.id] = flows.filter((f) => own.includes(f) || !used.has(f.id));
+  return out;
+}
+
+/**
+ * QA 문서 한 버전의 플로우별 사용처: 그 버전의 활성 케이스 + 그 버전으로 만든 완료되지 않은 사이클의 케이스 사본.
+ * 진행 중 사이클의 다음 Run이 플로우를 찾지 못하는 일이 없게 사이클 사본도 본다
  */
 export function prepFlowUses(
-  docs: { id: string; appVersion: string; createdAt: string; cases: TestCase[] }[],
+  doc: { id: string; appVersion: string; cases: TestCase[] },
   cycles: { cycle: TestCycle; cases: TestCase[] }[],
 ): Record<string, PrepFlowUse[]> {
   const out: Record<string, PrepFlowUse[]> = {};
   const add = (id: string, use: PrepFlowUse) => (out[id] ??= []).push(use);
-  // 새 QA 문서·사이클 먼저 (읽는 순서와 상관없이 같은 결과)
-  const newest = <T>(xs: T[], at: (x: T) => string) => [...xs].sort((a, b) => at(b).localeCompare(at(a)));
-  for (const d of newest(docs, (d) => d.createdAt)) {
-    for (const c of d.cases) {
-      if (c.change === 'removed') continue;
-      for (const id of new Set(refs(c))) add(id, { tcId: c.tcId, in: 'doc', docId: d.id, appVersion: d.appVersion });
-    }
+  for (const c of active(doc.cases)) {
+    for (const id of new Set(refs(c))) add(id, { tcId: c.tcId, in: 'doc', docId: doc.id, appVersion: doc.appVersion });
   }
-  for (const { cycle, cases } of newest(cycles, (c) => c.cycle.period.start)) {
-    if (!cycleUsesFlows(cycle)) continue;
+  // 새 사이클 먼저 (읽는 순서와 상관없이 같은 결과)
+  const newest = [...cycles].sort((a, b) => b.cycle.period.start.localeCompare(a.cycle.period.start));
+  for (const { cycle, cases } of newest) {
+    if (cycle.docId !== doc.id || !cycleUsesFlows(cycle)) continue;
     for (const c of cases) {
       for (const id of new Set(refs(c))) {
         add(id, { tcId: c.tcId, in: 'cycle', cycleId: cycle.id, cycleName: cycle.name });

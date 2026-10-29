@@ -86,21 +86,22 @@ export interface QcardApi {
   /** 스펙 확인 질문 처리 (F-QD-03): 답변하거나 "현 스펙대로 진행"으로 보류 해제 */
   resolveQuestion(ref: DocRef, questionId: string, resolution: QuestionResolution): Promise<void>;
   commentQuestion(ref: DocRef, questionId: string, text: string): Promise<void>;
-  listPrepFlows(projectId: string): Promise<PrepFlow[]>;
+  /** QA 문서 한 버전의 준비 플로우 (F-PF-01). 버전마다 사본이라 편집·삭제도 그 버전에만 적용된다 */
+  listPrepFlows(ref: DocRef): Promise<PrepFlow[]>;
   /**
-   * 플로우별 사용처 (F-PF-01): 모든 QA 문서 버전의 활성 케이스 + 완료되지 않은 사이클의 케이스 사본 (`prepFlowUses`).
+   * 플로우별 사용처: 그 버전의 활성 케이스 + 그 버전으로 만든 완료되지 않은 사이클의 케이스 사본 (`prepFlowUses`).
    * 사용처가 있으면 삭제할 수 없다
    */
-  listPrepFlowUses(projectId: string): Promise<Record<string, PrepFlowUse[]>>;
-  /** 준비 플로우 추가 (F-PF-01). Admin·QA만. 이름·확인 조건이 비거나 `env`가 아닌데 스텝이 없으면 `RuleError` */
-  createPrepFlow(projectId: string, input: PrepFlowInput): Promise<PrepFlow>;
+  listPrepFlowUses(ref: DocRef): Promise<Record<string, PrepFlowUse[]>>;
+  /** 준비 플로우 추가. Admin·QA만. 이름·확인 조건이 비거나 `env`가 아닌데 스텝이 없으면 `RuleError` */
+  createPrepFlow(ref: DocRef, input: PrepFlowInput): Promise<PrepFlow>;
   /**
    * 준비 플로우 편집. `expectedRev`가 최신이 아니면 `PrepFlowConflictError`. 사이클에 고정되지 않아
-   * 진행 중인 사이클도 다음 Run부터 바뀐 내용으로 준비한다. Admin·QA만
+   * 그 버전으로 만든 진행 중인 사이클도 다음 Run부터 바뀐 내용으로 준비한다. Admin·QA만
    */
-  updatePrepFlow(projectId: string, flowId: string, input: PrepFlowInput, expectedRev: number): Promise<PrepFlow>;
+  updatePrepFlow(ref: DocRef, flowId: string, input: PrepFlowInput, expectedRev: number): Promise<PrepFlow>;
   /** 준비 플로우 삭제. 케이스가 참조 중이면 `RuleError`(`prepFlowDeleteBlocker`). Admin·QA만 */
-  deletePrepFlow(projectId: string, flowId: string): Promise<void>;
+  deletePrepFlow(ref: DocRef, flowId: string): Promise<void>;
 
   /** 테스트 계정 (F-PF-04·08). 상태(사용 중·로그인 실패·격리)와 함께, 로그인 ID 순. 비밀값은 없다 */
   listAccounts(projectId: string): Promise<AccountView[]>;

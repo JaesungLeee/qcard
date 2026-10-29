@@ -516,6 +516,10 @@
 }
 
 /* 준비 플로우 */
+.qd-flow-version {
+  max-width: 420px;
+  margin-bottom: var(--qc-space-16);
+}
 .qd-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));

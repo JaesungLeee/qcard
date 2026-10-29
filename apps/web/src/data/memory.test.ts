@@ -380,45 +380,48 @@ describe('QA 문서 생성 요청 (PRD §5.2)', () => {
 });
 
 describe('준비 플로우 편집 (F-PF-01)', () => {
+  const ref = { projectId: 'haru', docId: 'doc-130' };
   const input = { name: '로그인 상태', kind: 'login' as const, check: '홈 탭이 보인다', steps: ['[로그인]'] };
 
   it('추가·편집하면 목록에 보이고 rev가 오른다. Viewer는 못 한다', async () => {
     const api = createMemoryApi();
-    const made = await api.createPrepFlow('haru', input);
+    const made = await api.createPrepFlow(ref, input);
     expect(made).toMatchObject({ id: 'pf-login', rev: 1, updatedBy: PEOPLE.lead });
-    const saved = await api.updatePrepFlow('haru', made.id, { ...input, steps: ['[로그인]', '홈 탭 확인'] }, 1);
+    const saved = await api.updatePrepFlow(ref, made.id, { ...input, steps: ['[로그인]', '홈 탭 확인'] }, 1);
     expect(saved.rev).toBe(2);
-    expect((await api.listPrepFlows('haru')).at(-1)).toEqual(saved);
-    expect(await api.listPrepFlows('moabook')).toEqual([]);
+    expect((await api.listPrepFlows(ref)).at(-1)).toEqual(saved);
+    // 버전마다 사본이라 다른 버전에는 생기지 않는다
+    expect((await api.listPrepFlows({ ...ref, docId: 'doc-120' })).map((f) => f.id)).not.toContain(made.id);
     api.switchUser(PEOPLE.planner);
-    await expect(api.createPrepFlow('haru', input)).rejects.toBeInstanceOf(PermissionError);
-    await expect(api.updatePrepFlow('haru', made.id, input, 2)).rejects.toBeInstanceOf(PermissionError);
+    await expect(api.createPrepFlow(ref, input)).rejects.toBeInstanceOf(PermissionError);
+    await expect(api.updatePrepFlow(ref, made.id, input, 2)).rejects.toBeInstanceOf(PermissionError);
   });
 
   it('스텝이 없으면 RuleError', async () => {
     const api = createMemoryApi();
-    await expect(api.createPrepFlow('haru', { ...input, steps: [] })).rejects.toBeInstanceOf(RuleError);
+    await expect(api.createPrepFlow(ref, { ...input, steps: [] })).rejects.toBeInstanceOf(RuleError);
   });
 
   it('다른 사람이 먼저 저장했으면 PrepFlowConflictError로 최신 내용을 돌려준다', async () => {
     const api = createMemoryApi();
-    await api.updatePrepFlow('haru', 'pf-done', { ...input, kind: 'data_state', name: '먼저' }, 0);
-    const err = await api.updatePrepFlow('haru', 'pf-done', { ...input, name: '나중' }, 0).catch((e) => e);
+    await api.updatePrepFlow(ref, 'pf-done', { ...input, kind: 'data_state', name: '먼저' }, 0);
+    const err = await api.updatePrepFlow(ref, 'pf-done', { ...input, name: '나중' }, 0).catch((e) => e);
     expect(err).toBeInstanceOf(PrepFlowConflictError);
     expect((err as PrepFlowConflictError).latest).toMatchObject({ name: '먼저', rev: 1 });
   });
 
   it('케이스가 쓰는 플로우는 지우지 못하고, 안 쓰는 플로우는 지운다', async () => {
     const api = createMemoryApi();
-    const uses = await api.listPrepFlowUses('haru');
-    expect(uses['pf-clean']!.some((u) => u.in === 'doc' && u.docId === 'doc-120')).toBe(true);
+    const uses = await api.listPrepFlowUses(ref);
+    expect(uses['pf-clean']!.some((u) => u.in === 'doc' && u.docId === 'doc-130')).toBe(true);
+    expect(uses['pf-clean']!.every((u) => u.in === 'doc' || u.cycleId.startsWith('cycle-130'))).toBe(true);
     expect(uses['pf-clean']!.some((u) => u.in === 'cycle')).toBe(true);
-    await expect(api.deletePrepFlow('haru', 'pf-clean')).rejects.toThrow(/케이스가 사용 중/);
-    const made = await api.createPrepFlow('haru', input);
+    await expect(api.deletePrepFlow(ref, 'pf-clean')).rejects.toThrow(/케이스가 사용 중/);
+    const made = await api.createPrepFlow(ref, input);
     api.switchUser(PEOPLE.planner);
-    await expect(api.deletePrepFlow('haru', made.id)).rejects.toBeInstanceOf(PermissionError);
+    await expect(api.deletePrepFlow(ref, made.id)).rejects.toBeInstanceOf(PermissionError);
     api.switchUser(PEOPLE.lead);
-    await api.deletePrepFlow('haru', made.id);
-    expect((await api.listPrepFlows('haru')).map((f) => f.id)).not.toContain(made.id);
+    await api.deletePrepFlow(ref, made.id);
+    expect((await api.listPrepFlows(ref)).map((f) => f.id)).not.toContain(made.id);
   });
 });

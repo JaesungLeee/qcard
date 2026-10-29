@@ -34,7 +34,7 @@ import type {
   QaDocJobEvent,
   QaDocJobSpec,
 } from '@qcard/shared';
-import { CaseBody as CaseBodySchema, hash } from '@qcard/shared';
+import { CaseBody as CaseBodySchema, hash, splitPrepFlowsByDoc } from '@qcard/shared';
 import { rowHash } from '@qcard/spec';
 import raw from './data/onboarding-flow.json';
 import generatedPoints from './data/onboarding-points.json';
@@ -1625,7 +1625,8 @@ export type FixtureDb = {
   results: Record<string, CaseResult[]>;
   defects: Record<string, Defect[]>;
   runs: Record<string, Run[]>;
-  prepFlows: PrepFlow[];
+  /** QA 문서 id → 그 버전의 준비 플로우 (F-PF-01, 버전마다 사본) */
+  prepFlows: Record<string, PrepFlow[]>;
   jobs: Job[];
   /** 작업 id → 생성 진행 */
   jobParts: Record<string, JobParts>;
@@ -1651,7 +1652,7 @@ export function createFixtureDb(): FixtureDb {
     results: { [cycle130.id]: results130, [cycle130Prod.id]: results130Prod, [cycle121.id]: results121 },
     defects: { [cycle130.id]: defects130, [cycle130Prod.id]: [], [cycle121.id]: defects121 },
     runs: { [cycle130.id]: runs130, [cycle130Prod.id]: [], [cycle121.id]: [] },
-    prepFlows: PREP_FLOWS,
+    prepFlows: splitPrepFlowsByDoc(PREP_FLOWS, [qaDocV130, qaDocV120]),
     jobs,
     jobParts,
     console: consoleSession(),

@@ -33,8 +33,9 @@ export const keys = {
   invitation: (token: string) => ['invitation', token] as const,
   qaDocs: (projectId: string) => ['qaDocs', projectId] as const,
   qaDoc: (projectId: string, docId: string) => ['qaDoc', projectId, docId] as const,
-  prepFlows: (projectId: string) => ['prepFlows', projectId] as const,
-  prepFlowUses: (projectId: string) => ['prepFlowUses', projectId] as const,
+  /** docId 없이 쓰면 그 프로젝트의 모든 버전 (무효화용) */
+  prepFlows: (projectId: string, docId?: string) => ['prepFlows', projectId, ...(docId ? [docId] : [])] as const,
+  prepFlowUses: (projectId: string, docId: string) => ['prepFlowUses', projectId, docId] as const,
   cycles: (projectId: string) => ['cycles', projectId] as const,
   cycle: (projectId: string, cycleId: string) => ['cycle', projectId, cycleId] as const,
   console: ['console'] as const,
@@ -123,42 +124,48 @@ export function useQaDoc(projectId: string, docId: string, enabled = true) {
   });
 }
 
-export function usePrepFlows(projectId: string) {
+/** QA 문서 한 버전의 준비 플로우 (F-PF-01, 버전마다 사본). docId가 없으면 읽지 않는다 */
+export function usePrepFlows(projectId: string, docId: string | undefined) {
   const api = useApi();
-  return useQuery({ queryKey: keys.prepFlows(projectId), queryFn: () => api.listPrepFlows(projectId) });
-}
-
-/** 플로우별 사용처 (모든 QA 문서 버전 + 완료되지 않은 사이클) */
-export function usePrepFlowUses(projectId: string) {
-  const api = useApi();
-  // 케이스 편집·사이클 만들기로 바뀌므로 화면을 열 때마다 다시 읽는다
   return useQuery({
-    queryKey: keys.prepFlowUses(projectId),
-    queryFn: () => api.listPrepFlowUses(projectId),
-    staleTime: 0,
+    queryKey: keys.prepFlows(projectId, docId ?? ''),
+    queryFn: () => api.listPrepFlows({ projectId, docId: docId! }),
+    enabled: !!docId,
   });
 }
 
-function usePrepFlowMutation<T, R = unknown>(projectId: string, fn: (api: QcardApi, input: T) => Promise<R>) {
+/** 플로우별 사용처 (그 버전의 케이스 + 그 버전으로 만든 완료되지 않은 사이클) */
+export function usePrepFlowUses(projectId: string, docId: string) {
+  const api = useApi();
+  // 케이스 편집·사이클 만들기로 바뀌므로 화면을 열 때마다 다시 읽는다
+  return useQuery({
+    queryKey: keys.prepFlowUses(projectId, docId),
+    queryFn: () => api.listPrepFlowUses({ projectId, docId }),
+    staleTime: 0,
+    enabled: !!docId,
+  });
+}
+
+function usePrepFlowMutation<T, R = unknown>(ref: DocRef, fn: (api: QcardApi, input: T) => Promise<R>) {
   const api = useApi();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: T) => fn(api, input),
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: keys.prepFlows(projectId) });
-      void qc.invalidateQueries({ queryKey: keys.prepFlowUses(projectId) });
+      void qc.invalidateQueries({ queryKey: keys.prepFlows(ref.projectId, ref.docId) });
+      void qc.invalidateQueries({ queryKey: keys.prepFlowUses(ref.projectId, ref.docId) });
     },
   });
 }
 
-export const useCreatePrepFlow = (projectId: string) =>
-  usePrepFlowMutation(projectId, (api, v: PrepFlowInput) => api.createPrepFlow(projectId, v));
-export const useUpdatePrepFlow = (projectId: string) =>
-  usePrepFlowMutation(projectId, (api, v: { id: string; input: PrepFlowInput; expectedRev: number }) =>
-    api.updatePrepFlow(projectId, v.id, v.input, v.expectedRev),
+export const useCreatePrepFlow = (ref: DocRef) =>
+  usePrepFlowMutation(ref, (api, v: PrepFlowInput) => api.createPrepFlow(ref, v));
+export const useUpdatePrepFlow = (ref: DocRef) =>
+  usePrepFlowMutation(ref, (api, v: { id: string; input: PrepFlowInput; expectedRev: number }) =>
+    api.updatePrepFlow(ref, v.id, v.input, v.expectedRev),
   );
-export const useDeletePrepFlow = (projectId: string) =>
-  usePrepFlowMutation(projectId, (api, id: string) => api.deletePrepFlow(projectId, id));
+export const useDeletePrepFlow = (ref: DocRef) =>
+  usePrepFlowMutation(ref, (api, id: string) => api.deletePrepFlow(ref, id));
 
 /** 사이클 목록: 진행률만 보면 돼서 사이클마다 구독하지 않고 15초마다 다시 읽는다 */
 export function useCycles(projectId: string) {
