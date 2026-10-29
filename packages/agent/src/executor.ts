@@ -7,6 +7,7 @@ import {
   EnvActionUnavailableError,
   findElement,
   UnsupportedInputError,
+  type DeviceInfo,
   type Point,
 } from '@qcard/device';
 import {
@@ -463,7 +464,7 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
       const at = clock.now();
       const before = last.screenshot;
       try {
-        const step = await act(env, call, last, info.size);
+        const step = await act(env, call, last, info);
         record({ ...step, ...(risk ? { risk } : {}), screenshot: before, durationMs: clock.now() - at }, at);
         if (call.name !== 'wait') operated.add(pointer);
         thought(env, start, 'act', `${call.name} · ${step.intent}`);
@@ -521,7 +522,7 @@ async function act(
   env: AgentEnv,
   call: Call,
   o: Observation,
-  size: { w: number; h: number },
+  { size, connection }: DeviceInfo,
 ): Promise<Omit<ExecStep, 'index' | 'videoTs' | 'caseStepIndex' | 'screenshot' | 'durationMs'>> {
   const d = env.device;
   const resolve = (ref: string) => {
@@ -589,6 +590,12 @@ async function act(
     case 'set_network': {
       if (!env.allowNetworkToggle) throw new ActionInputError('이 실행에서는 네트워크 조작이 허용되지 않습니다');
       const { wifi, data } = call.input;
+      // 네트워크를 끄는 케이스는 USB 연결에서만 (F-EX-16). 기기를 건드리기 전에 막는다 — 켜기만 하는 것은 그대로
+      if (connection === 'wifi' && (!wifi || !data)) {
+        throw new EnvActionUnavailableError(
+          'Wi-Fi ADB로 연결된 디바이스에서는 네트워크를 끌 수 없습니다 (USB 연결 필요)',
+        );
+      }
       await d.setNetwork('wifi', wifi);
       await d.setNetwork('data', data);
       return {

@@ -310,6 +310,41 @@ describe('Executor 루프', () => {
     expect(r2.steps[0]).toMatchObject({ action: 'env', input: 'Wi-Fi 끔 · 데이터 끔' });
   });
 
+  it('Wi-Fi ADB 디바이스에서 네트워크를 끄려 하면 기기를 건드리지 않고 Blocked, 켜기는 그대로 (F-EX-16)', async () => {
+    for (const input of [
+      { wifi: true, data: false },
+      { wifi: false, data: true },
+      { wifi: false, data: false },
+    ]) {
+      const device = new FakeDevice({ ...onboardingScenario('wifi'), start: 'mate-invite' });
+      const { llm, env } = setup('mate-invite', [[toolUse('set_network', { ...input, intent: '네트워크 끊기' })]], {
+        device,
+        allowNetworkToggle: true,
+      });
+      const r = await runSteps(env, { caseId: 'TC-1', steps: steps('네트워크 끊기'), context: '' });
+      expect(r).toMatchObject({
+        status: 'blocked',
+        reason: '환경 조작 불가: Wi-Fi ADB로 연결된 디바이스에서는 네트워크를 끌 수 없습니다 (USB 연결 필요)',
+      });
+      expect(device.log.filter((l) => l.startsWith('network'))).toEqual([]);
+      expect(device.state.network).toEqual({ wifi: true, data: true });
+      expect(llm.requests).toHaveLength(1);
+    }
+
+    const device = new FakeDevice({ ...onboardingScenario('wifi'), start: 'mate-invite' });
+    const on = setup(
+      'mate-invite',
+      [
+        [toolUse('set_network', { wifi: true, data: true, intent: '네트워크 다시 켜기' })],
+        [toolUse('step_done', { case_step_index: 0, summary: '' })],
+      ],
+      { device, allowNetworkToggle: true },
+    );
+    const r = await runSteps(on.env, { caseId: 'TC-1', steps: steps('네트워크 켜기'), context: '' });
+    expect(r.status).toBe('done');
+    expect(device.log.filter((l) => l.startsWith('network'))).toEqual(['network wifi on', 'network data on']);
+  });
+
   it('대상 앱 밖(런처) 화면은 트리 내용 대신 "앱 밖" 요소 하나만 보낸다', async () => {
     const { llm, env } = setup('launcher', [[toolUse('step_done', { case_step_index: 0, summary: '' })]]);
     await runSteps(env, { caseId: 'TC-1', steps: steps('확인'), context: '' });
