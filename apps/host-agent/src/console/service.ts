@@ -40,6 +40,8 @@ export type ConsoleServiceDeps = {
   awakeDir?: string;
   /** 테스트 계정 배정·반납 (F-PF-04) */
   accounts?: CycleRunDeps['accounts'];
+  /** 칸 자동 선점 (F-CY-06) */
+  cells?: CycleRunDeps['cells'];
 };
 
 export class ConsoleService implements ConsoleBackend {
@@ -272,6 +274,7 @@ export class ConsoleService implements ConsoleBackend {
           env: this.deps.env,
           awakeDir: this.deps.awakeDir,
           accounts: this.deps.accounts,
+          cells: this.deps.cells,
         },
         {
           projectId: m.projectId,

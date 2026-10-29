@@ -7,6 +7,7 @@ import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { MembershipError } from '@qcard/shared';
 import * as acc from './accounts';
+import * as cells from './cells';
 import * as h from './handlers';
 import { kmsBox, localBox, type SecretBox } from './secretBox';
 
@@ -97,6 +98,9 @@ export const deleteAccount = call(acc.deleteAccount);
 export const clearAccountFlag = call(acc.clearAccountFlag);
 export const claimAccount = call(acc.claimAccount, { allowHost: true });
 export const releaseAccount = call(acc.releaseAccount, { allowHost: true });
+
+// 칸 자동 선점 (F-CY-06): 케이스를 시작하기 전에 실행 중인 호스트가 부른다
+export const claimCell = call(cells.claimCell, { allowHost: true });
 
 /**
  * 삭제 유예(30일)가 지난 프로젝트 영구 삭제 (F-TM-12). 스크린샷이 많으면 오래 걸려 제한 시간을 최대로 둔다 —

@@ -10,6 +10,7 @@ import { holdAwake } from './awake';
 import { BuildInstallError, ensureBuild } from './build';
 import { ConsoleHub } from './console/hub';
 import type { AccountLeaser } from './accounts';
+import type { CellClaimer } from './cells';
 import type { UploadQueue } from './queue';
 import { runCycle, type RunCycleOutcome } from './runCycle';
 import { runSink } from './sink';
@@ -44,6 +45,8 @@ export type CycleRunDeps = {
   env?: Partial<Pick<AgentEnv, 'clock' | 'vision' | 'settleMs'>>;
   /** 테스트 계정 배정·반납 (F-PF-04). 없으면 계정이 필요한 케이스는 Blocked */
   accounts?: AccountLeaser;
+  /** 칸 자동 선점 (F-CY-06). 없으면 잡지 않고 돈다(테스트) */
+  cells?: CellClaimer;
 };
 
 export type RunAccount = { uid: string; hostId: string };
@@ -230,6 +233,8 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
       onCaseStart: (tc) => hub.caseStarted(tc),
       onPhase: (p) => hub.phase(p),
       accounts: deps.accounts,
+      cells: deps.cells,
+      onSkip: (tc) => hub.caseSkipped(tc),
       log,
     }).finally(async () => {
       await release();

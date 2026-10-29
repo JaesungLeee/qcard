@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cycleDeleteBlocker, cycleDeletion } from './cycles';
+import { cellSkip, cycleDeleteBlocker, cycleDeletion, holdsCell } from './cycles';
 import type { Member, Run, TestCycle } from './domain';
 import { MembershipError } from './membership';
 
@@ -57,5 +57,57 @@ describe('사이클 삭제 (F-CY-10)', () => {
     expect(kind(() => cycleDeletion(members, viewer, cycle, [], cycle.name, T0))).toBe('permission');
     expect(kind(() => cycleDeletion(members, qa, cycle, [], '1.0.0 (7)', T0))).toBe('rule');
     expect(kind(() => cycleDeletion(members, qa, cycle, [], ` ${cycle.name} `, T0))).toBe('ok');
+  });
+});
+
+describe('칸 자동 선점 (F-CY-06)', () => {
+  const me: Run = { ...run('running', 0), id: 'r-me' };
+  const other = (status: Run['status'], heartbeat: number, currentTcId = 'TC-1', deviceId = 'd1'): Run => ({
+    ...run(status, heartbeat),
+    id: 'r-other',
+    executor: '박도윤',
+    currentTcId,
+    deviceId,
+  });
+  const result = (verdict: 'pass' | 'nt', runId: string, executedSec: number) => ({
+    verdict,
+    runId,
+    executedAt: at(executedSec),
+  });
+
+  it('칸은 실행 중이고 신호가 90초 안에 있는 Run만 잡는다 (일시정지·끝난 Run은 놓는다)', () => {
+    expect(holdsCell(other('running', 0), at(90))).toBe(true);
+    expect(holdsCell(other('running', 0), at(91))).toBe(false);
+    expect(holdsCell(other('paused', 0), at(10))).toBe(false);
+    expect(holdsCell(other('done', 0), at(10))).toBe(false);
+    expect(holdsCell({ status: 'running' }, T0)).toBe(false);
+  });
+
+  it('같은 대상 디바이스의 다른 Run이 잡은 칸은 건너뛰고, 신호가 끊기면 가져간다', () => {
+    expect(cellSkip(me, [me, other('running', 0)], undefined, 'TC-1', false, at(30))).toEqual({
+      reason: 'running',
+      executor: '박도윤',
+      runId: 'r-other',
+    });
+    // 하트비트 만료 (호스트 연결 끊김)
+    expect(cellSkip(me, [me, other('running', 0)], undefined, 'TC-1', false, at(120))).toBeUndefined();
+    // 일시정지 · 다른 칸 · 다른 디바이스
+    expect(cellSkip(me, [other('paused', 0)], undefined, 'TC-1', false, at(30))).toBeUndefined();
+    expect(cellSkip(me, [other('running', 0, 'TC-2')], undefined, 'TC-1', false, at(30))).toBeUndefined();
+    expect(cellSkip(me, [other('running', 0, 'TC-1', 'd2')], undefined, 'TC-1', false, at(30))).toBeUndefined();
+    // 다시 실행하려고 고른 칸도 잡혀 있으면 건너뛴다
+    expect(cellSkip(me, [other('running', 0)], undefined, 'TC-1', true, at(30))?.reason).toBe('running');
+  });
+
+  it('결과가 있는 칸은 건너뛰고, 다시 실행으로 고른 칸은 이 Run이 시작하기 전의 결과일 때만 돌린다', () => {
+    expect(cellSkip(me, [], result('nt', 'r-x', 10), 'TC-1', false, at(30))).toBeUndefined();
+    expect(cellSkip(me, [], result('pass', 'r-old', -100), 'TC-1', false, at(30))).toEqual({
+      reason: 'done',
+      runId: 'r-old',
+    });
+    expect(cellSkip(me, [], result('pass', 'r-old', -100), 'TC-1', true, at(30))).toBeUndefined();
+    // 이 Run이 시작한 뒤 다른 Run이 끝냄 (일시정지 중 다른 실행자가 돌린 칸 포함)
+    expect(cellSkip(me, [], result('pass', 'r-other', 10), 'TC-1', true, at(30))?.reason).toBe('done');
+    expect(cellSkip(me, [], result('pass', 'r-me', 10), 'TC-1', true, at(30))).toBeUndefined();
   });
 });

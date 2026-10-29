@@ -170,15 +170,18 @@ service cloud.firestore {
       }
       // Run: 실행한 사용자의 호스트만 만들고 고친다. 다른 PC(같은 사용자의 다시 연결한 PC 포함)에서 이어서 실행할 수 있다.
       // 새 Run은 완료되지 않은 사이클에만 (이어서 실행은 호스트가 막는다 — 실행 중 Run은 완료 뒤에도 결과를 올려야 한다)
+      // 지금 칸(currentTcId)은 칸 자동 선점의 잠금이라 Functions(claimCell)만 정한다. 호스트는 지우기만 한다 (F-CY-06)
       match /cycles/{c}/runs/{run} {
         allow read: if isMember(p);
         allow create: if canEdit(p) && isHost()
           && request.resource.data.executorUid == request.auth.uid
           && request.resource.data.hostId == hostClaim()
+          && !('currentTcId' in request.resource.data)
           && cycleOpen(p, c);
         allow update: if canEdit(p) && isHost()
           && resource.data.get('executorUid', '') == request.auth.uid
-          && request.resource.data.executorUid == request.auth.uid;
+          && request.resource.data.executorUid == request.auth.uid
+          && request.resource.data.get('currentTcId', null) in [null, resource.data.get('currentTcId', null)];
         allow delete: if false;
       }
       // 결과 칸

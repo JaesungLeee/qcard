@@ -13,7 +13,16 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import type { ConsoleHome, ConsoleServerMessage } from '@qcard/shared';
-import { ConsoleService, firestoreApply, runCycle, runSink, startRunJobs, UploadQueue, type RunTarget } from '../src';
+import {
+  ConsoleService,
+  firestoreApply,
+  LEASE_LOST_MS,
+  runCycle,
+  runSink,
+  startRunJobs,
+  UploadQueue,
+  type RunTarget,
+} from '../src';
 
 /*
  * 호스트 에이전트 실행 → Firestore·Storage 업로드를 에뮬레이터·보안 규칙 위에서 확인한다.
@@ -216,6 +225,141 @@ describe('runCycle → Firestore·Storage', () => {
     expect(out.status).toBe('done');
     const r = (await api.getCycle(REF)).results.find((x) => x.tcId === 'TC-ONBOARDING-004' && x.deviceId === DEVICE)!;
     expect(r).toMatchObject({ verdict: 'blocked', blockedReason: '계정 없음: 구독자 종류의 빈 계정이 없습니다' });
+  });
+
+  describe('칸 자동 선점 (F-CY-06)', () => {
+    const TWO = ['TC-ONBOARDING-004', 'TC-ONBOARDING-005'];
+    const noLlm: LlmClient = { create: () => Promise.reject(new Error('LLM을 부르면 안 된다')) };
+    /** 계정이 없어 Blocked로 끝나는 케이스 — LLM 없이 결과가 생긴다 */
+    const blockedCases = () =>
+      env.withSecurityRulesDisabled(async (c) => {
+        const db = c.firestore() as unknown as Firestore;
+        for (const tc of TWO)
+          await updateDoc(doc(db, `projects/haru/cycles/cycle-130-1/cases/${tc}`), { accountKind: '구독자' });
+      });
+    const noAccount = { claim: async () => ({ account: null }), release: async () => {} };
+    const resultOf = async (tc: string) => {
+      let data: Record<string, unknown> | undefined;
+      await env.withSecurityRulesDisabled(async (c) => {
+        const db = c.firestore() as unknown as Firestore;
+        data = (await getDoc(doc(db, `projects/haru/cycles/cycle-130-1/results/${tc}__${DEVICE}`))).data();
+      });
+      return data;
+    };
+
+    it('케이스마다 앞 결과를 올린 뒤 칸을 잡고, 다른 Run이 잡은 칸은 결과 없이 건너뛴다', async () => {
+      await blockedCases();
+      const { api, sink } = await host(PEOPLE.lead, 'run-claim');
+      const asked: { tcId: string; rerun: boolean; before?: string }[] = [];
+      const skipped: string[] = [];
+      const out = await runCycle({
+        api,
+        sink,
+        env: { ...agentEnv(noLlm), vault: new SecretVault() },
+        ...REF,
+        deviceId: DEVICE,
+        runId: 'run-claim',
+        tcIds: TWO,
+        accounts: noAccount,
+        cells: {
+          claim: async (input) => {
+            asked.push({ tcId: input.tcId, rerun: input.rerun, before: (await resultOf(TWO[0]!))?.runId as string | undefined });
+            return input.tcId === TWO[1]
+              ? { claimed: false, skip: { reason: 'running', executor: PEOPLE.qa, runId: 'run-qa' } }
+              : { claimed: true };
+          },
+        },
+        onSkip: (tc, s) => skipped.push(`${tc.tcId}:${s.reason}`),
+      });
+      expect(out.status).toBe('done');
+      // 두 번째 칸을 잡을 때 첫 칸 결과가 이미 Firestore에 있다 (잡은 칸을 옮기기 전에 큐를 비운다)
+      expect(asked).toEqual([
+        { tcId: TWO[0], rerun: true, before: expect.not.stringMatching(/^run-claim$/) },
+        { tcId: TWO[1], rerun: true, before: 'run-claim' },
+      ]);
+      expect(skipped).toEqual([`${TWO[1]}:running`]);
+      expect(out.results.map((r) => r.tcId)).toEqual([TWO[0]]);
+      expect((await resultOf(TWO[1]!))?.runId).not.toBe('run-claim');
+    });
+
+    it('칸을 잡지 못할 만큼 네트워크가 끊기면 실행하지 않고 "네트워크 끊김"으로 일시정지한다', async () => {
+      await blockedCases();
+      const { db, api, sink } = await host(PEOPLE.lead, 'run-offline');
+      const out = await runCycle({
+        api,
+        sink,
+        env: { ...agentEnv(noLlm), vault: new SecretVault() },
+        ...REF,
+        deviceId: DEVICE,
+        runId: 'run-offline',
+        tcIds: TWO,
+        accounts: {
+          claim: () => Promise.reject(new Error('칸을 잡기 전에 계정을 받으면 안 된다')),
+          release: async () => {},
+        },
+        cells: {
+          claim: () => Promise.reject(Object.assign(new Error('fetch failed'), { code: 'functions/unavailable' })),
+        },
+      });
+      expect(out).toMatchObject({ status: 'paused', reason: 'network', results: [] });
+      const run = (await getDoc(doc(db, 'projects/haru/cycles/cycle-130-1/runs/run-offline'))).data();
+      expect(run).toMatchObject({ status: 'paused', pauseReason: 'network' });
+    });
+
+    it('케이스 도중 연결 신호가 끊긴 지 오래면 다음 턴에서 멈추고, 결과를 버린 채 "호스트 연결 끊김"으로 일시정지한다', async () => {
+      const { db, api, sink } = await host(PEOPLE.lead, 'run-lost');
+      const tc = 'TC-ONBOARDING-004';
+      const before = await resultOf(tc);
+      // 실제 시각: 칸을 잡은 뒤 단계 수행에 들어가며 PC가 잠들었다 깬 것처럼 건너뛴다
+      let t = 0;
+      const claims: string[] = [];
+      const out = await runCycle({
+        api,
+        sink,
+        env: agentEnv(replay),
+        ...REF,
+        deviceId: DEVICE,
+        runId: 'run-lost',
+        tcIds: [tc],
+        now: () => t,
+        cells: {
+          claim: async (input) => {
+            claims.push(input.tcId);
+            return { claimed: true };
+          },
+        },
+        onPhase: (p) => {
+          if (p === 'steps') t += LEASE_LOST_MS + 1;
+        },
+      });
+      expect(out).toMatchObject({ status: 'paused', reason: 'host_lost', results: [] });
+      expect(out.status === 'paused' && out.message).toContain('다른 실행자가 이 칸을 가져갔을 수 있습니다');
+      expect(claims).toEqual([tc]);
+      expect(await resultOf(tc)).toEqual(before);
+      const run = (await getDoc(doc(db, 'projects/haru/cycles/cycle-130-1/runs/run-lost'))).data();
+      expect(run).toMatchObject({ status: 'paused', pauseReason: 'host_lost' });
+    });
+
+    it('이어서 실행하면 처음 시작한 시각을 그대로 둔다 (그 뒤 다른 Run이 끝낸 칸을 가리는 기준)', async () => {
+      const { db, api, sink } = await host(PEOPLE.lead, 'run-resume');
+      await sink.start(TWO, '2026-10-20T01:00:00.000Z');
+      await sink.pause('network');
+      await sink.drain();
+      const out = await runCycle({
+        api,
+        sink,
+        env: agentEnv(noLlm),
+        ...REF,
+        deviceId: DEVICE,
+        runId: 'run-resume',
+        tcIds: TWO,
+        skipDone: true,
+        cells: { claim: async () => ({ claimed: false, skip: { reason: 'done', runId: 'run-other' } }) },
+      });
+      expect(out).toMatchObject({ status: 'done', results: [] });
+      const run = (await getDoc(doc(db, 'projects/haru/cycles/cycle-130-1/runs/run-resume'))).data();
+      expect(run).toMatchObject({ status: 'done', startedAt: '2026-10-20T01:00:00.000Z' });
+    });
   });
 
   it('디바이스가 잠겨 있으면 LLM을 부르지 않고 Run을 일시정지한다', async () => {

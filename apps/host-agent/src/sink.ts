@@ -15,14 +15,15 @@ import type { ApplyOp, UploadQueue } from './queue';
  */
 
 export interface RunSink {
-  /** tcIds: 실행 큐 (이어서 실행할 때 쓴다) */
-  start(tcIds: string[]): Promise<void>;
   /**
-   * 지금 실행 중인 케이스를 Run 문서(`currentTcId`)에 알린다. 진행 표시용이며 잠금이 아니다 —
-   * 칸 선점(F-CY-06)은 아직 없어서 두 실행자가 같은 대상 디바이스로 동시에 돌리면 같은 칸을 중복 실행한다
+   * tcIds: 실행 큐 (이어서 실행할 때 쓴다). startedAt: 이어서 실행하면 처음 시작한 시각.
+   * 지금 케이스(`currentTcId`)는 쓰지 않는다 — 칸 선점의 잠금이라 Functions(claimCell)가 정한다 (F-CY-06)
    */
-  progress(tcId: string): Promise<void>;
-  /** 호스트가 살아 있다는 신호 (F-DV-04). Run 동안 RUN_HEARTBEAT_MS마다 */
+  start(tcIds: string[], startedAt?: string): Promise<void>;
+  /**
+   * 호스트가 살아 있다는 신호 (F-DV-04). Run 동안 RUN_HEARTBEAT_MS마다. 업로드 큐를 거치지 않고 바로 보낸다 —
+   * 스크린샷 업로드가 밀려 신호가 늦으면 다른 Run이 이 Run의 칸을 끊긴 것으로 보고 가져간다 (F-CY-06). 실패하면 던진다
+   */
   heartbeat(): Promise<void>;
   saveScreenshot: SaveScreenshot;
   result(r: CaseResult): Promise<void>;
@@ -58,7 +59,7 @@ export function runSink(queue: UploadQueue, t: RunTarget): RunSink {
   const cycle = `projects/${t.projectId}/cycles/${t.cycleId}`;
   const runPath = `${cycle}/runs/${t.runId}`;
   return {
-    async start(tcIds) {
+    async start(tcIds, startedAt) {
       const run: Run = {
         id: t.runId,
         cycleId: t.cycleId,
@@ -68,25 +69,18 @@ export function runSink(queue: UploadQueue, t: RunTarget): RunSink {
         deviceId: t.deviceId,
         status: 'running',
         tcIds,
-        startedAt: new Date().toISOString(),
+        startedAt: startedAt ?? new Date().toISOString(),
         heartbeatAt: new Date().toISOString(),
       };
       await queue.enqueue({ type: 'set', path: runPath, data: { ...run, _i: Date.now() } });
     },
-    progress: (tcId) =>
-      queue.enqueue({
-        type: 'update',
-        path: runPath,
-        data: { status: 'running', currentTcId: tcId, heartbeatAt: new Date().toISOString() },
-        remove: ['pauseReason', 'waiting'],
-      }),
     waiting: (level) =>
       queue.enqueue(
         level
           ? { type: 'update', path: runPath, data: { waiting: { level, since: new Date().toISOString() } } }
           : { type: 'update', path: runPath, data: {}, remove: ['waiting'] },
       ),
-    heartbeat: () => queue.enqueue({ type: 'update', path: runPath, data: { heartbeatAt: new Date().toISOString() } }),
+    heartbeat: () => queue.sendNow({ type: 'update', path: runPath, data: { heartbeatAt: new Date().toISOString() } }),
     async saveScreenshot(png, { caseId, index }) {
       const path = `${runPath}/${caseId}/obs-${String(index).padStart(2, '0')}.png`;
       await queue.enqueue({ type: 'upload', path, contentType: 'image/png' }, png);

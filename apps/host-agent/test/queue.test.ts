@@ -25,6 +25,22 @@ describe('UploadQueue (F-EX-13)', () => {
     expect(sent).toEqual(['docs/1', 'docs/2', 'docs/3']);
   });
 
+  it('sendNow는 밀린 업로드를 기다리지 않고 바로 보낸다 (Run 연결 신호, F-CY-06)', async () => {
+    const sent: string[] = [];
+    const q = await new UploadQueue(
+      dir(),
+      async (op) => {
+        if (op.type === 'set') await new Promise(() => {}); // 끝나지 않는 업로드
+        sent.push(op.path);
+      },
+      { retryMs: 5 },
+    ).open();
+    await q.enqueue(set(1));
+    await q.sendNow({ type: 'update', path: 'runs/r1', data: { heartbeatAt: 'now' } });
+    expect(sent).toEqual(['runs/r1']);
+    expect(await q.pending()).toBe(1);
+  });
+
   it('다시 해도 안 되는 그 밖의 오류면 멈추고 알린다. 작업은 디스크에 남는다', async () => {
     const d = dir();
     const invalid = Object.assign(new Error('bad data'), { code: 'invalid-argument' });

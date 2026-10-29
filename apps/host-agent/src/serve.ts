@@ -50,7 +50,7 @@ const session = await openHostSession({ seedUser: values.user, target }).catch((
   console.error(e.message);
   process.exit(1);
 });
-const { db, storage, api, user, host, account, queueDir, accounts } = session;
+const { db, storage, api, user, host, account, queueDir, accounts, cells } = session;
 
 // ---------------------------------------------------------------- 연결 신호
 /** 연결된 디바이스 (시리얼별 정보는 한 번만 읽는다) — 웹이 사이클 대상을 고를 때 쓴다. 읽기 전용(getprop·wm) */
@@ -106,6 +106,7 @@ const service = new ConsoleService({
   executor: user.name,
   account,
   accounts,
+  cells,
   claudeCode: () => ({
     installed: claude?.installed ?? true,
     loggedIn: claude?.loggedIn ?? false,

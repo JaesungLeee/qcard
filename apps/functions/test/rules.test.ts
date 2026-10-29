@@ -8,6 +8,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import {
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   serverTimestamp,
@@ -445,6 +446,16 @@ describe('Agent 기록은 그 Run을 실행한 사용자의 호스트만 (PRD §
     await assertSucceeds(updateDoc(doc(asHost('u-qa', 'h-qa2'), `${C}/runs/r1`), { status: 'paused' }));
     await assertFails(updateDoc(doc(asHost('u-admin', 'h-admin'), `${C}/runs/r1`), { status: 'done' }));
     await assertFails(updateDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), { executorUid: 'u-admin' }));
+  });
+
+  it('지금 칸(칸 선점 잠금)은 Functions만 정하고, 호스트는 지우기만 한다 (F-CY-06)', async () => {
+    await assertFails(setDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), { ...run, currentTcId: 'TC-1' }));
+    await assertSucceeds(setDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), run));
+    await assertFails(updateDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), { currentTcId: 'TC-1' }));
+    await env.withSecurityRulesDisabled((c) => updateDoc(doc(c.firestore(), `${C}/runs/r1`), { currentTcId: 'TC-1' }));
+    await assertSucceeds(updateDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), { heartbeatAt: 'later' }));
+    await assertFails(updateDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), { currentTcId: 'TC-2' }));
+    await assertSucceeds(updateDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), { currentTcId: deleteField() }));
   });
 
   it('예전 Run(실행자 uid 없음)은 더 이어 쓰지 못한다', async () => {

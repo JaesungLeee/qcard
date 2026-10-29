@@ -1,9 +1,18 @@
-import { blockedCase, runCase, RunAbortedError, type AccountIssue, type AgentEnv } from '@qcard/agent';
+import { blockedCase, runCase, RunAbortedError, type AccountIssue, type AgentEnv, type RunControl } from '@qcard/agent';
 import type { QcardApi } from '@qcard/data';
 import { ClaudeCodeSetupError, PlanLimitError, type UsageMeter } from '@qcard/llm';
 import { DeviceDisconnectedError } from '@qcard/device';
-import { RUN_HEARTBEAT_MS, type CaseResult, type PauseReason, type TestCase } from '@qcard/shared';
+import {
+  RUN_HEARTBEAT_MS,
+  RUN_STALE_MS,
+  type CaseResult,
+  type CellSkip,
+  type PauseReason,
+  type TestCase,
+} from '@qcard/shared';
 import { RunAccounts, type AccountLeaser } from './accounts';
+import { skipText, type CellClaimer } from './cells';
+import { isTransient } from './queue';
 import type { RunSink } from './sink';
 
 /*
@@ -11,9 +20,22 @@ import type { RunSink } from './sink';
  * 플랜 한도·Claude Code 로그인 문제면 Run을 일시정지하고 멈춘다 (F-EX-17). 다시 부르면 남은 칸부터 이어 간다.
  * 디바이스 화면이 꺼졌거나 잠겨 있거나 연결이 끊겨도 일시정지한다: 케이스마다 시작 전에 확인하고, Blocked로 끝난 케이스는
  * 도중에 잠긴 것인지 다시 확인해 그 결과는 버린다 (잠금 화면에서 헤매며 사용량만 쓰고 Blocked가 쌓이지 않게).
+ * 케이스마다 칸을 먼저 잡는다 (F-CY-06): 같은 대상 디바이스의 다른 Run이 잡았거나 끝낸 칸은 건너뛴다.
+ * 칸을 잡으려면 온라인이어야 해서, 큐를 비우지 못하거나 잡기 호출이 네트워크 오류면 "네트워크 끊김"으로 일시정지한다.
+ * 케이스 도중 연결 신호를 LEASE_LOST_MS 넘게 남기지 못했으면(네트워크 끊김·PC 절전) 다른 Run이 칸을 가져갔을 수 있어,
+ * 다음 턴에서 멈추고 진행 중 케이스 결과를 버린 뒤 "호스트 연결 끊김"으로 일시정지한다 — 남이 가져간 칸에 플랜 사용량을 쓰지 않게.
  */
 
 const DISCONNECTED = '디바이스 연결이 끊겼습니다. USB를 다시 연결한 뒤 이어서 실행하세요';
+const OFFLINE = '네트워크가 끊겨 다음 칸을 잡지 못했습니다. 연결을 확인한 뒤 이어서 실행하세요';
+/** 칸을 잡기 전에 앞 케이스의 결과·증거를 올리며 기다리는 시간 */
+const CLAIM_DRAIN_MS = 60_000;
+/**
+ * 마지막으로 보낸 연결 신호가 이만큼 지나면 칸을 잃은 것으로 본다. 다른 Run은 RUN_STALE_MS가 지나야 가져가지만,
+ * 신호 한 번만큼 먼저 멈춘다 (PC 간 시계 차이·요청 지연 여유)
+ */
+export const LEASE_LOST_MS = RUN_STALE_MS - RUN_HEARTBEAT_MS;
+const LEASE_LOST = `연결 신호가 ${LEASE_LOST_MS / 1000}초 넘게 끊겨(네트워크 끊김·PC 절전) 다른 실행자가 이 칸을 가져갔을 수 있습니다. 진행 중 케이스 결과는 버렸습니다. 이어서 실행하세요`;
 
 export type RunCycleInput = {
   api: QcardApi;
@@ -42,7 +64,13 @@ export type RunCycleInput = {
   drainTimeoutMs?: number;
   /** 테스트 계정 배정·반납 (F-PF-04). 없으면 계정이 필요한 케이스는 Blocked. 비밀값은 env.vault에 둔다 */
   accounts?: AccountLeaser;
+  /** 칸 자동 선점 (F-CY-06). 없으면 잡지 않고 돈다(테스트) */
+  cells?: CellClaimer;
+  /** 다른 Run이 잡았거나 끝낸 칸을 건너뜀 */
+  onSkip?: (tc: TestCase, skip: CellSkip) => void;
   log?: (line: string) => void;
+  /** 연결 신호를 판단할 실제 시각 (Agent의 가짜 시계와 따로. 테스트) */
+  now?: () => number;
 };
 
 export type RunCycleOutcome = (
@@ -98,6 +126,38 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
       throw e;
     }
   };
+  // 칸 리스 (F-CY-06): 마지막으로 남긴 연결 신호(잡기 포함)의 시각. 한 번 잃으면 다음 칸을 잡을 때까지 잃은 채로 둔다 —
+  // 절전에서 깨어나 신호가 다시 성공해도, 자는 동안 다른 Run이 가져갔을 수 있다
+  const now = input.now ?? Date.now;
+  let signaledAt = now();
+  let lost = false;
+  const leaseLost = () => {
+    if (input.cells && !lost && now() - signaledAt > LEASE_LOST_MS) lost = true;
+    return lost;
+  };
+  const beat = async () => {
+    const at = now();
+    leaseLost();
+    await sink.heartbeat();
+    if (!lost) signaledAt = at;
+  };
+  /** 칸을 잡는다. 건너뛸 이유, 온라인이 아니면 'offline' */
+  const claimCell = async (tc: TestCase): Promise<CellSkip | 'offline' | undefined> => {
+    if (!input.cells) return undefined;
+    // 앞 케이스 결과가 올라간 뒤에 잡는다 — 결과가 큐에 남은 채 칸을 옮기면 다른 Run이 그 칸을 남은 칸으로 본다
+    if ((await sink.drain(CLAIM_DRAIN_MS)) > 0) return 'offline';
+    try {
+      const at = now();
+      const r = await input.cells.claim({ projectId, cycleId, runId: input.runId, tcId: tc.tcId, rerun: !!input.tcIds });
+      // 잡기는 서버가 연결 신호도 남긴다
+      signaledAt = at;
+      lost = false;
+      return r.claimed ? undefined : r.skip;
+    } catch (e) {
+      if (isTransient(e)) return 'offline';
+      throw e;
+    }
+  };
   const accounts = new RunAccounts({
     leaser: input.accounts,
     vault: input.env.vault,
@@ -106,17 +166,36 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
     runId: input.runId,
     log: input.log,
   });
-  await sink.start(cases.map((c) => c.tcId));
+  // 이어서 실행하면 처음 시작한 시각을 그대로 둔다 — 그 뒤 다른 Run이 끝낸 칸을 다시 돌리지 않게 (F-CY-06)
+  const resumed = detail.runs.find((r) => r.id === input.runId);
+  await sink.start(
+    cases.map((c) => c.tcId),
+    resumed?.startedAt,
+  );
   // 호스트가 살아 있다는 신호 (F-DV-04): 끊기면 웹은 "호스트 연결 끊김"으로 보이고, 다시 켠 호스트가 일시정지로 정리한다
-  const beat = setInterval(() => void sink.heartbeat().catch(() => {}), RUN_HEARTBEAT_MS);
-  beat.unref?.();
+  const timer = setInterval(() => void beat().catch(() => {}), RUN_HEARTBEAT_MS);
+  timer.unref?.();
+  // 칸을 잃었으면 Agent가 다음 턴에서 멈춘다 (실행자 중단과 같은 경로, 아래에서 일시정지로 바꾼다)
+  const base = input.env.control;
+  const control: RunControl | undefined = input.cells
+    ? {
+        interrupted: () => leaseLost() || !!base?.interrupted(),
+        checkpoint: async () => (leaseLost() ? 'abort' : base ? base.checkpoint() : 'continue'),
+      }
+    : base;
   try {
     for (const testCase of cases) {
       const before = await deviceProblem();
       if (before) return paused(before.reason, before.message);
-      await sink.progress(testCase.tcId);
+      const skip = await claimCell(testCase);
+      if (skip === 'offline') return paused('network', OFFLINE);
+      if (skip) {
+        input.log?.(`□ ${testCase.tcId} 건너뜀 — ${skipText(skip)}`);
+        input.onSkip?.(testCase, skip);
+        continue;
+      }
       input.onCaseStart?.(testCase);
-      const env = { ...input.env, saveScreenshot: sink.saveScreenshot };
+      const env = { ...input.env, control, saveScreenshot: sink.saveScreenshot };
       // 테스트 계정 (F-PF-04): 받지 못하면 실행하지 않고 Blocked("계정 없음")
       const acc = await accounts.forCase(testCase);
       if ('blocked' in acc) {
@@ -139,6 +218,8 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
           resetApp: acc.resetApp,
           onAccountIssue: (issue, detail) => issues.push([issue, detail]),
         });
+        // 검증 중에 잃었을 수도 있다 (검증은 턴 사이 확인이 없다)
+        if (leaseLost()) return paused('host_lost', `${testCase.tcId} 실행 중 ${LEASE_LOST}`);
         if (result.verdict === 'blocked') {
           const during = await deviceProblem();
           if (during) return paused(during.reason, `${testCase.tcId} 실행 중 ${during.message}`);
@@ -151,6 +232,9 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
         input.onCase?.(testCase, result);
       } catch (e) {
         // 실행자가 중단: 진행 중 케이스는 판정하지 않고 Run을 끝낸다 (남은 칸은 N/T로 남는다)
+        if (e instanceof RunAbortedError && leaseLost()) {
+          return paused('host_lost', `${testCase.tcId} 실행 중 ${LEASE_LOST}`);
+        }
         if (e instanceof RunAbortedError) {
           await sink.finish('aborted');
           return { status: 'aborted', results, pendingUploads: await sink.drain(input.drainTimeoutMs) };
@@ -175,7 +259,7 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
     const pendingUploads = await sink.drain(input.drainTimeoutMs);
     return { status: 'done', results, pendingUploads };
   } finally {
-    clearInterval(beat);
+    clearInterval(timer);
     await accounts.finish();
   }
 }
