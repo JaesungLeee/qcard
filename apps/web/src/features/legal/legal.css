@@ -1,0 +1,79 @@
+/* 개인정보처리방침·이용약관. 색은 --qc-* 토큰만 쓴다. */
+.ql-doc {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-24);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.ql-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-6);
+}
+.ql-head h1,
+.ql-section h2 {
+  margin: 0;
+}
+.ql-muted {
+  margin: 0;
+  color: var(--qc-foreground-neutral-secondary);
+}
+.ql-faint {
+  color: var(--qc-foreground-neutral-tertiary);
+}
+.ql-doc a {
+  color: var(--qc-foreground-brand-primary);
+}
+.ql-toc {
+  padding: var(--qc-space-16) var(--qc-space-20);
+  border: 1px solid var(--qc-line-neutral-secondary);
+  border-radius: var(--qc-radius-12);
+  background: var(--qc-surface-neutral-primary);
+}
+.ql-toc ol {
+  margin: 0;
+  list-style: decimal;
+  padding-left: var(--qc-space-20);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--qc-space-4) var(--qc-space-16);
+}
+.ql-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-12);
+  scroll-margin-top: var(--qc-space-24);
+}
+.ql-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-8);
+  color: var(--qc-foreground-neutral-primary);
+}
+.ql-body p,
+.ql-body ul {
+  margin: 0;
+}
+.ql-body ul {
+  list-style: disc;
+  padding-left: var(--qc-space-20);
+  display: flex;
+  flex-direction: column;
+  gap: var(--qc-space-4);
+}
+.ql-body b {
+  font-weight: 700;
+}
+.ql-body code {
+  font-family: var(--qc-font-mono);
+}
+.ql-foot {
+  display: flex;
+  gap: var(--qc-space-16);
+  padding-top: var(--qc-space-16);
+  border-top: 1px solid var(--qc-line-neutral-tertiary);
+}

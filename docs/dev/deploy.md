@@ -48,6 +48,8 @@ callable 함수의 공개 호출 권한(Cloud Run Invoker `allUsers`)은 CLI가 
 
 웹 주소는 `https://qcard.dev`(Hosting 커스텀 도메인, 가비아 DNS). 기본 주소 `qcard-d2ade.web.app`·`qcard-d2ade.firebaseapp.com`으로 들어오면 `apps/web/index.html`의 스크립트가 같은 경로의 `qcard.dev`로 보낸다(로그인 핸들러 `/__/auth/*`는 그대로). Hosting은 모든 경로를 `index.html`로 보낸다(SPA).
 
+개인정보처리방침 `/privacy`·이용약관 `/terms`는 로그인 없이 열린다. 시행일(`apps/web/src/features/legal/policy.ts`의 `EFFECTIVE_DATE`)이 비어 있으면 두 문서는 "초안"으로 보이므로 공개 출시 릴리스에서 채운다. 데이터 처리 방식(수집 항목·보관 위치·삭제)을 바꾸면 `PrivacyPage.tsx`도 함께 고친다.
+
 ## 데이터 옮기기
 
 ### 준비 플로우를 QA 문서 버전별로 (PRD v0.17)

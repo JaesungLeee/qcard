@@ -18,6 +18,9 @@
 .qp-faint {
   color: var(--qc-foreground-neutral-tertiary);
 }
+.qp-link {
+  color: var(--qc-foreground-brand-primary);
+}
 .qp-field {
   display: flex;
   flex-direction: column;
