@@ -118,6 +118,26 @@ export function filterCases(cases: TestCase[], f: CaseFilter): TestCase[] {
   });
 }
 
+/**
+ * 일괄 승인·반려할 케이스 선택. 헤더 체크박스는 보이는 페이지만 고르고,
+ * `spanning`은 "모두 선택"으로 걸러진 목록 전체를 고른 상태라 페이지를 넘겨도 선택이 남는다.
+ */
+export type CaseSelection = { ids: string[]; spanning: boolean };
+export const NO_SELECTION: CaseSelection = { ids: [], spanning: false };
+export type ApprovalTarget = 'approved' | 'rejected';
+
+/** 그리드에서 바뀐 이 페이지의 선택을 합친다: 다른 페이지에서 고른 케이스는 그대로 둔다 */
+export function mergePageSelection(ids: string[], pageIds: string[], pageSelected: string[]): string[] {
+  const onPage = new Set(pageIds);
+  return [...ids.filter((id) => !onPage.has(id)), ...pageSelected];
+}
+
+/** "모두 선택"이 고르는 범위의 이름: 필터가 걸려 있으면 필터 결과, 아니면 분류 */
+export function selectionScopeLabel(scope: CaseScope, f: CaseFilter): string {
+  if (f.change !== 'all' || f.unapprovedOnly || f.q.trim()) return '조건에 맞는 케이스';
+  return scope.feature === null ? '전체 케이스' : '이 분류의 케이스';
+}
+
 export function countBy<K extends string>(cases: TestCase[], key: (c: TestCase) => K): Record<K, number> {
   const out = {} as Record<K, number>;
   for (const c of cases) out[key(c)] = (out[key(c)] ?? 0) + 1;
@@ -495,19 +515,4 @@ export function coverage(doc: Pick<QADocument, 'requirements' | 'cases' | 'quest
   });
   const uncovered = rows.filter((r) => r.status === 'none').length;
   return { rows, covered: rows.length - uncovered, uncovered };
-}
-
-// ---------------------------------------------------------------- 준비 플로우 사용처
-
-export function prepFlowUsage(cases: TestCase[]): Map<string, TestCase[]> {
-  const out = new Map<string, TestCase[]>();
-  for (const c of cases) {
-    if (!isActive(c)) continue;
-    for (const id of [...c.prepFlowIds, ...(c.restoreFlowId ? [c.restoreFlowId] : [])]) {
-      const list = out.get(id) ?? [];
-      list.push(c);
-      out.set(id, list);
-    }
-  }
-  return out;
 }

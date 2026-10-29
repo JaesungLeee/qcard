@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GITHUB, PEOPLE } from '@qcard/fixtures';
-import { ConflictError, PermissionError, RuleError } from './api';
+import {
+  ConflictError,
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENTS,
+  PermissionError,
+  PrepFlowConflictError,
+  RuleError,
+} from './api';
 import type { LocalRun } from './localRuns';
 import { createMemoryApi, passRate } from './memory';
 
@@ -68,6 +75,44 @@ describe('사이클 판정', () => {
     });
     expect(r.decidedBy).toEqual({ kind: 'human', name: api.currentUser });
     expect(r.history.at(-1)).toMatchObject({ from: 'check', to: 'pass', by: api.currentUser });
+  });
+
+  it('수동 결과에 스크린샷을 첨부하고, 다시 확정할 때 남길 첨부만 남긴다 (F-RP-05)', async () => {
+    const api = createMemoryApi();
+    const r = (await api.getCycle(CYCLE)).results.find((x) => x.verdict === 'check')!;
+    const at = { ...CYCLE, tcId: r.tcId, deviceId: r.deviceId };
+    const png = { name: 'a.png', type: 'image/png', bytes: new Uint8Array([1, 2, 3]), w: 1080, h: 2340 };
+    const first = await api.confirmVerdict({
+      ...at,
+      verdict: 'fail',
+      actualSummary: '재현',
+      attachments: { keep: [], add: [png, { ...png, name: 'b.png' }] },
+    });
+    expect(first.attachments).toEqual([
+      { kind: 'url', url: 'data:image/png;base64,AQID', w: 1080, h: 2340 },
+      { kind: 'url', url: 'data:image/png;base64,AQID', w: 1080, h: 2340 },
+    ]);
+    expect(first.history.at(-1)!.attachments).toBe(2);
+    // 첨부를 주지 않으면 그대로, 주면 그 목록으로 바뀐다
+    expect((await api.confirmVerdict({ ...at, verdict: 'fail', actualSummary: '재현' })).attachments).toHaveLength(2);
+    const second = await api.confirmVerdict({ ...at, verdict: 'pass', attachments: { keep: [], add: [] } });
+    expect(second.attachments).toBeUndefined();
+    expect(second.history.at(-1)!.attachments).toBeUndefined();
+  });
+
+  it('첨부는 PNG·JPEG·WebP 이미지 5장, 한 장 10MB까지 (F-RP-05)', async () => {
+    const api = createMemoryApi();
+    const r = (await api.getCycle(CYCLE)).results.find((x) => x.verdict === 'check')!;
+    const at = { ...CYCLE, tcId: r.tcId, deviceId: r.deviceId, verdict: 'pass' as const };
+    const png = { name: 'a.png', type: 'image/png', bytes: new Uint8Array([1]) };
+    await expect(
+      api.confirmVerdict({ ...at, attachments: { keep: [], add: Array(MAX_ATTACHMENTS + 1).fill(png) } }),
+    ).rejects.toBeInstanceOf(RuleError);
+    await expect(
+      api.confirmVerdict({ ...at, attachments: { keep: [], add: [{ ...png, type: 'image/gif' }] } }),
+    ).rejects.toThrow('PNG·JPEG·WebP');
+    const big = { ...png, bytes: new Uint8Array(MAX_ATTACHMENT_BYTES + 1) };
+    await expect(api.confirmVerdict({ ...at, attachments: { keep: [], add: [big] } })).rejects.toThrow('10MB');
   });
 
   it('통과율은 N/T를 분모에서 뺀다', () => {
@@ -331,5 +376,49 @@ describe('QA 문서 생성 요청 (PRD §5.2)', () => {
     expect(job).toMatchObject({ status: 'queued' });
     expect(job).not.toHaveProperty('error');
     await expect(api.retryJob('haru', 'job-130')).rejects.toBeInstanceOf(PermissionError);
+  });
+});
+
+describe('준비 플로우 편집 (F-PF-01)', () => {
+  const input = { name: '로그인 상태', kind: 'login' as const, check: '홈 탭이 보인다', steps: ['[로그인]'] };
+
+  it('추가·편집하면 목록에 보이고 rev가 오른다. Viewer는 못 한다', async () => {
+    const api = createMemoryApi();
+    const made = await api.createPrepFlow('haru', input);
+    expect(made).toMatchObject({ id: 'pf-login', rev: 1, updatedBy: PEOPLE.lead });
+    const saved = await api.updatePrepFlow('haru', made.id, { ...input, steps: ['[로그인]', '홈 탭 확인'] }, 1);
+    expect(saved.rev).toBe(2);
+    expect((await api.listPrepFlows('haru')).at(-1)).toEqual(saved);
+    expect(await api.listPrepFlows('moabook')).toEqual([]);
+    api.switchUser(PEOPLE.planner);
+    await expect(api.createPrepFlow('haru', input)).rejects.toBeInstanceOf(PermissionError);
+    await expect(api.updatePrepFlow('haru', made.id, input, 2)).rejects.toBeInstanceOf(PermissionError);
+  });
+
+  it('스텝이 없으면 RuleError', async () => {
+    const api = createMemoryApi();
+    await expect(api.createPrepFlow('haru', { ...input, steps: [] })).rejects.toBeInstanceOf(RuleError);
+  });
+
+  it('다른 사람이 먼저 저장했으면 PrepFlowConflictError로 최신 내용을 돌려준다', async () => {
+    const api = createMemoryApi();
+    await api.updatePrepFlow('haru', 'pf-done', { ...input, kind: 'data_state', name: '먼저' }, 0);
+    const err = await api.updatePrepFlow('haru', 'pf-done', { ...input, name: '나중' }, 0).catch((e) => e);
+    expect(err).toBeInstanceOf(PrepFlowConflictError);
+    expect((err as PrepFlowConflictError).latest).toMatchObject({ name: '먼저', rev: 1 });
+  });
+
+  it('케이스가 쓰는 플로우는 지우지 못하고, 안 쓰는 플로우는 지운다', async () => {
+    const api = createMemoryApi();
+    const uses = await api.listPrepFlowUses('haru');
+    expect(uses['pf-clean']!.some((u) => u.in === 'doc' && u.docId === 'doc-120')).toBe(true);
+    expect(uses['pf-clean']!.some((u) => u.in === 'cycle')).toBe(true);
+    await expect(api.deletePrepFlow('haru', 'pf-clean')).rejects.toThrow(/케이스가 사용 중/);
+    const made = await api.createPrepFlow('haru', input);
+    api.switchUser(PEOPLE.planner);
+    await expect(api.deletePrepFlow('haru', made.id)).rejects.toBeInstanceOf(PermissionError);
+    api.switchUser(PEOPLE.lead);
+    await api.deletePrepFlow('haru', made.id);
+    expect((await api.listPrepFlows('haru')).map((f) => f.id)).not.toContain(made.id);
   });
 });

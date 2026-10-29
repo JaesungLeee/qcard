@@ -34,9 +34,11 @@ import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
 import { fmtDateTime, fmtNumber } from '../../components/format';
 import { MockScreen } from '../../mock/MockScreen';
+import { AttachmentList } from './Attachments';
 import { ConfirmPanel } from './ConfirmPanel';
+import { DefectPanel } from './DefectPanel';
 import { EvidenceBand } from './EvidenceBand';
-import { autoConfirmChecks, decidedByLabel, isAutoPassReversal, neighbors, resultKey, shortId } from './model';
+import { autoConfirmChecks, cellRun, decidedByLabel, isAutoPassReversal, neighbors, resultKey, shortId } from './model';
 import { Card, KV, Mono, RunState, traceUrl, useNow } from './parts';
 import './qa-sheet.css';
 
@@ -77,9 +79,7 @@ function Trace({ d }: { d: CycleDetail }) {
   const go = (t: string, dev: string) => navigate(traceUrl(projectId, d.cycle.id, t, dev));
   const manual = tc.mode === 'manual';
   const now = useNow();
-  const running = d.runs.find(
-    (x) => x.deviceId === deviceId && x.currentTcId === tcId && (x.status === 'running' || x.status === 'paused'),
-  );
+  const running = cellRun(d.runs, deviceId, tcId, now);
   const notRun = r.verdict === 'nt';
   // 자동 실행 기록이 있으면 근거 띠, 없으면(미수행·수동 입력) 요약 카드
   const band = !notRun && r.steps.length > 0;
@@ -209,6 +209,11 @@ function Trace({ d }: { d: CycleDetail }) {
       <div className="qs-trace">
         <div className="qs-stack">
           <CaseCard tc={tc} />
+          {r.attachments?.length ? (
+            <Card title="첨부 스크린샷">
+              <AttachmentList shots={r.attachments} />
+            </Card>
+          ) : null}
           {notRun && !manual ? (
             <div className="qc-card qs-empty">
               <Icons.IconClock aria-hidden />
@@ -222,7 +227,10 @@ function Trace({ d }: { d: CycleDetail }) {
                       stale={isRunStale(running, now)}
                       waiting={running.waiting?.level}
                     />
-                    {running.executor}의 Run이 이 칸을 잡고 있습니다.
+                    {/* 일시정지된 Run은 칸을 놓는다 — 이어서 실행하기 전에 다른 Run이 가져갈 수 있다 (F-CY-06) */}
+                    {running.status === 'paused'
+                      ? `${running.executor}의 Run이 이 칸에서 멈췄습니다.`
+                      : `${running.executor}의 Run이 이 칸을 잡고 있습니다.`}
                   </span>
                 ) : (
                   `${device.label}의 남은 칸입니다. Run이 이 케이스를 실행하면 스텝 타임라인과 검증 결과가 여기에 쌓입니다.`
@@ -243,6 +251,7 @@ function Trace({ d }: { d: CycleDetail }) {
 
         <aside className="qs-trace-side" aria-label="판정">
           <ConfirmPanel key={resultKey(r.tcId, r.deviceId)} cycleId={d.cycle.id} result={r} manual={manual} />
+          <DefectPanel key={`defect-${resultKey(r.tcId, r.deviceId)}`} d={d} r={r} tc={tc} projectId={projectId} />
           {!manual && !notRun && <ConditionsCard r={r} />}
           <HistoryCard r={r} manual={manual} />
         </aside>
@@ -429,6 +438,7 @@ function HistoryCard({ r, manual }: { r: CaseResult; manual: boolean }) {
               </span>
               <span className={`${textClass('caption1')} qs-muted`}>
                 {fmtDateTime(h.at)} · {h.by}
+                {h.attachments ? ` · 스크린샷 ${h.attachments}장` : ''}
               </span>
               {h.note && <span className={textClass('label2')}>{h.note}</span>}
             </li>

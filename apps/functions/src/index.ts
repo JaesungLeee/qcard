@@ -1,11 +1,13 @@
 import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { MembershipError } from '@qcard/shared';
 import * as acc from './accounts';
+import * as cells from './cells';
 import * as h from './handlers';
 import { kmsBox, localBox, type SecretBox } from './secretBox';
 
@@ -38,9 +40,9 @@ const toHttps = (e: unknown) => (e instanceof MembershipError ? new HttpsError(C
  */
 function call<T>(
   fn: (ctx: h.Ctx, data: unknown, req: CallableRequest) => Promise<T>,
-  opts: { allowHost?: boolean } = {},
+  opts: { allowHost?: boolean; timeoutSeconds?: number } = {},
 ) {
-  return onCall(async (req) => {
+  return onCall({ ...(opts.timeoutSeconds ? { timeoutSeconds: opts.timeoutSeconds } : {}) }, async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
     const host = typeof req.auth.token.host === 'string' ? req.auth.token.host : undefined;
     if (host && !opts.allowHost)
@@ -69,6 +71,15 @@ export const revokeInvitation = call(h.revokeInvitation);
 export const getInvitation = call(h.getInvitation);
 export const acceptInvitation = call(h.acceptInvitation);
 
+// 사이클 삭제 (F-CY-10): 하위 문서와 Storage 증거까지 지운다. 스크린샷이 많으면 오래 걸려 제한 시간을 늘린다
+export const deleteCycle = call(
+  (ctx, data) => h.deleteCycle(ctx, data, (prefix) => getStorage().bucket().deleteFiles({ prefix })),
+  { timeoutSeconds: 300 },
+);
+
+// 준비 플로우 삭제 (F-PF-01): 케이스 참조 확인은 질의가 필요해 Functions 트랜잭션에서 한다
+export const deletePrepFlow = call(h.deletePrepFlow);
+
 // 호스트 연결 (F-TM-14). hostToken은 로그인 전에 부른다 — 호스트 자격(비밀값)으로 확인한다
 export const pairHost = call(h.pairHost);
 export const revokeHost = call(h.revokeHost, { allowHost: true });
@@ -88,7 +99,17 @@ export const clearAccountFlag = call(acc.clearAccountFlag);
 export const claimAccount = call(acc.claimAccount, { allowHost: true });
 export const releaseAccount = call(acc.releaseAccount, { allowHost: true });
 
-/** 삭제 유예(30일)가 지난 프로젝트 영구 삭제 (F-TM-12) */
-export const purgeDeletedProjects = onSchedule({ schedule: 'every day 04:00', timeZone: 'Asia/Seoul' }, async () => {
-  await h.purgeDeletedProjects(getFirestore(), new Date().toISOString());
-});
+// 칸 자동 선점 (F-CY-06): 케이스를 시작하기 전에 실행 중인 호스트가 부른다
+export const claimCell = call(cells.claimCell, { allowHost: true });
+
+/**
+ * 삭제 유예(30일)가 지난 프로젝트 영구 삭제 (F-TM-12). 스크린샷이 많으면 오래 걸려 제한 시간을 최대로 둔다 —
+ * 그래도 넘기면 남은 것은 다음 날 이어서 지운다
+ */
+export const purgeDeletedProjects = onSchedule(
+  { schedule: 'every day 04:00', timeZone: 'Asia/Seoul', timeoutSeconds: 540 },
+  async () => {
+    const bucket = getStorage().bucket();
+    await h.purgeDeletedProjects(getFirestore(), new Date().toISOString(), (prefix) => bucket.deleteFiles({ prefix }));
+  },
+);

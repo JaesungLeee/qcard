@@ -1,11 +1,12 @@
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
 import { MembershipError } from '@qcard/shared';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as h from '../src/handlers';
 
 /*
- * Firestore 에뮬레이터 위에서 핸들러를 직접 부른다 (`pnpm --filter @qcard/functions test`가 에뮬레이터를 띄운다).
+ * Firestore·Storage 에뮬레이터 위에서 핸들러를 직접 부른다 (`pnpm --filter @qcard/functions test`가 에뮬레이터를 띄운다).
  * 규칙 자체는 @qcard/shared membership과 웹 메모리 구현 테스트가 다루고, 여기서는 Firestore에 맞게
  * 읽고 쓰는지(트랜잭션·색인·하위 문서)를 본다.
  */
@@ -13,6 +14,8 @@ import * as h from '../src/handlers';
 const PROJECT = 'demo-qcard-test';
 if (!getApps().length) initializeApp({ projectId: PROJECT });
 const db = getFirestore();
+const bucket = getStorage().bucket(`${PROJECT}.appspot.com`);
+const removeFiles: h.RemoveFiles = (prefix) => bucket.deleteFiles({ prefix });
 
 const USERS = {
   lead: { uid: 'u-lead', name: '이재성', github: 'jaesung-lee' },
@@ -26,6 +29,7 @@ async function clear() {
   const host = process.env.FIRESTORE_EMULATOR_HOST;
   if (!host) throw new Error('Firestore 에뮬레이터가 필요합니다 (pnpm --filter @qcard/functions test)');
   await fetch(`http://${host}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: 'DELETE' });
+  await bucket.deleteFiles();
 }
 
 const expectRule = async (p: Promise<unknown>, kind: MembershipError['kind'], text?: string) => {
@@ -70,11 +74,112 @@ describe('프로젝트', () => {
 
     await h.deleteProject(ctx('lead', t0), { projectId: p.id, confirmName: 'Demo App' });
     await h.createInvitation(ctx('lead'), { projectId: p.id, role: 'qa' });
-    expect(await h.purgeDeletedProjects(db, '2026-11-20T00:00:00.000Z')).toEqual([]);
-    expect(await h.purgeDeletedProjects(db, '2026-11-21T00:00:00.000Z')).toEqual([p.id]);
+    expect(await h.purgeDeletedProjects(db, '2026-11-20T00:00:00.000Z', removeFiles)).toEqual([]);
+    expect(await h.purgeDeletedProjects(db, '2026-11-21T00:00:00.000Z', removeFiles)).toEqual([p.id]);
     expect((await db.doc(`projects/${p.id}`).get()).exists).toBe(false);
     expect((await db.collection(`projects/${p.id}/members`).get()).size).toBe(0);
     expect((await db.collection('invitationTokens').get()).size).toBe(0);
+  });
+
+  it('영구 삭제는 Storage 파일과 테스트 계정 비밀값까지 지우고, 이름이 겹치는 다른 프로젝트는 남긴다', async () => {
+    const p = await h.createProject(ctx('lead'), input);
+    const other = await h.createProject(ctx('qa'), input); // demo-app-2 — 접두어가 겹친다
+    const files = [
+      `projects/${p.id}/specBundles/b1/onboarding/spec.md`,
+      `projects/${p.id}/builds/b1/app.apk`,
+      `projects/${p.id}/cycles/c1/runs/r1/TC-001/obs-01.png`,
+    ];
+    const kept = `projects/${other.id}/specBundles/b1/onboarding/spec.md`;
+    for (const f of [...files, kept]) await bucket.file(f).save('x');
+    for (const sub of ['accounts', 'accountSecrets', 'secretAccessLog'])
+      await db.doc(`projects/${p.id}/${sub}/a1`).set({ at: 'x' });
+
+    await h.deleteProject(ctx('lead', '2026-10-22T00:00:00.000Z'), { projectId: p.id, confirmName: 'Demo App' });
+    expect(await h.purgeDeletedProjects(db, '2026-11-21T00:00:00.000Z', removeFiles)).toEqual([p.id]);
+
+    for (const f of files) expect((await bucket.file(f).exists())[0]).toBe(false);
+    expect((await bucket.file(kept).exists())[0]).toBe(true);
+    for (const sub of ['accounts', 'accountSecrets', 'secretAccessLog'])
+      expect((await db.collection(`projects/${p.id}/${sub}`).get()).size).toBe(0);
+    expect((await db.doc(`projects/${other.id}`).get()).exists).toBe(true);
+  });
+
+  it('Storage 삭제가 실패하면 문서를 남겨 다음 실행에서 다시 지운다', async () => {
+    const p = await h.createProject(ctx('lead'), input);
+    await h.deleteProject(ctx('lead', '2026-10-22T00:00:00.000Z'), { projectId: p.id, confirmName: 'Demo App' });
+    const broken = async () => {
+      throw new Error('storage down');
+    };
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await h.purgeDeletedProjects(db, '2026-11-21T00:00:00.000Z', broken)).toEqual([]);
+    quiet.mockRestore();
+    expect((await db.doc(`projects/${p.id}`).get()).exists).toBe(true);
+    expect(await h.purgeDeletedProjects(db, '2026-11-22T00:00:00.000Z', removeFiles)).toEqual([p.id]);
+  });
+});
+
+describe('사이클 삭제 (F-CY-10)', () => {
+  const T0 = '2026-10-28T10:00:00.000Z';
+  const NAME = '1.0.0 (7) 통합테스트';
+  /** 사이클 c1(하위 문서·증거 포함)과, 지우면 안 되는 사이클 c10·빌드 */
+  async function seed(p: string) {
+    const c = (id: string) => ({
+      id,
+      projectId: p,
+      name: NAME,
+      docId: 'd',
+      buildId: 'b',
+      targets: [],
+      period: { start: T0 },
+    });
+    await db.doc(`projects/${p}/cycles/c1`).set(c('c1'));
+    await db.doc(`projects/${p}/cycles/c10`).set(c('c10'));
+    for (const sub of ['cases/TC-1', 'results/TC-1__d', 'runs/r1', 'attempts/a1', 'defects/D-1', 'verdictLog/l1'])
+      await db.doc(`projects/${p}/cycles/c1/${sub}`).set({ at: T0 });
+    await db.doc(`projects/${p}/builds/b`).set({ id: 'b' });
+    const files = [
+      `projects/${p}/cycles/c1/runs/r1/TC-1/obs-01.png`,
+      `projects/${p}/cycles/c10/runs/r1/TC-1/obs-01.png`,
+    ];
+    for (const f of files) await bucket.file(f).save('x');
+    return files;
+  }
+  const del = (who: Who, p: string, confirmName = NAME, files = removeFiles) =>
+    h.deleteCycle(ctx(who, T0), { projectId: p, cycleId: 'c1', confirmName }, files);
+
+  it('사이클과 하위 문서·증거를 지우고, 접두어가 겹치는 다른 사이클·빌드는 남긴다', async () => {
+    const p = (await h.createProject(ctx('lead'), input)).id;
+    const [mine, other] = await seed(p);
+    await del('lead', p);
+    expect((await db.doc(`projects/${p}/cycles/c1`).get()).exists).toBe(false);
+    expect((await db.doc(`projects/${p}/cycles/c1`).listCollections()).length).toBe(0);
+    expect((await bucket.file(mine!).exists())[0]).toBe(false);
+    expect((await bucket.file(other!).exists())[0]).toBe(true);
+    expect((await db.doc(`projects/${p}/cycles/c10`).get()).exists).toBe(true);
+    expect((await db.doc(`projects/${p}/builds/b`).get()).exists).toBe(true);
+  });
+
+  it('이름이 다르거나, 멤버가 아니거나, 신호가 살아 있는 Run이 있으면 거부한다', async () => {
+    const p = (await h.createProject(ctx('lead'), input)).id;
+    await seed(p);
+    await expectRule(del('lead', p, '틀림'), 'rule', '이름');
+    await expectRule(del('guest', p), 'permission');
+    await db.doc(`projects/${p}/cycles/c1/runs/r1`).set({ status: 'running', heartbeatAt: T0 });
+    await expectRule(del('lead', p), 'rule', '실행 중인 Run 1개');
+    expect((await db.doc(`projects/${p}/cycles/c1`).get()).data()?.deletingAt).toBeUndefined();
+  });
+
+  it('Storage 삭제가 실패하면 삭제 중 표시를 남기고, 다시 삭제하면 이어서 지운다', async () => {
+    const p = (await h.createProject(ctx('lead'), input)).id;
+    await seed(p);
+    await expect(
+      del('lead', p, NAME, async () => {
+        throw new Error('storage down');
+      }),
+    ).rejects.toThrow('storage down');
+    expect((await db.doc(`projects/${p}/cycles/c1`).get()).data()?.deletingAt).toBe(T0);
+    await del('lead', p);
+    expect((await db.doc(`projects/${p}/cycles/c1`).get()).exists).toBe(false);
   });
 });
 

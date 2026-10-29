@@ -4,9 +4,10 @@ import { appendFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { compareVersions } from '@qcard/shared';
 import { canonicalJson } from './canonical';
 import { ClaudeCodeSetupError, LlmOutputError, LlmTimeoutError, PlanLimitError } from './messages';
-import type { LlmClient, LlmRequest, LlmResponse, LlmRetry } from './types';
+import { CLAUDE_CODE_MIN_VERSION, type LlmClient, type LlmRequest, type LlmResponse, type LlmRetry } from './types';
 
 /*
  * 사용자 PC에 설치·로그인된 Claude Code를 헤드리스(`claude -p`)로 실행해 LLM을 부른다 (PRD §8 옵션 D).
@@ -110,18 +111,23 @@ export function createClaudeCliLlm(
       }
 
       const timeout = options.turnTimeoutMs ?? TURN_TIMEOUT_MS;
+      const turn = (c: Anthropic.ContentBlockParam[]) =>
+        session.turn(c, timeout).catch((e: unknown) => {
+          // 버전 미달로 거절되면 그 버전을 기억해, 표가 낡았어도 다음 시작 전 점검에서 막는다
+          if (e instanceof ClaudeCodeSetupError && e.requiredVersion) learnMinVersion(req.model, e.requiredVersion);
+          throw e;
+        });
       // 응답이 없으면 다시 묻지 않는다 — 그 케이스는 사유와 함께 Blocked로 넘어간다
-      let r = await session.turn(content, timeout);
+      let r = await turn(content);
       let blocks: Anthropic.ContentBlock[];
       try {
         blocks = toBlocks(kind, r, session.toolNames);
       } catch (e) {
         if (kind !== 'tools' || !(e instanceof LlmOutputError)) throw e;
         // 형식이 틀리면 같은 세션에서 한 번 다시 묻는다
-        const again = await session.turn(
-          [{ type: 'text', text: `응답 형식 오류: ${e.message}. 정해진 형식의 JSON 객체 하나만 다시 답한다.` }],
-          timeout,
-        );
+        const again = await turn([
+          { type: 'text', text: `응답 형식 오류: ${e.message}. 정해진 형식의 JSON 객체 하나만 다시 답한다.` },
+        ]);
         r = { ...again, usage: addUsage(r.usage, again.usage) };
         blocks = toBlocks(kind, r, session.toolNames);
       }
@@ -144,6 +150,8 @@ class Session {
   private waiting?: { resolve: (r: CliResult) => void; reject: (e: Error) => void };
   /** 이번 턴에 Claude Code가 마지막으로 보낸 재시도 알림 */
   private retry?: LlmRetry;
+  /** 이번 턴에 Claude Code가 보낸 한도 알림 (`rate_limit_event`). 막혔으면 풀리는 시각을 여기서 읽는다 */
+  private limit?: RateLimitInfo;
 
   constructor(
     private readonly proc: CliProcess,
@@ -154,6 +162,7 @@ class Session {
   ) {
     proc.onMessage((m) => {
       if (m.type === 'result') this.settle((w) => w.resolve(m as unknown as CliResult));
+      else if (m.type === 'rate_limit_event') this.limit = m.rate_limit_info as RateLimitInfo | undefined;
       else if (m.type === 'system' && m.subtype === 'api_retry') {
         this.retry = parseRetry(m);
         this.onRetry?.(this.retry);
@@ -174,6 +183,7 @@ class Session {
     clearTimeout(this.idle);
     this.busy = true;
     this.retry = undefined;
+    this.limit = undefined;
     try {
       const result = new Promise<CliResult>((resolve, reject) => (this.waiting = { resolve, reject }));
       const timer = setTimeout(
@@ -191,7 +201,7 @@ class Session {
       );
       this.proc.send({ type: 'user', message: { role: 'user', content } });
       const r = await result.finally(() => clearTimeout(timer));
-      if (r.is_error) throw cliError(r);
+      if (r.is_error) throw cliError(r, this.limit);
       return r;
     } catch (e) {
       this.close();
@@ -241,19 +251,103 @@ export function retryReason(error: string, status?: number, noResponse = false):
 }
 
 /** 로그인·한도 오류는 Run을 멈춰야 하므로 따로 구분한다. 나머지는 응답 오류(→ Blocked) */
-export function cliError(r: CliResult): Error {
+/**
+ * stream-json의 `rate_limit_event.rate_limit_info` (공개 문서 아님. Claude Code 2.1.308 `-p` 출력에서 확인 — 턴마다 오고,
+ * 평소에는 status `allowed`). 막혔으면 status가 rejected, resetsAt은 풀리는 시각(초)
+ */
+export type RateLimitInfo = { status?: string; resetsAt?: number | null; rateLimitType?: string | null };
+
+export function cliError(r: CliResult, limit?: RateLimitInfo): Error {
   const text = r.result ?? '';
   if (/not logged in|\/login|invalid api key|oauth token/i.test(text)) {
     return new ClaudeCodeSetupError('not_logged_in', `Claude Code에 로그인되어 있지 않습니다: ${text}`);
   }
   // 새 모델은 Claude Code 최소 버전이 있다 (예: "does not support this model; version 2.1.280 or newer is required")
   if (/does not support this model|or newer is required|claude update/i.test(text)) {
-    return new ClaudeCodeSetupError('outdated', `Claude Code 업데이트가 필요합니다(터미널에서 claude update): ${text}`);
+    return new ClaudeCodeSetupError(
+      'outdated',
+      `Claude Code 업데이트가 필요합니다(터미널에서 claude update): ${text}`,
+      /version (\d+(?:\.\d+)+) or newer/i.exec(text)?.[1],
+    );
   }
   if (r.api_error_status === 429 || /usage limit|limit reached|hit your limit|rate.?limit/i.test(text)) {
-    return new PlanLimitError(`Claude 플랜 사용 한도에 닿았습니다: ${text}`);
+    // 풀리는 시각은 구조화된 한도 알림을 먼저 보고, 없으면 오류 문구에서 읽는다
+    const at =
+      limit?.status === 'rejected' && typeof limit.resetsAt === 'number'
+        ? new Date(limit.resetsAt * 1000).toISOString()
+        : resetsAt(text);
+    return new PlanLimitError(`Claude 플랜 사용 한도에 닿았습니다: ${text}`, at);
   }
   return new LlmOutputError(`Claude Code 오류: ${text || r.subtype}`);
+}
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+/**
+ * 한도 오류 문구의 풀리는 시각 (ISO). 읽지 못하면 undefined — 콘솔은 시각 없이 "한도 도달"로 보인다.
+ * - 시각 표기: "resets 3pm", "Resets at 3:10 PM", "resets Nov 3 at 9am (Asia/Seoul)". 시간대가 없으면 이 PC의 시간대,
+ *   날짜가 없으면 now 이후 가장 가까운 그 시각
+ * - 옛 형식: "Claude AI usage limit reached|1793260800" (초 단위)
+ */
+export function resetsAt(text: string, now = new Date()): string | undefined {
+  const sec = /\|(\d{10})\s*$/.exec(text)?.[1];
+  if (sec) return new Date(Number(sec) * 1000).toISOString();
+  const m =
+    /resets?\s+(?:at\s+)?(?:([a-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(?:at\s+)?)?(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?(?:\s*\(([^)]+)\))?/i.exec(
+      text,
+    );
+  if (!m) return undefined;
+  const [, mon, day, hh, mm, ap, zone] = m;
+  const month = mon ? MONTHS.indexOf(mon.toLowerCase()) : -1;
+  if (mon && month < 0) return undefined;
+  const tz = zone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  let today: { y: number; mo: number; d: number };
+  try {
+    today = wallDate(now, tz);
+  } catch {
+    return undefined; // 모르는 시간대
+  }
+  const hour = (Number(hh) % 12) + (ap!.toLowerCase() === 'p' ? 12 : 0);
+  const at = (y: number, mo: number, d: number) => zonedTime(y, mo, d, hour, Number(mm ?? 0), tz);
+  if (mon) {
+    const t = at(today.y, month, Number(day));
+    return new Date(t > now.getTime() ? t : at(today.y + 1, month, Number(day))).toISOString();
+  }
+  const t = at(today.y, today.mo, today.d);
+  return new Date(t > now.getTime() ? t : t + 24 * 3600_000).toISOString();
+}
+
+/** 그 시간대에서 본 날짜 */
+function wallDate(at: Date, tz: string) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric' })
+      .formatToParts(at)
+      .map((x) => [x.type, x.value]),
+  );
+  return { y: Number(p.year), mo: Number(p.month) - 1, d: Number(p.day) };
+}
+
+/** 그 시간대의 벽시계 시각 → epoch ms */
+function zonedTime(y: number, mo: number, d: number, h: number, mi: number, tz: string): number {
+  const guess = Date.UTC(y, mo, d, h, mi);
+  const offset = (t: number) => {
+    const p = Object.fromEntries(
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        hourCycle: 'h23',
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+      })
+        .formatToParts(t)
+        .map((x) => [x.type, x.value]),
+    );
+    return Date.UTC(+p.year!, +p.month! - 1, +p.day!, +p.hour!, +p.minute!) - t;
+  };
+  const first = guess - offset(guess);
+  return guess - offset(first);
 }
 
 type ToolCalls = { thought: string; calls: { name: string; input: Record<string, unknown> }[] };
@@ -421,7 +515,23 @@ export type ClaudeCodeStatus = {
   authMethod?: string;
   /** pro · max 등 */
   subscriptionType?: string;
+  /** 점검한 모델들에 필요한 최소 버전보다 낮으면 그 버전 */
+  requiredVersion?: string;
 };
+
+
+/** 실행 중 "version … or newer is required"로 알게 된 최소 버전 (이 프로세스 동안만. 업데이트하면 다음 점검에서 풀린다) */
+const learned = new Map<string, string>();
+export function learnMinVersion(model: string, version: string) {
+  const known = learned.get(model);
+  if (!known || compareVersions(version, known) > 0) learned.set(model, version);
+}
+
+/** 모델들을 부르는 데 필요한 Claude Code 최소 버전 (표와 실행 중 알게 된 값 중 높은 것) */
+export function requiredClaudeCodeVersion(models: readonly string[]): string | undefined {
+  const all = models.flatMap((m) => [CLAUDE_CODE_MIN_VERSION[m], learned.get(m)]).filter((v): v is string => !!v);
+  return all.sort(compareVersions).at(-1);
+}
 
 const run = (args: string[]) =>
   new Promise<string>((resolve, reject) =>
@@ -430,38 +540,73 @@ const run = (args: string[]) =>
     ),
   );
 
-/** 설치·로그인 상태 (F-EX-17). 계정 식별 정보(이메일·조직)는 돌려주지 않는다 */
-export async function claudeCodeStatus(): Promise<ClaudeCodeStatus> {
+/**
+ * 설치·로그인·버전 상태 (F-EX-17). models를 주면 그 모델들에 필요한 버전보다 낮은지 본다.
+ * 계정 식별 정보(이메일·조직)는 돌려주지 않는다
+ */
+export async function claudeCodeStatus(models: readonly string[] = []): Promise<ClaudeCodeStatus> {
   const version = await run(['--version']).catch(() => undefined);
   if (!version) return { installed: false, loggedIn: false };
   const auth = await run(['auth', 'status'])
     .then((out) => JSON.parse(out) as { loggedIn?: boolean; authMethod?: string; subscriptionType?: string })
     .catch(() => ({}) as { loggedIn?: boolean; authMethod?: string; subscriptionType?: string });
+  const v = version.trim().split(' ')[0]!;
+  const required = versionShortfall(v, models);
   return {
     installed: true,
-    version: version.trim().split(' ')[0],
+    version: v,
     loggedIn: auth.loggedIn === true,
     authMethod: auth.authMethod,
     subscriptionType: auth.subscriptionType,
+    ...(required ? { requiredVersion: required } : {}),
   };
 }
 
-/** Run·생성 시작 전 점검. 쓸 수 없으면 해결 방법을 담아 던진다 */
-export async function assertClaudeCodeReady(): Promise<ClaudeCodeStatus> {
-  const s = await claudeCodeStatus();
+/** 설치된 버전이 모델들에 필요한 버전보다 낮으면 필요한 버전. 버전을 모르면 판단하지 않는다 */
+export function versionShortfall(version: string | undefined, models: readonly string[]): string | undefined {
+  const required = requiredClaudeCodeVersion(models);
+  return version && required && compareVersions(version, required) < 0 ? required : undefined;
+}
+
+/** claude-sonnet-5-5 → Sonnet 5.5 */
+export const modelLabel = (model: string) =>
+  model
+    .replace(/^claude-/, '')
+    .replace(/-(\d+)-(\d+)$/, ' $1.$2')
+    .replace(/-(\d+)$/, ' $1')
+    .replace(/^\w/, (c) => c.toUpperCase());
+
+/** Run·생성 시작 전 점검. models는 그 작업이 부르는 모델(`MODELS_FOR`). 쓸 수 없으면 해결 방법을 담아 던진다 */
+export async function assertClaudeCodeReady(models: readonly string[] = []): Promise<ClaudeCodeStatus> {
+  const s = await claudeCodeStatus(models);
+  const problem = claudeCodeProblem(s, models);
+  if (problem) throw problem;
+  return s;
+}
+
+/** 이미 읽은 상태로 점검한다. 쓸 수 없으면 해결 방법을 담은 오류, 쓸 수 있으면 undefined */
+export function claudeCodeProblem(s: ClaudeCodeStatus, models: readonly string[]): ClaudeCodeSetupError | undefined {
   if (!s.installed) {
-    throw new ClaudeCodeSetupError(
+    return new ClaudeCodeSetupError(
       'not_installed',
       'Claude Code(claude)가 설치되어 있지 않습니다. https://claude.com/claude-code 에서 설치한 뒤 터미널에서 `claude`로 로그인하세요',
     );
   }
+  const required = versionShortfall(s.version, models);
+  if (required) {
+    return new ClaudeCodeSetupError(
+      'outdated',
+      `Claude Code ${s.version}은(는) ${models.map(modelLabel).join('·')}를 지원하지 않습니다. ${required} 이상이 필요합니다 — 터미널에서 \`claude update\`를 실행하세요`,
+      required,
+    );
+  }
   if (!s.loggedIn) {
-    throw new ClaudeCodeSetupError(
+    return new ClaudeCodeSetupError(
       'not_logged_in',
       'Claude Code에 로그인되어 있지 않습니다. 터미널에서 `claude`를 실행해 로그인하세요',
     );
   }
-  return s;
+  return undefined;
 }
 
 let workDir: string | undefined;

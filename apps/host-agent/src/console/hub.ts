@@ -172,6 +172,11 @@ export class ConsoleHub implements RunControl {
     });
   }
 
+  /** 다른 Run이 잡았거나 끝낸 칸 (F-CY-06): 이 Run의 큐에서 뺀다 */
+  caseSkipped(tc: TestCase) {
+    this.set({ queue: this.state.queue.filter((q) => q.tcId !== tc.tcId) });
+  }
+
   runEnded(status: LiveConsole['run']['status'], message?: string) {
     this.set({
       run: { status, ...(message ? { message } : {}) },

@@ -70,6 +70,10 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+/* 서명 지문: <wbr>을 넣은 콜론 뒤에서만 줄을 바꾼다 */
+.qs-kv .qs-sha {
+  overflow-wrap: normal;
+}
 
 /* 진행 막대: 판정별 구간. 숫자·범례를 함께 보여 색만으로 읽지 않게 한다. */
 .qs-bar {
@@ -95,6 +99,18 @@
 .qs-cycle:hover {
   border-color: var(--qc-line-neutral-primary);
   background: var(--qc-surface-neutral-secondary);
+}
+/* 카드의 [⋯] (F-CY-10): 카드 전체가 링크라 버튼을 그 위에 겹쳐 두고, 머리 오른쪽에 그만큼 자리를 비운다 */
+.qs-cycle-item {
+  position: relative;
+}
+.qs-cycle-menu {
+  position: absolute;
+  top: var(--qc-space-16);
+  right: var(--qc-space-16);
+}
+.qs-cycle-item:has(.qs-cycle-menu) .qs-cycle > .qs-card-head {
+  padding-right: var(--qc-space-40);
 }
 .qs-cycle-body {
   display: grid;
@@ -287,6 +303,10 @@
   color: var(--qc-qcard-verdict-fail-fg);
   flex: none;
 }
+/* 결함이 연결되지 않은 Fail 칸이 있는 행의 결함 ID 셀 (F-RP-19) */
+.qs-no-defect {
+  color: var(--qc-qcard-verdict-fail-fg);
+}
 .qs-history {
   margin: 0;
   padding: 0;
@@ -362,4 +382,21 @@
   flex-direction: column;
   gap: var(--qc-space-6);
   min-width: 0;
+}
+
+/* 첨부 스크린샷 (F-RP-05) */
+.qs-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--qc-space-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.qs-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--qc-space-4);
 }

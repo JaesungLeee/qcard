@@ -241,18 +241,17 @@ export function CasesTab({ d, index, projectId }: SheetProps) {
           {
             headerName: '결함 ID',
             colId: 'defect',
-            valueGetter: (p) =>
-              p.data &&
-              ([
-                ...new Set(
-                  Object.values(p.data.results)
-                    .map((r) => r?.defectId)
-                    .filter(Boolean),
-                ),
-              ].join(', ') ||
-                '—'),
-            width: 96,
+            // 결함이 연결되지 않은 Fail 칸이 있으면 "결함 없음"을 함께 보인다 (F-RP-19)
+            valueGetter: (p) => {
+              if (!p.data) return undefined;
+              const results = Object.values(p.data.results);
+              const ids = [...new Set(results.map((r) => r?.defectId).filter(Boolean))];
+              const missing = results.some((r) => r?.verdict === 'fail' && !r.defectId);
+              return [...ids, ...(missing ? ['결함 없음'] : [])].join(', ') || '—';
+            },
+            width: 120,
             cellClass: 'qc-mono',
+            cellClassRules: { 'qs-no-defect': (p) => String(p.value ?? '').includes('결함 없음') },
           },
           {
             headerName: '수행일 / 수행자',

@@ -1,7 +1,11 @@
 import { createFixtureDb, type ConsoleSession } from '@qcard/fixtures';
 import {
   accountState,
+  cycleUsesFlows,
   leaseLive,
+  newPrepFlow,
+  prepFlowChange,
+  prepFlowUses,
   type Build,
   type CaseResult,
   type CaseReviseJob,
@@ -19,6 +23,7 @@ import {
   type QaDocJobEvent,
   type QaDocJobSpec,
   type Run,
+  type Screenshot,
   type TestAccount,
   type TestCase,
   type TestCycle,
@@ -50,26 +55,36 @@ import {
   ConflictError,
   NotFoundError,
   PermissionError,
+  PrepFlowConflictError,
   RuleError,
+  toApiError,
   type AccountView,
   type CycleDetail,
+  type CycleRef,
   type InvitationView,
   type ProjectSummary,
   type QcardApi,
 } from './api';
 import {
   approvalFor,
+  attachmentPath,
+  attachmentProblem,
   caseReviseRequest,
+  changedDefect,
   closedRevision,
+  completedCycle,
   confirmedResult,
   cycleSummary,
   isActiveCycle,
   jobPartOrder,
   newBuild,
   newCycle,
+  newDefect,
   nextCase,
   qaDocRequest,
   qaDocSummary,
+  reopenedCycle,
+  requireOpenCycle,
   retriedJob,
   resolveQuestionIn,
   runRequest,
@@ -139,12 +154,13 @@ function withHistory(results: DocumentData[], logs: { data: () => DocumentData }
     const mine = (byResult.get(resultId(rest.tcId, rest.deviceId)) ?? []).sort(
       (a, b) => ms(a) - ms(b) || (a._i ?? 0) - (b._i ?? 0),
     );
-    const history = mine.map(({ at, by, from, to, note }) => ({
+    const history = mine.map(({ at, by, from, to, note, attachments }) => ({
       at: logTime(at),
       by,
       from,
       to,
       ...(note ? { note } : {}),
+      ...(attachments ? { attachments } : {}),
     }));
     return { ...rest, history: [...(rest.history ?? []), ...history] };
   });
@@ -176,7 +192,7 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
     try {
       return await fn();
     } catch (e) {
-      throw fromFirebase(e);
+      throw fromFirebase(toApiError(e));
     }
   };
   // callable은 undefined를 null로 바꿔 보내므로 빈 필드는 빼고 보낸다
@@ -219,6 +235,38 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       runs: ordered<Run>(runs.docs),
       defects: ordered<Defect>(defects.docs),
     };
+  }
+  /** 사이클 문서를 읽어 바꾼다 (완료·다시 열기). 빠진 필드가 지워지도록 통째로 쓴다 */
+  function updateCycle({ projectId, cycleId }: CycleRef, change: (c: TestCycle) => TestCycle) {
+    return runTransaction(db, async (tx) => {
+      const ref = doc(db, P(projectId), 'cycles', cycleId);
+      const snap = await tx.get(ref);
+      if (!snap.exists()) throw new NotFoundError(`사이클 없음: ${cycleId}`);
+      const next = change(strip<TestCycle>(snap.data()));
+      tx.set(ref, clean(next));
+      return next;
+    });
+  }
+  const flowRef = (p: string, id: string) => doc(db, P(p), 'prepFlows', id);
+  const membersOf = async (p: string) =>
+    (await getDocs(collection(db, P(p), 'members'))).docs.map((d) => d.data() as Member);
+  /** 준비 플로우 사용처: 모든 QA 문서 + 완료되지 않은 사이클의 케이스 사본 */
+  async function flowUses(p: string) {
+    const [metas, cycles] = await Promise.all([
+      getDocs(collection(db, P(p), 'qaDocs')),
+      getDocs(collection(db, P(p), 'cycles')),
+    ]);
+    const open = cycles.docs.map((d) => strip<TestCycle>(d.data())).filter(cycleUsesFlows);
+    const [docs, copies] = await Promise.all([
+      Promise.all(metas.docs.map((d) => loadQaDoc(p, d.id))),
+      Promise.all(
+        open.map(async (cycle) => ({
+          cycle,
+          cases: ordered<TestCase>((await getDocs(collection(db, P(p), 'cycles', cycle.id, 'cases'))).docs),
+        })),
+      ),
+    ]);
+    return prepFlowUses(docs, copies);
   }
   async function loadBuild(p: string, id: string): Promise<Build> {
     const snap = await getDoc(doc(db, P(p), 'builds', id));
@@ -368,6 +416,39 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       ),
     listPrepFlows: (projectId) =>
       guard(async () => ordered<PrepFlow>((await getDocs(collection(db, P(projectId), 'prepFlows'))).docs)),
+    listPrepFlowUses: (projectId) => guard(() => flowUses(projectId)),
+    createPrepFlow: (projectId, input) =>
+      guard(async () => {
+        const [members, existing] = await Promise.all([
+          membersOf(projectId),
+          getDocs(collection(db, P(projectId), 'prepFlows')),
+        ]);
+        const flow = newPrepFlow(members, me(), input, ordered<PrepFlow>(existing.docs), now());
+        const last = Math.max(-1, ...existing.docs.map((d) => (d.data()._i as number | undefined) ?? 0));
+        await runTransaction(db, async (tx) => {
+          // 목록을 읽은 뒤 다른 사람이 같은 id로 만들었으면 덮어쓰지 않는다
+          const ref = flowRef(projectId, flow.id);
+          if ((await tx.get(ref)).exists()) throw new RuleError('다른 사람이 방금 플로우를 추가했습니다. 다시 저장하세요.');
+          tx.set(ref, clean({ ...flow, _i: last + 1 }));
+        });
+        return flow;
+      }),
+    updatePrepFlow: (projectId, flowId, input, expectedRev) =>
+      guard(async () => {
+        const members = await membersOf(projectId);
+        return runTransaction(db, async (tx) => {
+          const ref = flowRef(projectId, flowId);
+          const snap = await tx.get(ref);
+          if (!snap.exists()) throw new NotFoundError(`준비 플로우 없음: ${flowId}`);
+          const current = strip<PrepFlow>(snap.data());
+          if ((current.rev ?? 0) !== expectedRev) throw new PrepFlowConflictError(current);
+          const next = prepFlowChange(members, me(), current, input, now());
+          tx.set(ref, clean({ ...next, _i: snap.data()._i }));
+          return next;
+        });
+      }),
+    // 참조 확인은 질의가 필요해 Functions 트랜잭션에서 한다 (클라이언트는 플로우를 지우지 못한다)
+    deletePrepFlow: (projectId, flowId) => call<void>('deletePrepFlow', { projectId, flowId }),
 
     // ------------------------------------------------------------ 테스트 계정 (F-PF-04·08·09)
     // 쓰기는 Functions만 (비밀값 봉인·배정 규칙). 배정이 살아 있는지는 그 Run의 연결 신호로 본다
@@ -533,8 +614,24 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       };
     },
     confirmVerdict: (input) =>
-      guard(() =>
-        runTransaction(db, async (tx) => {
+      guard(async () => {
+        // 첨부(F-RP-05)는 먼저 올리고 판정과 함께 경로를 남긴다. 판정 저장이 실패하면 올린 파일은 사이클 삭제 때 지워진다
+        const a = input.attachments;
+        let attachments: Screenshot[] | undefined;
+        if (a) {
+          const problem = attachmentProblem(a);
+          if (problem) throw new RuleError(problem);
+          if (a.add.length && !deps.storage) throw new NotFoundError('스크린샷 저장소가 연결되지 않았습니다');
+          const added = await Promise.all(
+            a.add.map(async (f) => {
+              const path = attachmentPath(input, doc(collection(db, 'ids')).id, f);
+              await uploadBytes(ref(deps.storage!, path), f.bytes, { contentType: f.type });
+              return { kind: 'storage' as const, path, ...(f.w && f.h ? { w: f.w, h: f.h } : {}) };
+            }),
+          );
+          attachments = [...a.keep, ...added];
+        }
+        return runTransaction(db, async (tx) => {
           const ref = doc(
             db,
             P(input.projectId),
@@ -555,9 +652,9 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
               where('deviceId', '==', input.deviceId),
             ),
           );
-          const next = confirmedResult(withHistory([current], logs.docs)[0]!, input, user.name, now());
+          const next = confirmedResult(withHistory([current], logs.docs)[0]!, input, user.name, now(), attachments);
           const log = doc(collection(db, P(input.projectId), 'cycles', input.cycleId, 'verdictLog'));
-          const { at: _at, ...change } = verdictChange(current, input, user.name, now());
+          const { at: _at, ...change } = verdictChange(current, input, user.name, now(), attachments);
           tx.set(log, {
             ...clean(change),
             tcId: input.tcId,
@@ -567,8 +664,41 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
           });
           tx.set(ref, clean({ ...next, history: current.history, _i: snap.data()._i, _decision: log.id }));
           return next;
+        });
+      }),
+
+    // 결함 (F-RP-19): 결함·사이클 번호·결과 칸을 한 트랜잭션으로 쓴다 (보안 규칙이 번호가 함께 올랐는지 본다)
+    createDefect: (input) =>
+      guard(() =>
+        runTransaction(db, async (tx) => {
+          const cycleRef = doc(db, P(input.projectId), 'cycles', input.cycleId);
+          const resultRef = doc(cycleRef, 'results', resultId(input.tcId, input.deviceId));
+          const [cycle, result] = await Promise.all([tx.get(cycleRef), tx.get(resultRef)]);
+          if (!cycle.exists()) throw new NotFoundError(`사이클 없음: ${input.cycleId}`);
+          if (!result.exists()) throw new NotFoundError(`결과 없음: ${input.tcId} × ${input.deviceId}`);
+          const made = newDefect(strip<TestCycle>(cycle.data()), strip<CaseResult>(result.data()), input, me(), now());
+          const seq = made.cycle.defectSeq!;
+          tx.update(cycleRef, { defectSeq: seq });
+          tx.update(resultRef, { defectId: made.defect.id });
+          tx.set(doc(cycleRef, 'defects', made.defect.id), clean({ ...made.defect, _i: seq }));
+          return made.defect;
         }),
       ),
+    updateDefect: (ref, defectId, patch) =>
+      guard(() =>
+        runTransaction(db, async (tx) => {
+          const at = doc(db, P(ref.projectId), 'cycles', ref.cycleId, 'defects', defectId);
+          const snap = await tx.get(at);
+          if (!snap.exists()) throw new NotFoundError(`결함 없음: ${defectId}`);
+          const next = changedDefect(strip<Defect>(snap.data()), patch);
+          tx.update(at, { severity: next.severity, status: next.status });
+          return next;
+        }),
+      ),
+    completeCycle: (ref) => guard(() => updateCycle(ref, (c) => completedCycle(c, me(), now()))),
+    reopenCycle: (ref) => guard(() => updateCycle(ref, reopenedCycle)),
+    // 하위 문서·Storage 증거까지 지워야 해서 Functions가 한다 (보안 규칙이 직접 삭제를 막는다)
+    deleteCycle: (ref, confirmName) => call<void>('deleteCycle', { ...ref, confirmName }),
 
     // ------------------------------------------------------------ QA 문서 생성 작업 (PRD §5.2, §6.2)
     requestQaDoc: (projectId, input) =>
@@ -596,6 +726,9 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       }),
     requestRun: (projectId, input) =>
       guard(async () => {
+        const cycle = await getDoc(doc(db, P(projectId), 'cycles', input.cycleId));
+        if (!cycle.exists()) throw new NotFoundError(`사이클 없음: ${input.cycleId}`);
+        requireOpenCycle(strip<TestCycle>(cycle.data()));
         const r = doc(collection(db, P(projectId), 'jobs'));
         const job = runRequest(projectId, input, me(), now(), r.id);
         await setDoc(r, clean(job));

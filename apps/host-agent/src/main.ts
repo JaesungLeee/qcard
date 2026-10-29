@@ -11,11 +11,10 @@
  * 하위 명령은 저장소의 개발용 스크립트(pair.ts·serve.ts)와 같은 코드를 그대로 불러 실행한다.
  */
 import { execFile } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { resolveAdb } from '@qcard/device/node';
-import { claudeCodeStatus } from '@qcard/llm';
+import { claudeCodeProblem, claudeCodeStatus, MODELS_FOR } from '@qcard/llm';
 import { findScrcpy } from './console/video';
+import { hostVersion } from './version';
 
 process.env.QCARD_TARGET ??= 'prod';
 process.env.QCARD_CLI = '1';
@@ -39,9 +38,6 @@ const HELP = `qcard — 스펙 기반 QA 자동화 호스트 에이전트
 
 웹: https://qcard.dev`;
 
-/** 번들(dist/qcard.js)과 소스(src/main.ts) 모두 한 단계 위에 package.json이 있다 */
-const version = () =>
-  (JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf8')) as { version: string }).version;
 
 const runs = (bin: string, args: string[]) =>
   new Promise<string | undefined>((resolve) =>
@@ -52,6 +48,7 @@ const runs = (bin: string, args: string[]) =>
 async function doctor(log: (l: string) => void, verbose: boolean): Promise<boolean> {
   const adb = await runs(resolveAdb(), ['version']);
   const claude = await claudeCodeStatus();
+  const problem = claudeCodeProblem(claude, [...MODELS_FOR.run, ...MODELS_FOR.qadoc]);
   const scrcpy = await findScrcpy();
   const lines: [ok: boolean, text: string][] = [
     [
@@ -59,12 +56,10 @@ async function doctor(log: (l: string) => void, verbose: boolean): Promise<boole
       adb ? `adb ${/version ([\d.]+)/.exec(adb)?.[1] ?? ''}`.trim() : 'adb 없음 — brew install android-platform-tools',
     ],
     [
-      claude.installed && claude.loggedIn,
-      !claude.installed
-        ? 'Claude Code 없음 — https://claude.com/claude-code 에서 설치한 뒤 `claude`로 로그인'
-        : claude.loggedIn
-          ? `Claude Code ${claude.version ?? ''}${claude.subscriptionType ? ` (${claude.subscriptionType})` : ''}`
-          : 'Claude Code에 로그인되어 있지 않습니다 — 터미널에서 `claude`로 로그인',
+      !problem,
+      problem
+        ? problem.message
+        : `Claude Code ${claude.version ?? ''}${claude.subscriptionType ? ` (${claude.subscriptionType})` : ''}`,
     ],
     [
       !!scrcpy,
@@ -81,7 +76,7 @@ const log = (l: string) => console.log(l);
 if (!command || command === '-h' || command === '--help' || command === 'help') {
   log(HELP);
 } else if (command === '-v' || command === '--version') {
-  log(version());
+  log(hostVersion());
 } else if (command === 'doctor') {
   process.exitCode = (await doctor(log, true)) ? 0 : 1;
 } else if (command === 'connect' || command === 'status' || command === 'disconnect') {

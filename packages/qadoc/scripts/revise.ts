@@ -17,6 +17,7 @@ import {
   createCassetteLlm,
   createLiveLlm,
   llmProviderFromEnv,
+  MODELS_FOR,
   UsageMeter,
   withUsage,
 } from '@qcard/llm';
@@ -77,7 +78,7 @@ const spec = readBundle(files).specs.find((s) => s.name === current.sourceRef.sp
 if (!spec) throw new Error(`스펙 없음: ${current.sourceRef.spec}`);
 
 if (llmProviderFromEnv() === 'claude-cli') {
-  const s = await assertClaudeCodeReady();
+  const s = await assertClaudeCodeReady(MODELS_FOR.qadoc);
   console.log(
     `LLM: Claude Code ${s.version} · ${s.authMethod}${s.subscriptionType ? ` · ${s.subscriptionType} 플랜` : ''}`,
   );

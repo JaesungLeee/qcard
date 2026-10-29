@@ -8,7 +8,7 @@ import { fmtDateTime } from '../../components/format';
 import { usePrepFlows, useQaDoc, useQaDocs, useSetApproval } from '../../data/hooks';
 import { Progress, Tag } from './Badges';
 import { CasesTab } from './CasesTab';
-import { isSelectable } from './logic';
+import { type ApprovalTarget, type CaseSelection, isSelectable, NO_SELECTION } from './logic';
 import { useDocParams } from './params';
 import { QuestionsTab } from './QuestionsTab';
 import { SuggestionsTab } from './SuggestionsTab';
@@ -31,8 +31,9 @@ function Review({ doc, projectId }: { doc: QADocument; projectId: string }) {
   const docs = useQaDocs(projectId);
   const prepFlows = usePrepFlows(projectId);
   const setApproval = useSetApproval(doc);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [selectionKey, setSelectionKey] = useState(0);
+  const [selection, setSelection] = useState<CaseSelection>(NO_SELECTION);
+  // 페이지 밖의 케이스까지 고른 채 일괄 처리하려 하면 한 번 더 묻는다
+  const [confirming, setConfirming] = useState<ApprovalTarget | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const prevVersion = docs.data?.find((d) => d.id === doc.prevDocId)?.appVersion;
@@ -42,19 +43,31 @@ function Review({ doc, projectId }: { doc: QADocument; projectId: string }) {
     return c;
   }, [doc.cases]);
 
-  const selectable = doc.cases.filter((c) => selected.includes(c.tcId) && isSelectable(c));
+  const picked = new Set(selection.ids);
+  const selectable = doc.cases.filter((c) => picked.has(c.tcId) && isSelectable(c));
   const toApprove = selectable.filter((c) => c.approval.status !== 'approved');
+  const targetsFor = (status: ApprovalTarget) => (status === 'approved' ? toApprove : selectable);
 
-  const bulk = (status: 'approved' | 'rejected') => {
-    const targets = status === 'approved' ? toApprove : selectable;
+  const changeSelection = (next: CaseSelection) => {
+    setSelection(next);
+    setConfirming(null);
+    setNotice(null);
+  };
+
+  const bulk = (status: ApprovalTarget) => {
+    const targets = targetsFor(status);
     if (targets.length === 0) return;
+    if (selection.spanning && confirming !== status) {
+      setConfirming(status);
+      return;
+    }
     setApproval.mutate(
       { tcIds: targets.map((c) => c.tcId), status },
       {
         onSuccess: () => {
+          setSelection(NO_SELECTION);
+          setConfirming(null);
           setNotice(`${targets.length}개 케이스를 ${status === 'approved' ? '승인' : '반려'}했습니다.`);
-          setSelected([]);
-          setSelectionKey((k) => k + 1);
         },
       },
     );
@@ -125,9 +138,7 @@ function Review({ doc, projectId }: { doc: QADocument; projectId: string }) {
         <Tab value={tab} onValueChange={changeTab}>
           <TabList size="medium">
             <TabListItem value="cases">케이스 {doc.cases.length}</TabListItem>
-            <TabListItem value="questions">
-              확인 질문 {doc.questions.length}
-            </TabListItem>
+            <TabListItem value="questions">확인 질문 {doc.questions.length}</TabListItem>
             <TabListItem value="suggestions">보강 제안 {doc.suggestions.length}</TabListItem>
             <TabListItem value="traceability">추적성</TabListItem>
           </TabList>
@@ -137,12 +148,16 @@ function Review({ doc, projectId }: { doc: QADocument; projectId: string }) {
           <CasesTab
             doc={doc}
             prepFlows={prepFlows.data ?? []}
-            selected={selected}
-            onSelectedChange={(ids) => {
-              setSelected(ids);
-              setNotice(null);
-            }}
-            selectionKey={selectionKey}
+            selection={selection}
+            onSelectionChange={changeSelection}
+            confirming={
+              confirming && {
+                status: confirming,
+                count: targetsFor(confirming).length,
+                skipped: selection.ids.length - targetsFor(confirming).length,
+              }
+            }
+            onCancelConfirm={() => setConfirming(null)}
             onBulk={bulk}
             bulkPending={setApproval.isPending}
             notice={notice}

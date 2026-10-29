@@ -12,6 +12,14 @@ export const PREP_KIND_LABEL: Record<PrepFlow['kind'], string> = {
   restore: '원복',
 };
 
+/** 종류를 고를 때 보이는 설명 (F-PF-01·08·09) */
+export const PREP_KIND_HINT: Record<PrepFlow['kind'], string> = {
+  login: '테스트 계정으로 로그인합니다. 앱이 계정을 거절하면 그 계정에 로그인 실패 표시가 붙습니다.',
+  data_state: '항목 수·설정값 같은 데이터 상태를 UI로 만듭니다.',
+  env: '코드가 앱 데이터를 초기화한 뒤 앱을 실행합니다. Agent는 스텝을 수행하지 않습니다.',
+  restore: '케이스가 바꾼 계정 상태를 되돌립니다. 실패하면 계정을 격리합니다.',
+};
+
 type Patch = Partial<Record<'tab' | 'case' | 'edit' | 'question' | 'feature' | 'flow' | 'page', string | null>>;
 
 /** 검토 화면 쿼리 파라미터. 다른 파라미터(예: `theme`)는 그대로 둔다. */

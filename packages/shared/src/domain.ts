@@ -159,8 +159,13 @@ export const PrepFlow = z.object({
   kind: z.enum(['login', 'data_state', 'env', 'restore']),
   check: z.string(),
   steps: z.array(z.string()),
+  /** 낙관적 잠금 (웹 편집). QA 문서 생성이 만든 플로우는 없다(0으로 본다) */
+  rev: z.number().int().optional(),
+  updatedBy: z.string().optional(),
+  updatedAt: z.string().optional(),
 });
 export type PrepFlow = z.infer<typeof PrepFlow>;
+export type PrepFlowKind = PrepFlow['kind'];
 
 export const ApprovalStatus = z.enum(['pending', 'approved', 'rejected', 'held']);
 export type ApprovalStatus = z.infer<typeof ApprovalStatus>;
@@ -430,6 +435,8 @@ export const VerdictChange = z.object({
   from: Verdict,
   to: Verdict,
   note: z.string().optional(),
+  /** 이 판정과 함께 남긴 첨부 스크린샷 수 (F-RP-05) */
+  attachments: z.number().optional(),
 });
 export type VerdictChange = z.infer<typeof VerdictChange>;
 
@@ -467,6 +474,8 @@ export const CaseResult = z.object({
   runId: z.string().optional(),
   steps: z.array(ExecStep),
   points: z.array(PointResult),
+  /** 사람이 결과를 입력하며 첨부한 스크린샷 (F-RP-05, 선택) */
+  attachments: z.array(Screenshot).optional(),
   history: z.array(VerdictChange),
   /** 이전 시도 (오래된 것부터) */
   previousAttempts: z.array(AttemptSummary).optional(),
@@ -484,17 +493,26 @@ export const SEVERITY_LABEL: Record<Severity, string> = {
   trivial: 'Trivial',
 };
 
+/**
+ * 결함 (F-RP-19). Fail 칸에서 만들고 그 칸의 `defectId`로 연결한다. id(`D-1`)는 사이클 안에서 매긴다 —
+ * 사이클 밖에서 가리킬 때는 사이클 이름을 함께 쓴다. 앱 빌드는 사이클의 빌드다
+ */
 export const Defect = z.object({
   id: z.string(),
   title: z.string(),
   severity: Severity,
   tcId: z.string(),
   deviceId: z.string(),
+  /** 결함이 난 칸의 OS 빌드 */
+  osBuild: z.string().optional(),
   repro: z.array(z.string()),
   expected: z.string(),
   actual: z.string(),
   status: z.enum(['open', 'fixed', 'closed']),
+  /** GitHub Issues로 발행한 이슈 주소 (F-RP-13, P1 — 아직 화면에 보이지 않는다) */
   trackerUrl: z.string().optional(),
+  createdBy: z.string().optional(),
+  createdAt: z.string().optional(),
 });
 export type Defect = z.infer<typeof Defect>;
 
@@ -504,6 +522,7 @@ export const PauseReason = z.enum([
   'network',
   'plan_limit',
   'not_logged_in',
+  'claude_not_installed',
   'claude_outdated',
   'device_locked',
   'device_disconnected',
@@ -515,6 +534,7 @@ export const PAUSE_REASON_LABEL: Record<PauseReason, string> = {
   network: '네트워크 끊김',
   plan_limit: '플랜 한도',
   not_logged_in: 'Claude Code 로그인 필요',
+  claude_not_installed: 'Claude Code 설치 필요',
   claude_outdated: 'Claude Code 업데이트 필요',
   device_locked: '디바이스 잠김',
   device_disconnected: '디바이스 연결 끊김',
@@ -562,13 +582,23 @@ export const TestCycle = z.object({
   docId: z.string(),
   buildId: z.string(),
   targets: z.array(TargetDevice),
+  /** end가 있으면 완료된 사이클 (F-CY-09): 새 Run을 받지 않는다. 사람 확정은 계속 된다 */
   period: z.object({ start: z.string(), end: z.string().optional() }),
+  /** 사이클을 완료한 사람 (다시 열면 지운다) */
+  completedBy: z.string().optional(),
   serverEnv: z.enum(['dev', 'stage', 'prod']),
   /** 케이스 스냅샷 (F-CY-02) */
   snapshot: z.array(z.object({ tcId: z.string(), contentHash: z.string() })),
   createdBy: z.string(),
+  /** 이 사이클에서 마지막으로 매긴 결함 번호 (F-RP-19). 없으면 0 */
+  defectSeq: z.number().optional(),
   /** local_run: 호스트에서 돌린 실행 결과를 사이클로 묶어 보여 주는 것 (개발용) */
   origin: z.enum(['cycle', 'local_run']).optional(),
+  /**
+   * 삭제 중 (F-CY-10): Functions가 하위 문서·증거를 지우기 전에 남긴다. 이 표시가 있으면 새 Run을 받지 않는다.
+   * 중간에 실패해 남았으면 다시 삭제하면 이어서 지운다
+   */
+  deletingAt: z.string().optional(),
 });
 export type TestCycle = z.infer<typeof TestCycle>;
 
@@ -606,11 +636,18 @@ export const SpecBundle = z.object({
 export type SpecBundle = z.infer<typeof SpecBundle>;
 
 /** 작업 실패·일시정지 이유. 플랜 한도·Claude Code 문제는 해결 후 다시 시도한다 (F-EX-17) */
-export const JobErrorKind = z.enum(['plan_limit', 'not_logged_in', 'claude_outdated', 'failed']);
+export const JobErrorKind = z.enum([
+  'plan_limit',
+  'not_logged_in',
+  'claude_not_installed',
+  'claude_outdated',
+  'failed',
+]);
 export type JobErrorKind = z.infer<typeof JobErrorKind>;
 export const JOB_ERROR_LABEL: Record<JobErrorKind, string> = {
   plan_limit: '플랜 한도',
   not_logged_in: 'Claude Code 로그인 필요',
+  claude_not_installed: 'Claude Code 설치 필요',
   claude_outdated: 'Claude Code 업데이트 필요',
   failed: '오류',
 };
@@ -827,6 +864,8 @@ export const Host = z.object({
       version: z.string().optional(),
       loggedIn: z.boolean(),
       subscriptionType: z.string().optional(),
+      /** QA 문서 생성에 쓰는 모델에 필요한 최소 버전보다 낮으면 그 버전 (F-EX-17) */
+      requiredVersion: z.string().optional(),
     })
     .optional(),
   /**
@@ -835,7 +874,8 @@ export const Host = z.object({
    */
   consoleUrl: z.string().optional(),
   /** 이 호스트가 처리할 수 있는 작업 종류. 없으면 이 필드보다 오래된 호스트다 (QA 문서 생성·Run 시작만) */
-  jobs: z.array(z.string()).optional(),
+  jobs: z.array(z.string()).optional(),  /** 호스트 에이전트 버전 (`@qcard/host`). 없으면 이 필드보다 오래된 호스트다 (0.2.x 이하) */
+  version: z.string().optional(),
 });
 export type Host = z.infer<typeof Host>;
 
@@ -844,6 +884,24 @@ const LEGACY_HOST_JOBS: readonly string[] = ['qa_doc_generate', 'run_cycle'];
 /** 호스트가 이 종류의 작업을 처리하는가. 옛 호스트는 모르는 작업을 건너뛰어 영영 대기로 남는다 */
 export const hostHandles = (host: Pick<Host, 'jobs'>, kind: Job['kind']) =>
   (host.jobs ?? LEGACY_HOST_JOBS).includes(kind);
+/** "0.3.0"·"2.1.308" 같은 점 구분 버전끼리 비교. a가 낮으면 음수 */
+export function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+/**
+ * Run을 맡길 수 있는 가장 낮은 호스트 버전. 웹·Functions·보안 규칙과 호환되지 않게 바뀐 호스트 릴리스에서 올린다.
+ * 0.3.0: Run의 지금 칸(`currentTcId`)을 Functions(claimCell)만 정해서, 그 전 호스트는 첫 케이스에서 보안 규칙에 막힌다 (F-CY-06)
+ */
+export const MIN_HOST_VERSION = '0.3.0';
+/** 이 호스트로는 Run을 시작할 수 없다. 버전을 알리지 않는 호스트는 그 필드보다 오래된 것이다 */
+export const hostOutdated = (host: Pick<Host, 'version'>) =>
+  !host.version || compareVersions(host.version, MIN_HOST_VERSION) < 0;
 /** 이 시간 안에 신호가 있으면 연결된 것으로 본다 (호스트는 30초마다 갱신) */
 export const HOST_ONLINE_MS = 90_000;
 
@@ -904,7 +962,9 @@ export const TestAccount = z.object({
     })
     .optional(),
   /** 로그인 준비 플로우가 실패했다. 비밀번호를 고치거나 표시를 지우기 전까지 배정하지 않는다 */
-  loginFailed: z.object({ at: z.string(), cycleId: z.string(), runId: z.string(), tcId: z.string(), detail: z.string().optional() }).optional(),
+  loginFailed: z
+    .object({ at: z.string(), cycleId: z.string(), runId: z.string(), tcId: z.string(), detail: z.string().optional() })
+    .optional(),
   /** 격리: 원복 실패 또는 원복 중 끊김. 사람이 원복하고 해제하기 전까지 배정하지 않는다 */
   quarantine: z
     .object({

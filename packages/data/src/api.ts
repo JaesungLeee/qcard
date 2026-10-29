@@ -7,6 +7,8 @@ import type {
   CaseBody,
   CaseReviseJob,
   PrepFlow,
+  PrepFlowInput,
+  PrepFlowUse,
   CaseResult,
   Defect,
   Host,
@@ -26,6 +28,7 @@ import type {
   Role,
   QADocument,
   Run,
+  Screenshot,
   TestCase,
   TestAccount,
   TestCycle,
@@ -84,6 +87,20 @@ export interface QcardApi {
   resolveQuestion(ref: DocRef, questionId: string, resolution: QuestionResolution): Promise<void>;
   commentQuestion(ref: DocRef, questionId: string, text: string): Promise<void>;
   listPrepFlows(projectId: string): Promise<PrepFlow[]>;
+  /**
+   * 플로우별 사용처 (F-PF-01): 모든 QA 문서 버전의 활성 케이스 + 완료되지 않은 사이클의 케이스 사본 (`prepFlowUses`).
+   * 사용처가 있으면 삭제할 수 없다
+   */
+  listPrepFlowUses(projectId: string): Promise<Record<string, PrepFlowUse[]>>;
+  /** 준비 플로우 추가 (F-PF-01). Admin·QA만. 이름·확인 조건이 비거나 `env`가 아닌데 스텝이 없으면 `RuleError` */
+  createPrepFlow(projectId: string, input: PrepFlowInput): Promise<PrepFlow>;
+  /**
+   * 준비 플로우 편집. `expectedRev`가 최신이 아니면 `PrepFlowConflictError`. 사이클에 고정되지 않아
+   * 진행 중인 사이클도 다음 Run부터 바뀐 내용으로 준비한다. Admin·QA만
+   */
+  updatePrepFlow(projectId: string, flowId: string, input: PrepFlowInput, expectedRev: number): Promise<PrepFlow>;
+  /** 준비 플로우 삭제. 케이스가 참조 중이면 `RuleError`(`prepFlowDeleteBlocker`). Admin·QA만 */
+  deletePrepFlow(projectId: string, flowId: string): Promise<void>;
 
   /** 테스트 계정 (F-PF-04·08). 상태(사용 중·로그인 실패·격리)와 함께, 로그인 ID 순. 비밀값은 없다 */
   listAccounts(projectId: string): Promise<AccountView[]>;
@@ -156,6 +173,25 @@ export interface QcardApi {
   watchCycle(ref: CycleRef, onChange: (detail: CycleDetail) => void, onError?: (e: unknown) => void): () => void;
   /** 사람 확정·오버라이드 (F-RP-04). 판정 변경 이력이 쌓인다. */
   confirmVerdict(input: ConfirmVerdictInput): Promise<CaseResult>;
+  /**
+   * 결함 등록 (F-RP-19): Fail 칸에서 결함을 만들고 그 칸의 `defectId`로 연결한다. 번호(`D-1`)는 사이클 안에서 매긴다.
+   * Fail이 아니거나 이미 결함이 있는 칸, 제목·재현 절차가 비면 `RuleError`. Admin·QA만
+   */
+  createDefect(input: NewDefectInput): Promise<Defect>;
+  /** 결함의 심각도·상태 바꾸기 (F-RP-19). Admin·QA만 */
+  updateDefect(ref: CycleRef, defectId: string, patch: DefectPatch): Promise<Defect>;
+  /**
+   * 사이클 완료 (F-CY-09): 새 Run을 받지 않는다. 사람 확정은 계속 된다. 남은 확인필요·N/T 경고는 화면이 먼저 보인다
+   * (`completionWarnings`). 이미 완료됐거나 로컬 실행 묶음이면 `RuleError`. Admin·QA만
+   */
+  completeCycle(ref: CycleRef): Promise<TestCycle>;
+  /** 완료 취소 (F-CY-09): 다시 Run을 받는다. 완료되지 않았으면 `RuleError`. Admin·QA만 */
+  reopenCycle(ref: CycleRef): Promise<TestCycle>;
+  /**
+   * 사이클 삭제 (F-CY-10): 결과·Run·결함·판정 이력과 스크린샷 증거까지 바로 영구 삭제한다. 빌드·QA 문서는 남는다.
+   * 이름이 다르거나, 완료된 사이클이거나, 실행 중인 Run이 있으면 `RuleError`(`cycleDeleteBlocker`). Admin·QA만
+   */
+  deleteCycle(ref: CycleRef, confirmName: string): Promise<void>;
 
   /** Storage에 올린 스크린샷(`kind: 'storage'`)을 화면에 띄울 주소. 로그인 상태로 읽는다 */
   screenshotUrl(path: string): Promise<string>;
@@ -185,6 +221,11 @@ export type NewCycleInput = {
   targets: { model: string; osMajor: number; resolution?: string }[];
   serverEnv: TestCycle['serverEnv'];
 };
+
+/** 결함 등록 폼에서 사람이 고치는 값 (`defectDraft`가 미리 채운다) */
+export type DefectDraft = Pick<Defect, 'title' | 'severity' | 'repro' | 'expected' | 'actual'>;
+export type NewDefectInput = DefectDraft & { projectId: string; cycleId: string; tcId: string; deviceId: string };
+export type DefectPatch = Partial<Pick<Defect, 'severity' | 'status'>>;
 
 /** QA 문서·사이클은 프로젝트 아래에 있다 (Firestore `projects/{p}/qaDocs/{d}`) */
 export type DocRef = { projectId: string; docId: string };
@@ -231,6 +272,8 @@ export type CycleSummary = {
   done: number;
   passRate: number;
   activeRuns: Run[];
+  /** 결함이 연결되지 않은 Fail 칸 (F-RP-19) — 결함 등록을 잊은 칸 */
+  unlinkedFails: number;
 };
 
 export type CycleDetail = {
@@ -252,11 +295,26 @@ export type ConfirmVerdictInput = {
   verdict: Verdict;
   note?: string;
   actualSummary?: string;
+  /**
+   * 첨부 스크린샷 (F-RP-05, 선택). 주면 칸의 첨부를 남길 기존 첨부(`keep`) + 새로 올릴 파일(`add`)로 바꾼다.
+   * 없으면 기존 첨부를 그대로 둔다. 개수·형식·크기는 `attachmentProblem`
+   */
+  attachments?: { keep: Screenshot[]; add: AttachmentFile[] };
 };
+
+/** 새로 올릴 첨부 이미지. w·h는 이미지 px (화면 비율용) */
+export type AttachmentFile = { name: string; type: string; bytes: Uint8Array; w?: number; h?: number };
 
 export class ConflictError extends Error {
   constructor(readonly latest: TestCase) {
     super(`${latest.tcId}: 다른 사람이 먼저 저장했습니다 (rev ${latest.rev}, ${latest.updatedBy ?? '알 수 없음'})`);
+  }
+}
+
+/** 준비 플로우를 다른 사람이 먼저 고쳤다. `latest`로 최신 내용을 보인다 */
+export class PrepFlowConflictError extends Error {
+  constructor(readonly latest: PrepFlow) {
+    super(`${latest.name}: 다른 사람이 먼저 저장했습니다 (rev ${latest.rev ?? 0}, ${latest.updatedBy ?? '알 수 없음'})`);
   }
 }
 

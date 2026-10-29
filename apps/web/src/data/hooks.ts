@@ -1,9 +1,12 @@
-import type { AccountInput, AccountPatch, CaseBody } from '@qcard/shared';
+import type { AccountInput, AccountPatch, CaseBody, PrepFlowInput } from '@qcard/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useRef } from 'react';
 import type {
   ConfirmVerdictInput,
+  CycleRef,
+  DefectPatch,
   DocRef,
+  NewDefectInput,
   NewCycleInput,
   NewProjectInput,
   QcardApi,
@@ -31,6 +34,7 @@ export const keys = {
   qaDocs: (projectId: string) => ['qaDocs', projectId] as const,
   qaDoc: (projectId: string, docId: string) => ['qaDoc', projectId, docId] as const,
   prepFlows: (projectId: string) => ['prepFlows', projectId] as const,
+  prepFlowUses: (projectId: string) => ['prepFlowUses', projectId] as const,
   cycles: (projectId: string) => ['cycles', projectId] as const,
   cycle: (projectId: string, cycleId: string) => ['cycle', projectId, cycleId] as const,
   console: ['console'] as const,
@@ -123,6 +127,38 @@ export function usePrepFlows(projectId: string) {
   const api = useApi();
   return useQuery({ queryKey: keys.prepFlows(projectId), queryFn: () => api.listPrepFlows(projectId) });
 }
+
+/** 플로우별 사용처 (모든 QA 문서 버전 + 완료되지 않은 사이클) */
+export function usePrepFlowUses(projectId: string) {
+  const api = useApi();
+  // 케이스 편집·사이클 만들기로 바뀌므로 화면을 열 때마다 다시 읽는다
+  return useQuery({
+    queryKey: keys.prepFlowUses(projectId),
+    queryFn: () => api.listPrepFlowUses(projectId),
+    staleTime: 0,
+  });
+}
+
+function usePrepFlowMutation<T, R = unknown>(projectId: string, fn: (api: QcardApi, input: T) => Promise<R>) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: T) => fn(api, input),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: keys.prepFlows(projectId) });
+      void qc.invalidateQueries({ queryKey: keys.prepFlowUses(projectId) });
+    },
+  });
+}
+
+export const useCreatePrepFlow = (projectId: string) =>
+  usePrepFlowMutation(projectId, (api, v: PrepFlowInput) => api.createPrepFlow(projectId, v));
+export const useUpdatePrepFlow = (projectId: string) =>
+  usePrepFlowMutation(projectId, (api, v: { id: string; input: PrepFlowInput; expectedRev: number }) =>
+    api.updatePrepFlow(projectId, v.id, v.input, v.expectedRev),
+  );
+export const useDeletePrepFlow = (projectId: string) =>
+  usePrepFlowMutation(projectId, (api, id: string) => api.deletePrepFlow(projectId, id));
 
 /** 사이클 목록: 진행률만 보면 돼서 사이클마다 구독하지 않고 15초마다 다시 읽는다 */
 export function useCycles(projectId: string) {
@@ -245,6 +281,55 @@ export function useConfirmVerdict() {
       void qc.invalidateQueries({ queryKey: keys.cycle(input.projectId, input.cycleId) });
       void qc.invalidateQueries({ queryKey: ['cycles'] });
     },
+  });
+}
+
+/** 결함 등록·심각도·상태 변경 (F-RP-19) */
+export function useCreateDefect() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: NewDefectInput) => api.createDefect(input),
+    onSettled: (_r, _e, input) => {
+      void qc.invalidateQueries({ queryKey: keys.cycle(input.projectId, input.cycleId) });
+      void qc.invalidateQueries({ queryKey: keys.cycles(input.projectId) });
+    },
+  });
+}
+
+/** 사이클 완료·다시 열기 (F-CY-09) */
+export function useCycleCompletion(ref: CycleRef) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (complete: boolean) => (complete ? api.completeCycle(ref) : api.reopenCycle(ref)),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: keys.cycle(ref.projectId, ref.cycleId) });
+      void qc.invalidateQueries({ queryKey: keys.cycles(ref.projectId) });
+      void qc.invalidateQueries({ queryKey: keys.projects }); // 진행 중 사이클 수
+    },
+  });
+}
+
+/** 사이클 삭제 (F-CY-10). 성공하면 화면이 사이클 목록으로 옮겨 간다 */
+export function useCycleDeletion(ref: CycleRef) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (confirmName: string) => api.deleteCycle(ref, confirmName),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: keys.cycles(ref.projectId) });
+      void qc.invalidateQueries({ queryKey: keys.projects }); // 진행 중 사이클 수
+    },
+  });
+}
+
+export function useUpdateDefect(ref: CycleRef) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { defectId: string; patch: DefectPatch }) => api.updateDefect(ref, v.defectId, v.patch),
+    onSettled: () => void qc.invalidateQueries({ queryKey: keys.cycle(ref.projectId, ref.cycleId) }),
   });
 }
 

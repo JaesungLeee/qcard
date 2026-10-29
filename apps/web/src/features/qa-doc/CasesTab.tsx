@@ -5,6 +5,7 @@ import {
   Icons,
   Pagination,
   PaginationSelect,
+  TextButton,
   TextField,
   TextFieldContent,
   textClass,
@@ -16,8 +17,10 @@ import type {
   ColDef,
   GridApi,
   ICellRendererParams,
+  IRowNode,
   RowClassRules,
   SelectionChangedEvent,
+  SelectionEventSourceType,
 } from 'ag-grid-community';
 import { AgGridReact } from 'ag-grid-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -32,11 +35,16 @@ import {
   groupRows,
   inScope,
   isSelectable,
+  mergePageSelection,
+  NO_SELECTION,
   orderByGroup,
   PAGE_SIZES,
   paginate,
+  selectionScopeLabel,
   shortSource,
+  type ApprovalTarget,
   type CaseFilter,
+  type CaseSelection,
   type CaseScope,
   type ChangeFilter,
   type GridRow,
@@ -67,7 +75,12 @@ function savePageSize(v: number) {
 
 /** 걸러진 목록을 만든다: 분류 범위 → 변경·승인·검색 필터 → 묶음 순서 */
 const listFor = (cases: TestCase[], scope: CaseScope, filter: CaseFilter) =>
-  orderByGroup(filterCases(cases.filter((c) => inScope(c, scope)), filter));
+  orderByGroup(
+    filterCases(
+      cases.filter((c) => inScope(c, scope)),
+      filter,
+    ),
+  );
 
 /**
  * 그리드 너비에 맞춰 열을 줄인다: 상세 패널이 열리거나 좁은 화면이면 상세에 다 나오는 열은 숨긴다.
@@ -135,6 +148,17 @@ function GroupRenderer({ data, context }: ICellRendererParams<GridRow>) {
 }
 
 const caseOf = (r: GridRow | undefined) => (r?.kind === 'case' ? r.case : undefined);
+
+/** 사람이 그리드에서 바꾼 선택만 받는다. 나머지(행 교체, 아래 동기화의 'api')는 선택 상태를 그리드에 맞춘 결과다 */
+const USER_SELECTION: ReadonlySet<SelectionEventSourceType> = new Set<SelectionEventSourceType>([
+  'checkboxSelected',
+  'rowClicked',
+  'spaceKey',
+  'keyboardSelectAll',
+  'uiSelectAll',
+  'uiSelectAllFiltered',
+  'uiSelectAllCurrentPage',
+]);
 
 const BASE_COLUMNS: ColDef<GridRow>[] = [
   {
@@ -221,19 +245,22 @@ const ROW_CLASS: RowClassRules<GridRow> = {
 export function CasesTab({
   doc,
   prepFlows,
-  selected,
-  onSelectedChange,
-  selectionKey,
+  selection,
+  onSelectionChange,
+  confirming,
+  onCancelConfirm,
   onBulk,
   bulkPending,
   notice,
 }: {
   doc: QADocument;
   prepFlows: PrepFlow[];
-  selected: string[];
-  onSelectedChange: (ids: string[]) => void;
-  selectionKey: number;
-  onBulk: (status: 'approved' | 'rejected') => void;
+  selection: CaseSelection;
+  onSelectionChange: (next: CaseSelection) => void;
+  /** 페이지 밖의 케이스까지 일괄 처리하기 전 확인: 처리할 수와 이미 승인돼 건너뛰는 수 */
+  confirming: { status: ApprovalTarget; count: number; skipped: number } | null;
+  onCancelConfirm: () => void;
+  onBulk: (status: ApprovalTarget) => void;
   bulkPending: boolean;
   notice: string | null;
 }) {
@@ -266,10 +293,47 @@ export function CasesTab({
   useEffect(() => {
     apiRef.current?.redrawRows();
   }, [caseId, scope.feature]);
-  // 일괄 선택은 보이는 페이지 안에서만 한다: 페이지·분류·필터가 바뀌면 선택을 푼다
+
+  // 헤더 체크박스는 이 페이지만 고른다. 걸러진 목록 전체는 "모두 선택"(spanning)으로 고른다
+  const selectableIds = useMemo(() => visible.filter(isSelectable).map((c) => c.tcId), [visible]);
+  const pageIds = useMemo(() => paged.items.filter(isSelectable).map((c) => c.tcId), [paged.items]);
+  const picked = new Set(selection.ids);
+  const pageAllPicked = pageIds.length > 0 && pageIds.every((id) => picked.has(id));
+  const offerAll = !selection.spanning && pageAllPicked && selectableIds.length > pageIds.length;
+  const allPicked = selectableIds.length > 0 && selectableIds.every((id) => picked.has(id));
+  const scopeLabel = selectionScopeLabel(scope, filter);
+  const excluded = visible.length - selectableIds.length;
+
+  // 그리드 이벤트 처리기와 행 교체 뒤 동기화가 최신 선택을 보도록
+  const latest = useRef({ selection, pageIds });
+  latest.current = { selection, pageIds };
+  const clearSelection = () => {
+    const s = latest.current.selection;
+    if (s.ids.length > 0 || s.spanning) onSelectionChange(NO_SELECTION);
+  };
+  // 분류·필터·페이지 크기가 바뀌면 선택을 푼다. 페이지만 넘길 때는 "모두 선택"한 선택을 남긴다
+  useEffect(clearSelection, [pageSize, scope, filter]);
   useEffect(() => {
-    apiRef.current?.deselectAll();
-  }, [selectionKey, paged.page, pageSize, scope, filter]);
+    if (!latest.current.selection.spanning) clearSelection();
+  }, [paged.page]);
+
+  /** 선택 상태를 그리드 체크박스에 맞춘다. 페이지를 넘기면 행이 바뀌므로 그때마다 다시 맞춘다 */
+  const syncGrid = () => {
+    const api = apiRef.current;
+    if (!api) return;
+    const want = new Set(latest.current.selection.ids);
+    const on: IRowNode<GridRow>[] = [];
+    const off: IRowNode<GridRow>[] = [];
+    api.forEachNode((n) => {
+      const c = caseOf(n.data);
+      if (!c) return;
+      const w = want.has(c.tcId) && n.selectable;
+      if (w !== !!n.isSelected()) (w ? on : off).push(n);
+    });
+    if (on.length) api.setNodesSelected({ nodes: on, newValue: true, source: 'api' });
+    if (off.length) api.setNodesSelected({ nodes: off, newValue: false, source: 'api' });
+  };
+  useEffect(syncGrid, [selection, rows]);
 
   // 주소로 케이스를 열면(?case=) 그 케이스가 보이는 분류·페이지로 옮긴다. 케이스가 바뀔 때 한 번만
   const placed = useRef<string | null>(null);
@@ -281,10 +345,7 @@ export function CasesTab({
     if (index < 0) return; // 필터에 걸러진 케이스는 옮기지 않는다
     const page = Math.floor(index / pageSize) + 1;
     if (target === scope && page === paged.page) return;
-    set(
-      { feature: target.feature, flow: target.subFeature, page: page > 1 ? String(page) : null },
-      { replace: true },
-    );
+    set({ feature: target.feature, flow: target.subFeature, page: page > 1 ? String(page) : null }, { replace: true });
   });
 
   const open = (c: TestCase) => set({ case: c.tcId, edit: null });
@@ -305,171 +366,225 @@ export function CasesTab({
     <div className={`qd-cases${current ? ' has-panel' : ''}`}>
       <CaseNav tree={tree} total={doc.cases.length} scope={scope} onPick={pick} />
       <div className="qd-stack">
-      <div className="qd-stack" style={{ gap: token('space-2') }}>
-        <span className={`${textClass('label2', 'medium')} qd-faint`}>
-          {scope.feature === null ? '모든 기능' : scope.subFeature === null ? '기능' : `${scope.feature} › 유저 플로우`}
-        </span>
-        <h2 className={textClass('headline2', 'bold')} style={{ margin: 0 }}>
-          {scope.feature === null ? '전체 케이스' : scope.subFeature === null ? scope.feature : flowLabel || '(유저 플로우 없음)'}
-        </h2>
-      </div>
-      <div className="qd-toolbar">
-        <div className="qd-row" role="group" aria-label="변경 필터">
-          {CHANGE_FILTERS.map((k) => (
-            <Chip
-              key={k}
-              size="small"
-              variant="outlined"
-              active={filter.change === k}
-              onClick={() => changeFilter((f) => ({ ...f, change: k }))}
-            >
-              {k === 'all' ? '전체' : CHANGE_LABEL[k]}{' '}
-              <span className="qc-mono">{k === 'all' ? scoped.length : (changeCounts[k] ?? 0)}</span>
-            </Chip>
-          ))}
-          <CheckLabel
-            className={`${textClass('label1')} qd-check`}
-            style={{ marginLeft: token('space-8') }}
-            checked={filter.unapprovedOnly}
-            onCheckedChange={(v) => changeFilter((f) => ({ ...f, unapprovedOnly: v }))}
-          >
-            미승인만
-          </CheckLabel>
-        </div>
-        <div style={{ flex: '0 1 300px', minWidth: 200 }}>
-          <TextField
-            size="medium"
-            aria-label="케이스 검색"
-            placeholder="TC ID, 제목, 출처, 요구사항 검색"
-            value={filter.q}
-            onChange={(e) => changeFilter((f) => ({ ...f, q: e.target.value }))}
-            leadingContent={
-              <TextFieldContent variant="icon">
-                <Icons.IconSearch />
-              </TextFieldContent>
-            }
-          />
-        </div>
-      </div>
-
-      <div
-        className={`${textClass('label1')} qd-row`}
-        style={{ justifyContent: 'space-between', minHeight: 32 }}
-        aria-live="polite"
-      >
-        {selected.length > 0 ? (
-          <span className="qd-row">
-            <span className={textClass('label1', 'medium')}>{selected.length}개 선택됨</span>
-            <Button
-              size="small"
-              variant="solid"
-              color="negative"
-              disabled={bulkPending}
-              onClick={() => onBulk('rejected')}
-            >
-              일괄 반려
-            </Button>
-            <Button size="small" variant="outlined" color="assistive" onClick={() => apiRef.current?.deselectAll()}>
-              선택 해제
-            </Button>
+        <div className="qd-stack" style={{ gap: token('space-2') }}>
+          <span className={`${textClass('label2', 'medium')} qd-faint`}>
+            {scope.feature === null
+              ? '모든 기능'
+              : scope.subFeature === null
+                ? '기능'
+                : `${scope.feature} › 유저 플로우`}
           </span>
-        ) : (
-          <span className="qd-muted">
-            {notice ?? (
-              <>
-                케이스 <span className="qc-mono">{visible.length}</span>개
-                {visible.length !== scoped.length && <> · 이 분류 {scoped.length}개</>}. 이 페이지에서 행을
-                선택하면 일괄 승인·반려할 수 있습니다 (보류·삭제 케이스 제외).
-              </>
-            )}
-          </span>
-        )}
-      </div>
-
-      <div className={`qd-split${current ? ' has-panel' : ''}`}>
-        <div className="qd-stack" style={{ gap: token('space-12') }}>
-        <div className="qd-grid" ref={gridRef}>
-          <AgGridReact<GridRow>
-            theme={qcardGridTheme}
-            domLayout="autoHeight"
-            rowData={rows}
-            columnDefs={columns}
-            defaultColDef={{ sortable: false, resizable: true, suppressMovable: true }}
-            context={context}
-            getRowId={(p) => (p.data.kind === 'group' ? `g:${p.data.key}` : p.data.case.tcId)}
-            isFullWidthRow={(p) => p.rowNode.data?.kind === 'group'}
-            fullWidthCellRenderer={GroupRenderer}
-            getRowHeight={(p) => (p.data?.kind === 'group' ? 36 : undefined)}
-            rowClassRules={ROW_CLASS}
-            rowSelection={{
-              mode: 'multiRow',
-              checkboxes: true,
-              headerCheckbox: true,
-              enableClickSelection: false,
-              hideDisabledCheckboxes: true,
-              isRowSelectable: (n) => {
-                const c = caseOf(n.data);
-                return !!c && isSelectable(c);
-              },
-            }}
-            selectionColumnDef={{ width: 48, pinned: 'left' }}
-            tooltipShowDelay={400}
-            overlayNoRowsTemplate="조건에 맞는 케이스가 없습니다"
-            onGridReady={(e) => {
-              apiRef.current = e.api;
-              if (caseId) {
-                const node = e.api.getRowNode(caseId);
-                if (node) e.api.ensureNodeVisible(node, 'middle');
-              }
-            }}
-            onSelectionChanged={(e: SelectionChangedEvent<GridRow>) =>
-              onSelectedChange(
-                e.api
-                  .getSelectedRows()
-                  .map(caseOf)
-                  .filter((c): c is TestCase => !!c)
-                  .map((c) => c.tcId),
-              )
-            }
-            onCellClicked={(e: CellClickedEvent<GridRow>) => {
-              if (e.column.getColId() === 'ag-Grid-SelectionColumn') return;
-              const c = caseOf(e.data);
-              if (c) open(c);
-            }}
-          />
+          <h2 className={textClass('headline2', 'bold')} style={{ margin: 0 }}>
+            {scope.feature === null
+              ? '전체 케이스'
+              : scope.subFeature === null
+                ? scope.feature
+                : flowLabel || '(유저 플로우 없음)'}
+          </h2>
         </div>
-        {visible.length > 0 && (
-          <div className="qd-pager">
-            <span className={`${textClass('label2')} qd-muted qc-mono`}>
-              {paged.start + 1}–{paged.start + paged.items.length} / {visible.length}
-            </span>
-            <Pagination
-              variant="extended"
-              page={paged.page}
-              totalPages={paged.pageCount}
-              onChange={(p) => p && goTo(p)}
-              trailingContent={
-                <PaginationSelect
-                  label="페이지당"
-                  pageSize={pageSize}
-                  pageSizeOptions={[...PAGE_SIZES]}
-                  onChange={(s) => s && changePageSize(s)}
-                />
+        <div className="qd-toolbar">
+          <div className="qd-row" role="group" aria-label="변경 필터">
+            {CHANGE_FILTERS.map((k) => (
+              <Chip
+                key={k}
+                size="small"
+                variant="outlined"
+                active={filter.change === k}
+                onClick={() => changeFilter((f) => ({ ...f, change: k }))}
+              >
+                {k === 'all' ? '전체' : CHANGE_LABEL[k]}{' '}
+                <span className="qc-mono">{k === 'all' ? scoped.length : (changeCounts[k] ?? 0)}</span>
+              </Chip>
+            ))}
+            <CheckLabel
+              className={`${textClass('label1')} qd-check`}
+              style={{ marginLeft: token('space-8') }}
+              checked={filter.unapprovedOnly}
+              onCheckedChange={(v) => changeFilter((f) => ({ ...f, unapprovedOnly: v }))}
+            >
+              미승인만
+            </CheckLabel>
+          </div>
+          <div style={{ flex: '0 1 300px', minWidth: 200 }}>
+            <TextField
+              size="medium"
+              aria-label="케이스 검색"
+              placeholder="TC ID, 제목, 출처, 요구사항 검색"
+              value={filter.q}
+              onChange={(e) => changeFilter((f) => ({ ...f, q: e.target.value }))}
+              leadingContent={
+                <TextFieldContent variant="icon">
+                  <Icons.IconSearch />
+                </TextFieldContent>
               }
             />
           </div>
-        )}
         </div>
-        {current && (
-          <CaseDetail
-            key={current.tcId}
-            doc={doc}
-            c={current}
-            prepFlows={prepFlows}
-            onClose={() => set({ case: null, edit: null })}
-          />
-        )}
-      </div>
+
+        <div
+          className={`${textClass('label1')} qd-row`}
+          style={{ justifyContent: 'space-between', minHeight: 32 }}
+          aria-live="polite"
+        >
+          {confirming ? (
+            <span className="qd-row">
+              <span className={textClass('label1', 'medium')}>
+                이 페이지 밖의 케이스를 포함해 <span className="qc-mono">{confirming.count}</span>개를{' '}
+                {confirming.status === 'approved' ? '승인' : '반려'}할까요?
+              </span>
+              {confirming.skipped > 0 && (
+                <span className="qd-muted">이미 승인된 {confirming.skipped}개는 그대로 둡니다.</span>
+              )}
+              <Button size="small" variant="outlined" color="assistive" onClick={onCancelConfirm}>
+                취소
+              </Button>
+              <Button
+                size="small"
+                variant="solid"
+                color={confirming.status === 'approved' ? 'primary' : 'negative'}
+                loading={bulkPending}
+                onClick={() => onBulk(confirming.status)}
+              >
+                {confirming.count}개 {confirming.status === 'approved' ? '승인' : '반려'}
+              </Button>
+            </span>
+          ) : selection.ids.length > 0 ? (
+            <span className="qd-row">
+              <span className={textClass('label1', 'medium')}>{selection.ids.length}개 선택됨</span>
+              <Button
+                size="small"
+                variant="solid"
+                color="negative"
+                disabled={bulkPending}
+                onClick={() => onBulk('rejected')}
+              >
+                일괄 반려
+              </Button>
+              <Button size="small" variant="outlined" color="assistive" onClick={() => onSelectionChange(NO_SELECTION)}>
+                선택 해제
+              </Button>
+              {offerAll && (
+                <span className="qd-row">
+                  <span className="qd-muted">이 페이지의 {pageIds.length}개를 모두 선택했습니다.</span>
+                  <TextButton
+                    size="small"
+                    color="primary"
+                    onClick={() => onSelectionChange({ ids: selectableIds, spanning: true })}
+                  >
+                    {scopeLabel} {selectableIds.length}개 모두 선택
+                  </TextButton>
+                </span>
+              )}
+              {selection.spanning && (
+                <span className="qd-muted">
+                  {allPicked
+                    ? `${scopeLabel} ${selectableIds.length}개를 모두 선택했습니다${excluded > 0 ? ` (보류·삭제 ${excluded}개 제외)` : ''}.`
+                    : `${scopeLabel} ${selectableIds.length}개 중 ${selection.ids.length}개를 선택했습니다.`}{' '}
+                  페이지를 넘겨도 선택이 유지됩니다.
+                </span>
+              )}
+            </span>
+          ) : (
+            <span className="qd-muted">
+              {notice ?? (
+                <>
+                  케이스 <span className="qc-mono">{visible.length}</span>개
+                  {visible.length !== scoped.length && <> · 이 분류 {scoped.length}개</>}. 행을 선택하면 일괄
+                  승인·반려할 수 있습니다 (보류·삭제 케이스 제외).
+                </>
+              )}
+            </span>
+          )}
+        </div>
+
+        <div className={`qd-split${current ? ' has-panel' : ''}`}>
+          <div className="qd-stack" style={{ gap: token('space-12') }}>
+            <div className="qd-grid" ref={gridRef}>
+              <AgGridReact<GridRow>
+                theme={qcardGridTheme}
+                domLayout="autoHeight"
+                rowData={rows}
+                columnDefs={columns}
+                defaultColDef={{ sortable: false, resizable: true, suppressMovable: true }}
+                context={context}
+                getRowId={(p) => (p.data.kind === 'group' ? `g:${p.data.key}` : p.data.case.tcId)}
+                isFullWidthRow={(p) => p.rowNode.data?.kind === 'group'}
+                fullWidthCellRenderer={GroupRenderer}
+                getRowHeight={(p) => (p.data?.kind === 'group' ? 36 : undefined)}
+                rowClassRules={ROW_CLASS}
+                rowSelection={{
+                  mode: 'multiRow',
+                  checkboxes: true,
+                  headerCheckbox: true,
+                  enableClickSelection: false,
+                  hideDisabledCheckboxes: true,
+                  isRowSelectable: (n) => {
+                    const c = caseOf(n.data);
+                    return !!c && isSelectable(c);
+                  },
+                }}
+                selectionColumnDef={{ width: 48, pinned: 'left' }}
+                tooltipShowDelay={400}
+                overlayNoRowsTemplate="조건에 맞는 케이스가 없습니다"
+                onGridReady={(e) => {
+                  apiRef.current = e.api;
+                  syncGrid();
+                  if (caseId) {
+                    const node = e.api.getRowNode(caseId);
+                    if (node) e.api.ensureNodeVisible(node, 'middle');
+                  }
+                }}
+                onRowDataUpdated={syncGrid}
+                onSelectionChanged={(e: SelectionChangedEvent<GridRow>) => {
+                  if (!USER_SELECTION.has(e.source)) return;
+                  const { selection: s, pageIds: onPage } = latest.current;
+                  const pageSelected = e.api
+                    .getSelectedRows()
+                    .map(caseOf)
+                    .filter((c): c is TestCase => !!c)
+                    .map((c) => c.tcId);
+                  const ids = mergePageSelection(s.ids, onPage, pageSelected);
+                  onSelectionChange({ ids, spanning: s.spanning && ids.length > 0 });
+                }}
+                onCellClicked={(e: CellClickedEvent<GridRow>) => {
+                  if (e.column.getColId() === 'ag-Grid-SelectionColumn') return;
+                  const c = caseOf(e.data);
+                  if (c) open(c);
+                }}
+              />
+            </div>
+            {visible.length > 0 && (
+              <div className="qd-pager">
+                <span className={`${textClass('label2')} qd-muted qc-mono`}>
+                  {paged.start + 1}–{paged.start + paged.items.length} / {visible.length}
+                </span>
+                <Pagination
+                  variant="extended"
+                  page={paged.page}
+                  totalPages={paged.pageCount}
+                  onChange={(p) => p && goTo(p)}
+                  trailingContent={
+                    <PaginationSelect
+                      label="페이지당"
+                      pageSize={pageSize}
+                      pageSizeOptions={[...PAGE_SIZES]}
+                      onChange={(s) => s && changePageSize(s)}
+                    />
+                  }
+                />
+              </div>
+            )}
+          </div>
+          {current && (
+            <CaseDetail
+              key={current.tcId}
+              doc={doc}
+              c={current}
+              prepFlows={prepFlows}
+              onClose={() => set({ case: null, edit: null })}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import {
   type Build,
   type CaseResult,
   type CaseReviseJob,
+  type Defect,
   type Job,
   type QaDocJob,
   type QaDocJobDraft,
@@ -14,6 +15,7 @@ import {
   type SpecBundle,
   type QADocument,
   type Run,
+  type Screenshot,
   type TestCase,
   type TestCycle,
   type Verdict,
@@ -25,7 +27,11 @@ import {
   NotFoundError,
   PermissionError,
   RuleError,
+  type AttachmentFile,
   type ConfirmVerdictInput,
+  type DefectDraft,
+  type DefectPatch,
+  type NewDefectInput,
   type CycleSummary,
   type NewCycleInput,
   type QaDocSummary,
@@ -130,20 +136,66 @@ export function resolveQuestionIn(
   return { questions, released };
 }
 
-/** 사람 확정·오버라이드 (F-RP-04)가 남기는 판정 기록 한 건. 판정이 같아도 사람이 확정했다는 기록으로 남긴다 */
-export function verdictChange(r: CaseResult, input: ConfirmVerdictInput, user: string, now: string): VerdictChange {
-  return { at: now, by: user, from: r.verdict, to: input.verdict, ...(input.note ? { note: input.note } : {}) };
+// 첨부 스크린샷 (F-RP-05). storage.rules의 manual 경로 규칙과 같은 값이다
+export const MAX_ATTACHMENTS = 5;
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const ATTACHMENT_EXT: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
+
+/** 첨부를 받을 수 없는 이유. 없으면 undefined */
+export function attachmentProblem(a: NonNullable<ConfirmVerdictInput['attachments']>): string | undefined {
+  if (a.keep.length + a.add.length > MAX_ATTACHMENTS) return `스크린샷은 ${MAX_ATTACHMENTS}장까지 첨부할 수 있습니다`;
+  for (const f of a.add) {
+    if (!ATTACHMENT_EXT[f.type]) return `${f.name}: PNG·JPEG·WebP 이미지만 첨부할 수 있습니다`;
+    if (f.bytes.length > MAX_ATTACHMENT_BYTES) return `${f.name}: 한 장에 10MB까지 첨부할 수 있습니다`;
+  }
+  return undefined;
 }
 
-/** 사람 확정·오버라이드 (F-RP-04): 판정 변경 이력을 남긴다 */
-export function confirmedResult(r: CaseResult, input: ConfirmVerdictInput, user: string, now: string): CaseResult {
+/** 첨부 파일의 Storage 경로. 사이클 폴더 아래라 사이클·프로젝트 삭제 때 함께 지워진다 */
+export function attachmentPath(input: ConfirmVerdictInput, id: string, file: AttachmentFile): string {
+  return `projects/${input.projectId}/cycles/${input.cycleId}/manual/${input.tcId}__${input.deviceId}/${id}.${ATTACHMENT_EXT[file.type] ?? 'png'}`;
+}
+
+/** 사람 확정·오버라이드 (F-RP-04)가 남기는 판정 기록 한 건. 판정이 같아도 사람이 확정했다는 기록으로 남긴다 */
+export function verdictChange(
+  r: CaseResult,
+  input: ConfirmVerdictInput,
+  user: string,
+  now: string,
+  attachments?: Screenshot[],
+): VerdictChange {
+  return {
+    at: now,
+    by: user,
+    from: r.verdict,
+    to: input.verdict,
+    ...(input.note ? { note: input.note } : {}),
+    ...(attachments?.length ? { attachments: attachments.length } : {}),
+  };
+}
+
+/**
+ * 사람 확정·오버라이드 (F-RP-04): 판정 변경 이력을 남긴다.
+ * `attachments`는 올린 뒤의 첨부 목록(F-RP-05) — 주면 칸의 첨부를 바꾸고, 없으면 그대로 둔다
+ */
+export function confirmedResult(
+  r: CaseResult,
+  input: ConfirmVerdictInput,
+  user: string,
+  now: string,
+  attachments?: Screenshot[],
+): CaseResult {
   const next: CaseResult = structuredClone(r);
-  next.history.push(verdictChange(r, input, user, now));
+  next.history.push(verdictChange(r, input, user, now, attachments));
   next.verdict = input.verdict;
   next.decidedBy = { kind: 'human', name: user };
   next.autoConfirmed = false;
   if (input.actualSummary !== undefined) next.actualSummary = input.actualSummary;
   if (input.note !== undefined) next.note = input.note;
+  if (attachments) {
+    if (attachments.length) next.attachments = attachments;
+    else delete next.attachments;
+  }
   if (!next.executedAt) {
     next.executedAt = now;
     next.executor = user;
@@ -168,11 +220,103 @@ export function cycleSummary(
     done: results.length - counts.nt,
     passRate: passRate(counts),
     activeRuns: runs.filter((r) => r.status === 'running' || r.status === 'paused'),
+    unlinkedFails: unlinkedFails(results).length,
+  };
+}
+
+/** 결함이 연결되지 않은 Fail 칸 (F-RP-19) */
+export const unlinkedFails = (results: CaseResult[]) => results.filter((r) => r.verdict === 'fail' && !r.defectId);
+
+/** 결함 등록 폼에 미리 채울 값 (F-RP-19): 케이스의 제목·사전 조건과 스텝·기대 결과, 칸의 실제 결과 */
+export function defectDraft(tc: TestCase, r: CaseResult): DefectDraft {
+  return {
+    title: tc.title,
+    severity: 'major',
+    repro: [...tc.preconditions, ...tc.steps.map((s) => s.text)],
+    expected: tc.verificationPoints.map((v) => v.expected).join(' / '),
+    actual: r.actualSummary ?? '',
+  };
+}
+
+/**
+ * 결함 등록 (F-RP-19): 사이클의 다음 번호로 결함을 만들고 칸에 연결한다. 저장은 세 문서 — 결함, 번호를 올린 사이클,
+ * `defectId`를 채운 결과 칸 — 를 함께 쓴다
+ */
+export function newDefect(
+  cycle: TestCycle,
+  r: CaseResult,
+  input: NewDefectInput,
+  user: { name: string },
+  now: string,
+): { defect: Defect; cycle: TestCycle; result: CaseResult } {
+  if (r.verdict !== 'fail') throw new RuleError('Fail 칸에서만 결함을 등록할 수 있습니다.');
+  if (r.defectId) throw new RuleError(`이미 결함 ${r.defectId}이(가) 연결된 칸입니다.`);
+  const title = input.title.trim();
+  if (!title) throw new RuleError('결함 제목을 입력하세요.');
+  const repro = input.repro.map((s) => s.trim()).filter(Boolean);
+  if (!repro.length) throw new RuleError('재현 절차를 한 단계 이상 입력하세요.');
+  const seq = (cycle.defectSeq ?? 0) + 1;
+  const defect: Defect = {
+    id: `D-${seq}`,
+    title,
+    severity: input.severity,
+    tcId: r.tcId,
+    deviceId: r.deviceId,
+    ...(r.osBuild ? { osBuild: r.osBuild } : {}),
+    repro,
+    expected: input.expected.trim(),
+    actual: input.actual.trim(),
+    status: 'open',
+    createdBy: user.name,
+    createdAt: now,
+  };
+  return { defect, cycle: { ...cycle, defectSeq: seq }, result: { ...r, defectId: defect.id } };
+}
+
+/** 결함 심각도·상태 바꾸기 (F-RP-19). 그 밖의 필드는 바꾸지 않는다 */
+export function changedDefect(d: Defect, patch: DefectPatch): Defect {
+  return {
+    ...d,
+    ...(patch.severity ? { severity: patch.severity } : {}),
+    ...(patch.status ? { status: patch.status } : {}),
   };
 }
 
 /** 진행 중 사이클: 끝나지 않았고 로컬 실행 묶음이 아닌 것 */
 export const isActiveCycle = (c: TestCycle) => !c.period.end && c.origin !== 'local_run';
+
+/** 완료하기 전에 알릴 것 (F-CY-09): 남은 확인필요·N/T 칸, 아직 끝나지 않은 Run */
+export function completionWarnings(results: CaseResult[], runs: Run[]) {
+  const counts = countVerdicts(results);
+  return {
+    check: counts.check,
+    nt: counts.nt,
+    /** 실행 중인 Run은 끝까지 결과를 올린다 */
+    running: runs.filter((r) => r.status === 'running').length,
+    /** 일시정지된 Run은 완료 후 이어서 실행할 수 없다 */
+    paused: runs.filter((r) => r.status === 'paused').length,
+  };
+}
+
+/** 사이클 완료 (F-CY-09) */
+export function completedCycle(c: TestCycle, user: { name: string }, now: string): TestCycle {
+  if (c.origin === 'local_run') throw new RuleError('로컬 실행 묶음은 완료할 수 없습니다.');
+  if (c.period.end) throw new RuleError('이미 완료된 사이클입니다.');
+  return { ...c, period: { ...c.period, end: now }, completedBy: user.name };
+}
+
+/** 완료 취소 (F-CY-09) */
+export function reopenedCycle(c: TestCycle): TestCycle {
+  if (c.origin === 'local_run' || !c.period.end) throw new RuleError('완료된 사이클이 아닙니다.');
+  const { completedBy: _, ...rest } = c;
+  return { ...rest, period: { start: c.period.start } };
+}
+
+/** 완료(F-CY-09)·삭제 중(F-CY-10)인 사이클은 새 Run을 받지 않는다 — 웹 요청·호스트가 함께 쓴다 */
+export function requireOpenCycle(c: TestCycle): void {
+  if (c.deletingAt) throw new RuleError(`삭제 중인 사이클입니다 (${c.name}).`);
+  if (c.period.end) throw new RuleError(`완료된 사이클입니다 (${c.name}). 다시 열어야 실행할 수 있습니다.`);
+}
 
 /**
  * QA 문서 생성 요청 (PRD §5.2) → 올릴 파일·스펙 묶음·Job. 메모리·Firestore 구현이 같이 쓴다.
@@ -257,9 +401,7 @@ export function caseReviseRequest(
 ): CaseReviseJob {
   const c = d.cases.find((x) => x.tcId === tcId);
   if (!c) throw new NotFoundError(`케이스 없음: ${tcId}`);
-  const questionIds = d.questions
-    .filter((q) => q.status === 'answered' && q.caseIds.includes(tcId))
-    .map((q) => q.id);
+  const questionIds = d.questions.filter((q) => q.status === 'answered' && q.caseIds.includes(tcId)).map((q) => q.id);
   if (!questionIds.length) throw new RuleError('이 케이스에 답변된 스펙 확인 질문이 없습니다.');
   const busy = existing.some(
     (j) =>
@@ -282,7 +424,12 @@ export function caseReviseRequest(
 }
 
 /** 수정안을 적용했거나 버렸다고 기록한다. 요청한 사람만, 완료된 수정안만 */
-export function closedRevision(job: Job, outcome: 'applied' | 'dismissed', user: { uid: string; name: string }, now: string): CaseReviseJob {
+export function closedRevision(
+  job: Job,
+  outcome: 'applied' | 'dismissed',
+  user: { uid: string; name: string },
+  now: string,
+): CaseReviseJob {
   if (job.kind !== 'case_revise') throw new RuleError('케이스 수정안 작업이 아닙니다.');
   if (job.requestedBy !== user.uid) throw new PermissionError('요청한 사람만 수정안을 처리할 수 있습니다.');
   if (job.status !== 'done') throw new RuleError('완료된 수정안만 처리합니다.');

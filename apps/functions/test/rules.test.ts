@@ -8,6 +8,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import {
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   serverTimestamp,
@@ -46,12 +47,20 @@ beforeEach(async () => {
     await setDoc(doc(db, 'projects/haru/members/u-viewer'), { role: 'viewer' });
     await setDoc(doc(db, 'projects/haru/invitations/i1'), { token: 't1' });
     await setDoc(doc(db, 'projects/haru/qaDocs/doc-130'), { appVersion: '1.3.0' });
+    await setDoc(doc(db, 'projects/haru/cycles/c1'), CYCLE);
     await setDoc(doc(db, 'projects/other/qaDocs/d1'), { appVersion: '1.0.0' });
     await setDoc(doc(db, 'invitationTokens/t1'), { projectId: 'haru', invitationId: 'i1' });
     await setDoc(doc(db, 'users/u-qa'), { github: 'minji-kim', name: '김민지' });
   });
 });
 
+const CYCLE = {
+  name: 'c1',
+  docId: 'doc-130',
+  buildId: 'build-100-a',
+  snapshot: [{ tcId: 'TC-1', contentHash: 'h1' }],
+  period: { start: '2026-10-20T00:00:00Z' },
+};
 const as = (uid: string | null) => (uid ? env.authenticatedContext(uid) : env.unauthenticatedContext()).firestore();
 
 describe('읽기', () => {
@@ -99,12 +108,13 @@ describe('쓰기', () => {
     const cycle = doc(qa, 'projects/haru/cycles/c2');
     const copy = doc(qa, 'projects/haru/cycles/c2/cases/TC-1');
     const snapshot = [{ tcId: 'TC-1', contentHash: 'h1' }];
-    await assertSucceeds(setDoc(cycle, { name: 'c2', docId: 'doc-130', snapshot }));
+    await assertSucceeds(setDoc(cycle, { name: 'c2', docId: 'doc-130', buildId: 'build-100-a', snapshot }));
     await assertSucceeds(setDoc(copy, { title: '원래 제목' }));
     await assertFails(setDoc(copy, { title: '바꾼 제목' }));
     await assertFails(deleteDoc(copy));
     await assertFails(updateDoc(cycle, { snapshot: [{ tcId: 'TC-1', contentHash: 'h2' }] }));
     await assertFails(updateDoc(cycle, { docId: 'doc-120' }));
+    await assertFails(updateDoc(cycle, { buildId: 'build-101-b' })); // 새 빌드는 새 사이클로
     // 이름·기간 같은 다른 필드와 결과 칸(N/T)은 계속 쓴다
     await assertSucceeds(updateDoc(cycle, { name: 'c2 (수정)' }));
     await assertSucceeds(setDoc(doc(qa, 'projects/haru/cycles/c2/results/TC-1__d'), { verdict: 'nt' }));
@@ -177,6 +187,16 @@ describe('쓰기', () => {
       await assertFails(setDoc(doc(as('u-qa'), RESULT), human(first, { verdict: 'pass' })));
       await assertFails(updateDoc(doc(as('u-qa'), LOG, first), { to: 'pass' }));
       await assertFails(deleteDoc(doc(as('u-qa'), LOG, first)));
+    });
+
+    it('첨부 스크린샷은 판정을 확정하면서 5장까지만 바꾼다 (F-RP-05)', async () => {
+      const shot = (i: number) => ({ kind: 'storage', path: `projects/haru/cycles/c1/manual/TC-1__d/s${i}.png` });
+      const shots = (n: number) => Array.from({ length: n }, (_, i) => shot(i));
+      await assertSucceeds(confirm(log(), (id) => human(id, { attachments: shots(5) })));
+      await assertFails(confirm(log(), (id) => human(id, { attachments: shots(6) })));
+      await assertFails(confirm(log(), (id) => human(id, { attachments: 'projects/haru/x.png' })));
+      // 로그 없이 첨부만 바꾸지 못한다
+      await assertFails(updateDoc(doc(as('u-qa'), RESULT), { attachments: shots(1) }));
     });
 
     it('판정을 건드리지 않는 메모·요약은 사람이 고치지만, Agent 증거는 못 고친다', async () => {
@@ -279,6 +299,125 @@ describe('호스트 토큰 (F-TM-14)', () => {
   });
 });
 
+describe('결함 (F-RP-19)', () => {
+  const C = 'projects/haru/cycles/c9';
+  const asHost = (uid: string, host: string) => env.authenticatedContext(uid, { host }).firestore();
+  const defect = {
+    id: 'D-1',
+    title: '토스트가 겹쳐 쌓임',
+    severity: 'minor',
+    status: 'open',
+    tcId: 'TC-1',
+    deviceId: 'd',
+  };
+  beforeEach(() =>
+    env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore();
+      await setDoc(doc(db, C), { name: 'c9', docId: 'doc-130', buildId: 'b', snapshot: [] });
+      await setDoc(doc(db, 'hostConnections/h-qa'), { id: 'h-qa', uid: 'u-qa' });
+    }),
+  );
+  /** 사이클 번호를 올리면서 결함을 만든다 (createDefect와 같은 쓰기) */
+  const create = (db: ReturnType<typeof as>, seq: number, d: Record<string, unknown> = defect) => {
+    const batch = writeBatch(db);
+    batch.update(doc(db, C), { defectSeq: seq });
+    batch.set(doc(db, `${C}/defects/${String(d.id)}`), d);
+    return batch.commit();
+  };
+
+  it('Admin·QA가 사이클 번호를 하나 올리면서 그 번호로 만든다', async () => {
+    await assertSucceeds(create(as('u-qa'), 1));
+    await assertSucceeds(create(as('u-admin'), 2, { ...defect, id: 'D-2' }));
+  });
+
+  it('번호를 올리지 않거나, 건너뛰거나, 다른 번호로는 만들지 못한다', async () => {
+    const qa = as('u-qa');
+    await assertFails(setDoc(doc(qa, `${C}/defects/D-1`), defect));
+    await assertFails(create(qa, 2, { ...defect, id: 'D-2' }));
+    await assertFails(create(qa, 1, { ...defect, id: 'D-7' }));
+  });
+
+  it('Viewer·호스트는 만들지 못한다', async () => {
+    await assertFails(create(as('u-viewer'), 1));
+    await assertFails(create(asHost('u-qa', 'h-qa'), 1));
+  });
+
+  it('만든 뒤에는 심각도·상태만 바꾸고 지우지 못한다', async () => {
+    await assertSucceeds(create(as('u-qa'), 1));
+    const at = doc(as('u-qa'), `${C}/defects/D-1`);
+    await assertSucceeds(updateDoc(at, { severity: 'major', status: 'fixed' }));
+    await assertFails(updateDoc(at, { title: '바꾼 제목' }));
+    await assertFails(updateDoc(doc(as('u-viewer'), `${C}/defects/D-1`), { status: 'closed' }));
+    await assertFails(deleteDoc(at));
+  });
+});
+
+describe('사이클 완료 (F-CY-09)', () => {
+  const C = 'projects/haru/cycles/c1';
+  const asHost = (uid: string, host: string) => env.authenticatedContext(uid, { host }).firestore();
+  const run = { status: 'running', executorUid: 'u-qa', hostId: 'h-qa' };
+  const done = { start: '2026-10-20T00:00:00Z', end: '2026-10-27T00:00:00Z' };
+  beforeEach(() =>
+    env.withSecurityRulesDisabled((c) =>
+      setDoc(doc(c.firestore(), 'hostConnections/h-qa'), { id: 'h-qa', uid: 'u-qa' }),
+    ),
+  );
+
+  it('Admin·QA가 완료하고 다시 연다. Viewer·호스트는 못 한다', async () => {
+    await assertFails(updateDoc(doc(as('u-viewer'), C), { period: done }));
+    await assertFails(updateDoc(doc(asHost('u-qa', 'h-qa'), C), { period: done }));
+    await assertSucceeds(updateDoc(doc(as('u-qa'), C), { period: done, completedBy: '김민지' }));
+    await assertSucceeds(setDoc(doc(as('u-admin'), C), CYCLE)); // 다시 열기: 완료 필드를 지운 문서로 통째로 쓴다
+  });
+
+  it('완료된 사이클에는 새 Run을 만들 수 없고, 이미 시작한 Run은 마저 쓴다', async () => {
+    await assertSucceeds(setDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), run));
+    await env.withSecurityRulesDisabled((c) => updateDoc(doc(c.firestore(), C), { period: done }));
+    await assertFails(setDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r2`), run));
+    await assertSucceeds(updateDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), { status: 'done' }));
+    const agent = { tcId: 'TC-1', deviceId: 'd', verdict: 'pass', decidedBy: { kind: 'agent' }, runId: 'r1' };
+    await assertSucceeds(setDoc(doc(asHost('u-qa', 'h-qa'), `${C}/results/TC-1__d`), agent));
+  });
+
+  it('없는 사이클에는 Run을 만들 수 없다', async () => {
+    await assertFails(setDoc(doc(asHost('u-qa', 'h-qa'), 'projects/haru/cycles/nope/runs/r1'), run));
+  });
+});
+
+describe('사이클 삭제 (F-CY-10)', () => {
+  const C = 'projects/haru/cycles/c1';
+  const asHost = (uid: string, host: string) => env.authenticatedContext(uid, { host }).firestore();
+  const run = { status: 'running', executorUid: 'u-qa', hostId: 'h-qa' };
+  beforeEach(() =>
+    env.withSecurityRulesDisabled((c) =>
+      setDoc(doc(c.firestore(), 'hostConnections/h-qa'), { id: 'h-qa', uid: 'u-qa' }),
+    ),
+  );
+
+  it('사이클 문서는 Admin도 직접 지우지 못한다 (Functions만)', async () => {
+    await assertFails(deleteDoc(doc(as('u-admin'), C)));
+    await assertFails(deleteDoc(doc(as('u-qa'), C)));
+  });
+
+  it('삭제 중 표시는 사람이 남기거나 지우지 못한다', async () => {
+    await assertFails(updateDoc(doc(as('u-qa'), C), { deletingAt: '2026-10-28T00:00:00Z' }));
+    await assertFails(
+      setDoc(doc(as('u-qa'), 'projects/haru/cycles/c9'), { ...CYCLE, deletingAt: '2026-10-28T00:00:00Z' }),
+    );
+    await env.withSecurityRulesDisabled((c) =>
+      updateDoc(doc(c.firestore(), C), { deletingAt: '2026-10-28T00:00:00Z' }),
+    );
+    await assertFails(setDoc(doc(as('u-admin'), C), CYCLE));
+  });
+
+  it('삭제 중인 사이클에는 새 Run을 만들 수 없다', async () => {
+    await env.withSecurityRulesDisabled((c) =>
+      updateDoc(doc(c.firestore(), C), { deletingAt: '2026-10-28T00:00:00Z' }),
+    );
+    await assertFails(setDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), run));
+  });
+});
+
 describe('Agent 기록은 그 Run을 실행한 사용자의 호스트만 (PRD §8)', () => {
   const C = 'projects/haru/cycles/c1';
   const asHost = (uid: string, host: string) => env.authenticatedContext(uid, { host }).firestore();
@@ -307,6 +446,16 @@ describe('Agent 기록은 그 Run을 실행한 사용자의 호스트만 (PRD §
     await assertSucceeds(updateDoc(doc(asHost('u-qa', 'h-qa2'), `${C}/runs/r1`), { status: 'paused' }));
     await assertFails(updateDoc(doc(asHost('u-admin', 'h-admin'), `${C}/runs/r1`), { status: 'done' }));
     await assertFails(updateDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), { executorUid: 'u-admin' }));
+  });
+
+  it('지금 칸(칸 선점 잠금)은 Functions만 정하고, 호스트는 지우기만 한다 (F-CY-06)', async () => {
+    await assertFails(setDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), { ...run, currentTcId: 'TC-1' }));
+    await assertSucceeds(setDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), run));
+    await assertFails(updateDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), { currentTcId: 'TC-1' }));
+    await env.withSecurityRulesDisabled((c) => updateDoc(doc(c.firestore(), `${C}/runs/r1`), { currentTcId: 'TC-1' }));
+    await assertSucceeds(updateDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), { heartbeatAt: 'later' }));
+    await assertFails(updateDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), { currentTcId: 'TC-2' }));
+    await assertSucceeds(updateDoc(doc(asHost('u-qa', 'h-qa'), `${C}/runs/r1`), { currentTcId: deleteField() }));
   });
 
   it('예전 Run(실행자 uid 없음)은 더 이어 쓰지 못한다', async () => {
@@ -351,5 +500,35 @@ describe('테스트 계정 (F-PF-08, F-EX-09)', () => {
     await assertSucceeds(getDoc(doc(as('u-qa'), 'projects/haru/secretAccessLog/l1')));
     await assertFails(getDoc(doc(as('u-viewer'), 'projects/haru/secretAccessLog/l1')));
     await assertFails(setDoc(doc(as('u-qa'), 'projects/haru/secretAccessLog/l2'), { accountId: 'a1' }));
+  });
+});
+
+describe('준비 플로우 (F-PF-01)', () => {
+  const asHost = (uid: string, host: string) => env.authenticatedContext(uid, { host }).firestore();
+  const FLOW = { id: 'pf-a', name: '온보딩 완료', kind: 'data_state', check: '홈', steps: ['[건너뛰기]'] };
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      await setDoc(doc(c.firestore(), 'hostConnections/h-qa'), { id: 'h-qa', uid: 'u-qa', name: 'mbp' });
+      await setDoc(doc(c.firestore(), 'projects/haru/prepFlows/pf-a'), FLOW);
+    });
+  });
+
+  it('Admin·QA는 만들고 고친다. Viewer는 못 한다', async () => {
+    await assertSucceeds(setDoc(doc(as('u-qa'), 'projects/haru/prepFlows/pf-b'), { ...FLOW, id: 'pf-b' }));
+    await assertSucceeds(updateDoc(doc(as('u-admin'), 'projects/haru/prepFlows/pf-a'), { name: '바꿈', rev: 1 }));
+    await assertSucceeds(getDoc(doc(as('u-viewer'), 'projects/haru/prepFlows/pf-a')));
+    await assertFails(setDoc(doc(as('u-viewer'), 'projects/haru/prepFlows/pf-c'), { ...FLOW, id: 'pf-c' }));
+    await assertFails(updateDoc(doc(as('u-viewer'), 'projects/haru/prepFlows/pf-a'), { name: 'x' }));
+  });
+
+  it('호스트는 QA 문서 생성 때 새 플로우를 만들기만 하고, 고치지 못한다', async () => {
+    const host = asHost('u-qa', 'h-qa');
+    await assertSucceeds(setDoc(doc(host, 'projects/haru/prepFlows/pf-new'), { ...FLOW, id: 'pf-new' }));
+    await assertFails(setDoc(doc(host, 'projects/haru/prepFlows/pf-a'), { ...FLOW, name: '덮어씀' }));
+  });
+
+  it('아무도 직접 지우지 못한다 (참조 확인은 Functions)', async () => {
+    await assertFails(deleteDoc(doc(as('u-admin'), 'projects/haru/prepFlows/pf-a')));
+    await assertFails(deleteDoc(doc(asHost('u-qa', 'h-qa'), 'projects/haru/prepFlows/pf-a')));
   });
 });

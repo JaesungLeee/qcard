@@ -6,15 +6,21 @@ import {
   accountDeletion,
   accountState,
   changeRole,
+  cycleDeletion,
   deletion,
   flagClearing,
   invitationState,
   leaseLive,
   leaving,
   mergeSecret,
+  MIN_HOST_VERSION,
   newAccount,
   newInvitation,
+  newPrepFlow,
   newProject,
+  prepFlowChange,
+  prepFlowDeletion,
+  prepFlowUses,
   projectIdFor,
   removal,
   requireAdmin,
@@ -26,11 +32,14 @@ import {
   type CaseReviseJob,
   type HostConnection,
   type Member,
+  type PrepFlow,
   type TestAccount,
+  type TestCycle,
 } from '@qcard/shared';
 import {
   ConflictError,
   NotFoundError,
+  PrepFlowConflictError,
   RuleError,
   toApiError,
   type ConfirmVerdictInput,
@@ -43,18 +52,24 @@ import {
 import { localRunCycle, type LocalRun } from './localRuns';
 import {
   approvalFor,
+  attachmentProblem,
   caseReviseRequest,
+  changedDefect,
   closedRevision,
+  completedCycle,
   confirmedResult,
   cycleSummary,
   isActiveCycle,
   jobPartOrder,
   newBuild,
   newCycle,
+  newDefect,
   nextCase,
   qaDocRequest,
   runRequest,
   qaDocSummary,
+  reopenedCycle,
+  requireOpenCycle,
   resolveQuestionIn,
   retriedJob,
 } from '@qcard/data';
@@ -62,6 +77,12 @@ import {
 export { countVerdicts, passRate } from '@qcard/data';
 
 const clone = <T>(v: T): T => structuredClone(v);
+
+function dataUrl(type: string, bytes: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return `data:${type};base64,${btoa(s)}`;
+}
 
 /** 메모리 구현은 로그인이 없으므로 개발용으로 사용자를 바꿀 수 있다 (초대 수락·권한 화면 확인용) */
 export type MemoryApi = QcardApi & { readonly users: string[]; switchUser(user: string): void };
@@ -109,6 +130,11 @@ export function createMemoryApi(
     return c;
   };
   const build = (buildId: string) => db.builds.find((b) => b.id === buildId)!;
+  const putCycle = (ref: CycleRef, c: TestCycle) => {
+    db.cycles = db.cycles.map((x) => (x.id === c.id ? c : x));
+    notify(ref);
+    return clone(c);
+  };
 
   // ------------------------------------------------------------ 프로젝트·멤버·초대 (F-TM-09~13)
   // 규칙은 @qcard/shared membership — Cloud Functions도 같은 함수를 쓴다.
@@ -164,6 +190,20 @@ export function createMemoryApi(
     accounts = accounts.map((x) => (x.id === a.id ? a : x));
     return a;
   };
+
+  // 준비 플로우 (F-PF-01). fixture 플로우는 하루콩 프로젝트 것이다
+  const flows: Record<string, PrepFlow[]> = { haru: db.prepFlows };
+  const flowsOf = (projectId: string) => flows[projectId] ?? [];
+  const flow = (projectId: string, id: string) => {
+    const f = flowsOf(projectId).find((x) => x.id === id);
+    if (!f) throw new NotFoundError(`준비 플로우 없음: ${id}`);
+    return f;
+  };
+  const usesOf = (projectId: string) =>
+    prepFlowUses(
+      db.qaDocs.filter((d) => d.projectId === projectId),
+      db.cycles.filter((c) => c.projectId === projectId).map((c) => ({ cycle: c, cases: db.cycleCases[c.id] ?? [] })),
+    );
 
   // 사이클 구독 (watchCycle): 쓰기가 일어나면 그 사이클을 다시 읽어 알린다
   const watchers = new Map<string, Set<(d: CycleDetail) => void>>();
@@ -319,8 +359,34 @@ export function createMemoryApi(
       q.comments.push({ by: currentUser, at: now(), text });
       return wait(undefined);
     },
-    async listPrepFlows() {
-      return wait(db.prepFlows);
+    async listPrepFlows(projectId) {
+      return wait(flowsOf(projectId));
+    },
+    async listPrepFlowUses(projectId) {
+      await ensureLocal();
+      return wait(usesOf(projectId));
+    },
+    createPrepFlow: (projectId, input) =>
+      rules(() => {
+        const flow = newPrepFlow(membersOf(projectId), actor(), input, flowsOf(projectId), now());
+        flows[projectId] = [...flowsOf(projectId), flow];
+        return flow;
+      }),
+    updatePrepFlow: (projectId, flowId, input, expectedRev) =>
+      rules(() => {
+        const current = flow(projectId, flowId);
+        if ((current.rev ?? 0) !== expectedRev) throw new PrepFlowConflictError(clone(current));
+        const next = prepFlowChange(membersOf(projectId), actor(), current, input, now());
+        flows[projectId] = flowsOf(projectId).map((f) => (f.id === flowId ? next : f));
+        return next;
+      }),
+    async deletePrepFlow(projectId, flowId) {
+      await ensureLocal();
+      return rules(() => {
+        flow(projectId, flowId);
+        prepFlowDeletion(membersOf(projectId), actor(), usesOf(projectId)[flowId] ?? []);
+        flows[projectId] = flowsOf(projectId).filter((f) => f.id !== flowId);
+      });
     },
 
     // ------------------------------------------------------------ 테스트 계정 (F-PF-04·08·09)
@@ -433,9 +499,65 @@ export function createMemoryApi(
       const results = db.results[input.cycleId] ?? [];
       const i = results.findIndex((x) => x.tcId === input.tcId && x.deviceId === input.deviceId);
       if (i < 0) throw new NotFoundError(`결과 없음: ${input.tcId} × ${input.deviceId}`);
-      results[i] = confirmedResult(results[i]!, input, currentUser, now());
+      // 메모리 구현은 Storage가 없어 첨부를 data URL로 둔다
+      const a = input.attachments;
+      const problem = a && attachmentProblem(a);
+      if (problem) throw new RuleError(problem);
+      const attachments = a && [
+        ...a.keep,
+        ...a.add.map((f) => ({ kind: 'url' as const, url: dataUrl(f.type, f.bytes), w: f.w, h: f.h })),
+      ];
+      results[i] = confirmedResult(results[i]!, input, currentUser, now(), attachments);
       notify(input);
       return wait(results[i]);
+    },
+    async createDefect(input) {
+      await ensureLocal();
+      return rules(() => {
+        requireEditor(membersOf(input.projectId), actor().uid);
+        const c = cycle(input.cycleId);
+        const results = db.results[c.id] ?? [];
+        const i = results.findIndex((x) => x.tcId === input.tcId && x.deviceId === input.deviceId);
+        if (i < 0) throw new NotFoundError(`결과 없음: ${input.tcId} × ${input.deviceId}`);
+        const made = newDefect(c, results[i]!, input, actor(), now());
+        db.cycles = db.cycles.map((x) => (x.id === c.id ? made.cycle : x));
+        results[i] = made.result;
+        db.defects[c.id] = [...(db.defects[c.id] ?? []), made.defect];
+        notify(input);
+        return clone(made.defect);
+      });
+    },
+    async updateDefect(ref, defectId, patch) {
+      return rules(() => {
+        requireEditor(membersOf(ref.projectId), actor().uid);
+        const list = db.defects[ref.cycleId] ?? [];
+        const i = list.findIndex((x) => x.id === defectId);
+        if (i < 0) throw new NotFoundError(`결함 없음: ${defectId}`);
+        list[i] = changedDefect(list[i]!, patch);
+        notify(ref);
+        return clone(list[i]);
+      });
+    },
+    async completeCycle(ref) {
+      return rules(() => {
+        requireEditor(membersOf(ref.projectId), actor().uid);
+        return putCycle(ref, completedCycle(cycle(ref.cycleId), actor(), now()));
+      });
+    },
+    async reopenCycle(ref) {
+      return rules(() => {
+        requireEditor(membersOf(ref.projectId), actor().uid);
+        return putCycle(ref, reopenedCycle(cycle(ref.cycleId)));
+      });
+    },
+    async deleteCycle(ref, confirmName) {
+      await ensureLocal();
+      return rules(() => {
+        const c = cycle(ref.cycleId);
+        cycleDeletion(membersOf(ref.projectId), actor(), c, db.runs[c.id] ?? [], confirmName, now());
+        db.cycles = db.cycles.filter((x) => x.id !== c.id);
+        for (const sub of [db.cycleCases, db.results, db.defects, db.runs]) delete sub[c.id];
+      });
     },
 
     // ------------------------------------------------------------ QA 문서 생성 작업
@@ -455,6 +577,7 @@ export function createMemoryApi(
     async requestRun(projectId, input) {
       return rules(() => {
         requireEditor(membersOf(projectId), actor().uid);
+        requireOpenCycle(cycle(input.cycleId));
         const job = runRequest(projectId, input, actor(), now(), `job-m${db.jobs.length + 1}`);
         db.jobs.unshift(job);
         return job;
@@ -514,6 +637,8 @@ export function createMemoryApi(
           devices: [{ serial: '3A281FDH2000AB', model: 'Pixel 8', osMajor: 16, resolution: '1080×2400' }],
           claudeCode: { version: '2.1.308', loggedIn: true, subscriptionType: 'max' },
           jobs: ['qa_doc_generate', 'run_cycle', 'case_revise'],
+          // `?demo=host-outdated`: Run을 맡길 수 없는 이전 버전 호스트 (UI 스냅샷용)
+          version: globalThis.location?.search.includes('demo=host-outdated') ? '0.2.1' : MIN_HOST_VERSION,
         },
       ]);
     },

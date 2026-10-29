@@ -22,5 +22,8 @@
   { "name": "qa-doc-suggestions", "path": "/p/haru/docs/doc-130?tab=suggestions", "waitFor": "보강 제안은 케이스가 아닙니다" },
   { "name": "qa-doc-traceability", "path": "/p/haru/docs/doc-130?tab=traceability", "waitFor": "커버리지" },
   { "name": "qa-doc-v120", "path": "/p/haru/docs/doc-120", "waitFor": "QA 문서 1.2.0" },
-  { "name": "qa-doc-prep-flows", "path": "/p/haru/prep-flows", "waitFor": "온보딩 완료" }
+  { "name": "qa-doc-prep-flows", "path": "/p/haru/prep-flows", "waitFor": "온보딩 완료" },
+  { "name": "qa-doc-prep-flow-new", "path": "/p/haru/prep-flows?new=1", "waitFor": "스텝 추가" },
+  { "name": "qa-doc-prep-flow-edit", "path": "/p/haru/prep-flows?edit=pf-done", "waitFor": "다음 실행부터 적용됩니다" },
+  { "name": "qa-doc-prep-flow-uses", "path": "/p/haru/prep-flows?uses=pf-clean", "waitFor": "사이클 보기" }
 ]

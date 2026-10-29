@@ -43,6 +43,21 @@ service cloud.firestore {
     function runOf(p, c, run) {
       return /databases/$(database)/documents/projects/$(p)/cycles/$(c)/runs/$(run);
     }
+    // 새 결함의 번호: 이 요청에서 사이클의 defectSeq가 정확히 하나 올랐고, 결함 id가 그 번호다 (F-RP-19)
+    function defectNumbered(p, c, id) {
+      let path = /databases/$(database)/documents/projects/$(p)/cycles/$(c);
+      let seq = getAfter(path).data.get('defectSeq', 0);
+      return seq == get(path).data.get('defectSeq', 0) + 1
+        && id == 'D-' + string(seq)
+        && request.resource.data.id == id;
+    }
+    // 완료된 사이클(period.end)·삭제 중인 사이클(deletingAt)은 새 Run을 받지 않는다 (F-CY-09·10).
+    // 이미 시작한 Run의 갱신·결과는 막지 않는다
+    function cycleOpen(p, c) {
+      let path = /databases/$(database)/documents/projects/$(p)/cycles/$(c);
+      return exists(path) && get(path).data.get('period', {}).get('end', null) == null
+        && get(path).data.get('deletingAt', null) == null;
+    }
     function ownsRun(p, c, run) {
       return isHost() && exists(runOf(p, c, run))
         && get(runOf(p, c, run)).data.get('executorUid', '') == request.auth.uid;
@@ -61,11 +76,15 @@ service cloud.firestore {
           ? next.verdict == 'nt' && !('decidedBy' in next)
           : personEdit(next, next.diff(resource.data).affectedKeys()));
     }
+    // 첨부 스크린샷(F-RP-05)은 판정을 확정하면서만 바꾼다(같은 요청의 판정 로그가 남는다). 5장까지
     function personEdit(next, changed) {
       return changed.hasOnly(['verdict', 'decidedBy', 'autoConfirmed', 'actualSummary', 'note', 'executor',
-                              'executedAt', 'defectId', 'history', '_decision'])
+                              'executedAt', 'defectId', 'history', '_decision', 'attachments'])
         && (!changed.hasAny(['verdict', 'decidedBy', 'autoConfirmed'])
-          || next.get('decidedBy', {}).get('kind', '') == 'human');
+          || next.get('decidedBy', {}).get('kind', '') == 'human')
+        && (!changed.hasAny(['attachments'])
+          || (changed.hasAny(['_decision']) && next.get('attachments', []) is list
+            && next.get('attachments', []).size() <= 5));
     }
 
     // 사람 판정(decidedBy.kind == 'human')이 새로 생기거나 바뀌면, 이 요청에서 만든 로그(_decision)가 그 판정을 기록해야 한다
@@ -107,9 +126,13 @@ service cloud.firestore {
         allow read: if isMember(p);
         allow write: if canEdit(p);
       }
-      match /prepFlows/{rest=**} {
+      // 준비 플로우 (F-PF-01). 호스트는 QA 문서 생성 때 새 플로우를 만들기만 한다. 편집은 웹의 사람만.
+      // 삭제는 Functions만 — 참조하는 케이스가 있는지 규칙으로는 질의할 수 없다
+      match /prepFlows/{id} {
         allow read: if isMember(p);
-        allow write: if canEdit(p);
+        allow create: if canEdit(p);
+        allow update: if canEdit(p) && !isHost();
+        allow delete: if false;
       }
       // 빌드: 올린 APK는 바꾸지 않는다 (모든 실행자가 같은 파일을 설치, F-DV-05)
       match /builds/{id} {
@@ -117,13 +140,19 @@ service cloud.firestore {
         allow create: if canEdit(p);
         allow update, delete: if false;
       }
-      // 테스트 사이클. 만들 때 고정한 스냅샷(TC ID·내용 해시)과 케이스 사본은 바꾸지 않는다 (F-CY-02)
+      // 테스트 사이클. 만들 때 고정한 스냅샷(TC ID·내용 해시)·QA 문서·빌드와 케이스 사본은 바꾸지 않는다 (F-CY-01·02)
+      // — 새 빌드는 새 사이클로 돌린다(한 사이클에 두 빌드의 결과가 섞이지 않게). 완료·다시 열기(F-CY-09)는 사람만.
+      // 삭제(F-CY-10)는 Functions만 한다 — 하위 문서·Storage 증거를 함께 지워야 해서 클라이언트는 지우지 못하고,
+      // 삭제 중 표시(deletingAt)도 바꾸지 못한다
       match /cycles/{c} {
         allow read: if isMember(p);
-        allow create, delete: if canEdit(p);
-        allow update: if canEdit(p)
+        allow create: if canEdit(p) && !('deletingAt' in request.resource.data);
+        allow update: if canEdit(p) && !isHost()
           && request.resource.data.snapshot == resource.data.snapshot
-          && request.resource.data.docId == resource.data.docId;
+          && request.resource.data.docId == resource.data.docId
+          && request.resource.data.buildId == resource.data.buildId
+          && request.resource.data.get('deletingAt', null) == resource.data.get('deletingAt', null);
+        allow delete: if false;
       }
       match /cycles/{c}/cases/{tcId} {
         allow read: if isMember(p);
@@ -139,15 +168,20 @@ service cloud.firestore {
           && request.resource.data.at == request.time;
         allow update, delete: if false;
       }
-      // Run: 실행한 사용자의 호스트만 만들고 고친다. 다른 PC(같은 사용자의 다시 연결한 PC 포함)에서 이어서 실행할 수 있다
+      // Run: 실행한 사용자의 호스트만 만들고 고친다. 다른 PC(같은 사용자의 다시 연결한 PC 포함)에서 이어서 실행할 수 있다.
+      // 새 Run은 완료되지 않은 사이클에만 (이어서 실행은 호스트가 막는다 — 실행 중 Run은 완료 뒤에도 결과를 올려야 한다)
+      // 지금 칸(currentTcId)은 칸 자동 선점의 잠금이라 Functions(claimCell)만 정한다. 호스트는 지우기만 한다 (F-CY-06)
       match /cycles/{c}/runs/{run} {
         allow read: if isMember(p);
         allow create: if canEdit(p) && isHost()
           && request.resource.data.executorUid == request.auth.uid
-          && request.resource.data.hostId == hostClaim();
+          && request.resource.data.hostId == hostClaim()
+          && !('currentTcId' in request.resource.data)
+          && cycleOpen(p, c);
         allow update: if canEdit(p) && isHost()
           && resource.data.get('executorUid', '') == request.auth.uid
-          && request.resource.data.executorUid == request.auth.uid;
+          && request.resource.data.executorUid == request.auth.uid
+          && request.resource.data.get('currentTcId', null) in [null, resource.data.get('currentTcId', null)];
         allow delete: if false;
       }
       // 결과 칸
@@ -165,10 +199,19 @@ service cloud.firestore {
         allow create: if canEdit(p) && isHost();
         allow update, delete: if false;
       }
-      // 결함 등 (cases·verdictLog·results·attempts·runs는 위 규칙만 — 여기서 쓰기를 열지 않는다)
+      // 결함 (F-RP-19): 사람만 만든다. 번호는 같은 요청에서 사이클의 defectSeq를 하나 올린 값이라 겹치지 않는다.
+      // 만든 뒤에는 심각도·상태만 바꾸고 지우지 않는다 (결과 칸의 defectId가 가리킨다)
+      match /cycles/{c}/defects/{id} {
+        allow read: if isMember(p);
+        allow create: if canEdit(p) && !isHost() && defectNumbered(p, c, id);
+        allow update: if canEdit(p) && !isHost()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['severity', 'status']);
+        allow delete: if false;
+      }
+      // 그 밖의 사이클 하위 문서 (cases·verdictLog·results·attempts·runs·defects는 위 규칙만 — 여기서 쓰기를 열지 않는다)
       match /cycles/{c}/{sub}/{rest=**} {
         allow read: if isMember(p);
-        allow write: if canEdit(p) && !(sub in ['cases', 'verdictLog', 'results', 'attempts', 'runs']);
+        allow write: if canEdit(p) && !(sub in ['cases', 'verdictLog', 'results', 'attempts', 'runs', 'defects']);
       }
       match /defects/{rest=**} {
         allow read: if isMember(p);

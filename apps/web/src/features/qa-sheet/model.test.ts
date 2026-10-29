@@ -6,6 +6,7 @@ import { consoleUrlOf } from '../console/Open';
 import {
   autoConfirmChecks,
   caseVerdictCounts,
+  cellRun,
   deviceStats,
   indexResults,
   maskAccount,
@@ -38,11 +39,16 @@ describe('worstVerdict', () => {
 });
 
 describe('웹에서 내 호스트로 Run 시작 (runLaunch)', () => {
-  const host = (devices: { model: string; osMajor: number }[], lastSeen = new Date().toISOString()) => ({
+  const host = (
+    devices: { model: string; osMajor: number }[],
+    lastSeen = new Date().toISOString(),
+    version: string | null = '0.3.0',
+  ) => ({
     id: 'h1',
     name: '내 맥',
     lastSeen,
     devices: devices.map((x, i) => ({ serial: `s${i}`, ...x })),
+    ...(version ? { version } : {}),
   });
   it('호스트가 꺼져 있거나 폰이 대상이 아니면 실행할 수 없다', async () => {
     const d = await load();
@@ -67,6 +73,15 @@ describe('웹에서 내 호스트로 Run 시작 (runLaunch)', () => {
     // 다른 사람의 일시정지 Run은 이어서 실행 대상이 아니다
     const other = runLaunch(d, [host([{ model: 'Pixel 8', osMajor: 16 }])], '김민지');
     expect(other.state === 'ready' && other.paused).toBeFalsy();
+  });
+  it('Run을 맡을 호스트가 최소 버전보다 낮거나 버전을 알리지 않으면 업데이트부터 안내한다', async () => {
+    const d = await load();
+    const p8 = [{ model: 'Pixel 8', osMajor: 16 }];
+    const at = new Date().toISOString();
+    expect(runLaunch(d, [host(p8, at, '0.2.1')], '이재성').state).toBe('outdated');
+    expect(runLaunch(d, [host(p8, at, null)], '이재성').state).toBe('outdated');
+    expect(runLaunch(d, [host(p8, at, '0.3.1')], '이재성').state).toBe('ready');
+    expect(runLaunch(d, [host(p8, at, '0.10.0')], '이재성').state).toBe('ready');
   });
 });
 
@@ -116,6 +131,20 @@ describe('progressMatrix', () => {
     expect(running.paused).toBe(true);
     expect(p8!.done + p8!.running + p8!.remaining).toBe(d.cases.length);
     expect(p8!.remaining).toBeGreaterThan(0);
+  });
+});
+
+describe('cellRun (F-CY-06)', () => {
+  const now = Date.parse('2026-10-23T10:00:00Z');
+  const base = { cycleId: 'c', deviceId: 'd1', currentTcId: 'TC-1', startedAt: '2026-10-23T09:00:00Z' };
+  const paused = { ...base, id: 'r-paused', executor: '이재성', status: 'paused' as const, heartbeatAt: '2026-10-23T09:59:50Z' };
+  const taker = { ...base, id: 'r-taker', executor: '김민지', status: 'running' as const, heartbeatAt: '2026-10-23T09:59:40Z' };
+  it('일시정지된 Run이 남긴 칸을 다른 Run이 가져갔으면 가져간 Run을 보인다', () => {
+    expect(cellRun([paused, taker], 'd1', 'TC-1', now)?.id).toBe('r-taker');
+    expect(cellRun([paused], 'd1', 'TC-1', now)?.id).toBe('r-paused');
+    // 가져간 Run도 끊겼으면 먼저 있던 Run 그대로
+    expect(cellRun([paused, { ...taker, heartbeatAt: '2026-10-23T09:00:00Z' }], 'd1', 'TC-1', now)?.id).toBe('r-paused');
+    expect(cellRun([paused, taker], 'd2', 'TC-1', now)).toBeUndefined();
   });
 });
 

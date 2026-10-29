@@ -3,12 +3,16 @@ import { FieldValue, type DocumentReference, type Firestore, type Transaction } 
 import {
   accepting,
   changeRole,
+  cycleDeletion,
+  cycleUsesFlows,
   deletion,
   invitationState,
   leaving,
   MembershipError,
   newInvitation,
   newProject,
+  prepFlowDeletion,
+  prepFlowUses,
   projectIdFor,
   removal,
   requireAdmin,
@@ -22,6 +26,10 @@ import {
   type Member,
   type NewProjectInput,
   type Project,
+  type QADocument,
+  type Run,
+  type TestCase,
+  type TestCycle,
 } from '@qcard/shared';
 import { z } from 'zod';
 import type { SecretBox } from './secretBox';
@@ -169,15 +177,81 @@ export async function restoreProject(ctx: Ctx, data: unknown): Promise<Project> 
   });
 }
 
-/** 삭제 유예가 지난 프로젝트를 하위 문서·초대 토큰까지 영구 삭제한다 (예약 실행) */
-export async function purgeDeletedProjects(db: Firestore, now: string): Promise<string[]> {
+/** Storage에서 접두어 아래 파일을 모두 지운다 (Functions는 기본 버킷, 테스트는 에뮬레이터) */
+export type RemoveFiles = (prefix: string) => Promise<void>;
+
+/**
+ * 삭제 유예가 지난 프로젝트를 영구 삭제한다 (예약 실행, F-TM-12) — Storage 파일(스펙·빌드·스크린샷), 초대 토큰,
+ * 프로젝트 문서와 하위 문서(테스트 계정 비밀값·감사 로그 포함). Storage를 먼저 지워, 중간에 실패해도 `purgeAt`이
+ * 남은 프로젝트를 다음 실행이 처음부터 다시 지운다. 한 프로젝트가 실패해도 나머지는 계속한다.
+ * 지운 프로젝트 id를 돌려준다
+ */
+export async function purgeDeletedProjects(db: Firestore, now: string, removeFiles: RemoveFiles): Promise<string[]> {
   const due = await db.collection('projects').where('purgeAt', '<=', now).get();
+  const purged: string[] = [];
   for (const doc of due.docs) {
-    const tokens = await db.collection('invitationTokens').where('projectId', '==', doc.id).get();
-    await Promise.all(tokens.docs.map((t) => t.ref.delete()));
-    await db.recursiveDelete(doc.ref);
+    try {
+      // 끝의 '/'가 없으면 `demo-app`이 `demo-app-2`의 파일까지 지운다
+      await removeFiles(`projects/${doc.id}/`);
+      const tokens = await db.collection('invitationTokens').where('projectId', '==', doc.id).get();
+      await Promise.all(tokens.docs.map((t) => t.ref.delete()));
+      await db.recursiveDelete(doc.ref);
+      purged.push(doc.id);
+    } catch (e) {
+      console.error(`프로젝트 영구 삭제 실패, 다음 실행에서 다시 지운다: ${doc.id}`, e);
+    }
   }
-  return due.docs.map((d) => d.id);
+  return purged;
+}
+
+const CycleId = ProjectId.extend({ cycleId: z.string().min(1), confirmName: z.string() });
+
+/**
+ * 사이클 삭제 (F-CY-10): 유예 없이 사이클 문서·하위 문서(케이스 사본·결과·Run·이전 시도·결함·판정 이력)와
+ * Storage 증거를 지운다. 빌드·QA 문서는 남는다. 먼저 트랜잭션에서 규칙을 보고 삭제 중 표시를 남겨(새 Run을 막는다)
+ * 그 뒤에 지운다 — 중간에 실패하면 표시가 남은 사이클을 다시 삭제해 이어서 지운다
+ */
+export async function deleteCycle(ctx: Ctx, data: unknown, removeFiles: RemoveFiles): Promise<void> {
+  const { projectId, cycleId, confirmName } = parse(CycleId, data);
+  const ref = ctx.db.doc(`projects/${projectId}/cycles/${cycleId}`);
+  const now = nowOf(ctx);
+  await ctx.db.runTransaction(async (tx) => {
+    const cycle = await read<TestCycle>(tx, ref, '사이클');
+    const runs = (await tx.get(ref.collection('runs'))).docs.map((d) => d.data() as Run);
+    const members = await membersIn(tx, ctx.db, projectId);
+    cycleDeletion(members, await actorOf(ctx, tx), cycle, runs, confirmName, now);
+    if (!cycle.deletingAt) tx.update(ref, { deletingAt: now });
+  });
+  await removeFiles(`projects/${projectId}/cycles/${cycleId}/`);
+  await ctx.db.recursiveDelete(ref);
+}
+
+const FlowId = ProjectId.extend({ flowId: z.string().min(1) });
+
+/**
+ * 준비 플로우 삭제 (F-PF-01): 케이스가 참조 중이면 막는다(`prepFlowUses`). 보안 규칙으로는 참조를 질의할 수 없고
+ * 클라이언트 트랜잭션은 질의를 못 해서, 여기서 한 트랜잭션 안에 참조를 읽고 지운다
+ */
+export async function deletePrepFlow(ctx: Ctx, data: unknown): Promise<void> {
+  const { projectId, flowId } = parse(FlowId, data);
+  const project = projectRef(ctx.db, projectId);
+  await ctx.db.runTransaction(async (tx) => {
+    const ref = project.collection('prepFlows').doc(flowId);
+    await read(tx, ref, '준비 플로우');
+    const members = await membersIn(tx, ctx.db, projectId);
+    const casesOf = async (ref: DocumentReference) =>
+      (await tx.get(ref.collection('cases'))).docs.map((d) => d.data() as TestCase);
+    const metas = (await tx.get(project.collection('qaDocs'))).docs;
+    const docs = await Promise.all(
+      metas.map(async (d) => ({ ...(d.data() as QADocument), id: d.id, cases: await casesOf(d.ref) })),
+    );
+    const open = (await tx.get(project.collection('cycles'))).docs.filter((d) => cycleUsesFlows(d.data() as TestCycle));
+    const cycles = await Promise.all(
+      open.map(async (d) => ({ cycle: d.data() as TestCycle, cases: await casesOf(d.ref) })),
+    );
+    prepFlowDeletion(members, await actorOf(ctx, tx), prepFlowUses(docs, cycles)[flowId] ?? []);
+    tx.delete(ref);
+  });
 }
 
 // ------------------------------------------------------------------ 멤버

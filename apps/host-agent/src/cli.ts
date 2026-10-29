@@ -22,7 +22,7 @@
  */
 import { parseArgs } from 'node:util';
 import { AdbDriver, devAppPackage, listDevices } from '@qcard/device/node';
-import { assertClaudeCodeReady, llmProviderFromEnv } from '@qcard/llm';
+import { assertClaudeCodeReady, llmProviderFromEnv, MODELS_FOR } from '@qcard/llm';
 import type { ClaudeCodeState } from '@qcard/shared';
 import { HostDisconnectedError, openHostSession } from './connect';
 import { attachScreen, hubBackend, launchConsole } from './console';
@@ -58,6 +58,7 @@ const {
   account,
   queueDir,
   accounts,
+  cells,
 } = await openHostSession({ seedUser: values.user }).catch((e: unknown) => {
   if (!(e instanceof HostDisconnectedError)) throw e;
   console.error(e.message);
@@ -67,7 +68,7 @@ const {
 // ---------------------------------------------------------------- LLM (본인 Claude Code)
 let claudeCode: ClaudeCodeState = { installed: true, loggedIn: true };
 if (llmProviderFromEnv() === 'claude-cli') {
-  const s = await assertClaudeCodeReady();
+  const s = await assertClaudeCodeReady(MODELS_FOR.run);
   claudeCode = { installed: true, loggedIn: true, version: s.version, plan: s.subscriptionType };
   log(`LLM: Claude Code ${s.version} · ${s.authMethod}${s.subscriptionType ? ` · ${s.subscriptionType} 플랜` : ''}`);
 }
@@ -89,7 +90,7 @@ if (leftover) log(`지난 실행에서 남은 업로드 ${leftover}건을 보냅
 let prepared: Awaited<ReturnType<typeof prepareCycleRun>>;
 try {
   prepared = await prepareCycleRun(
-    { api, storage, queue, device, info, executor: seed.name, account, claudeCode, log, accounts },
+    { api, storage, queue, device, info, executor: seed.name, account, claudeCode, log, accounts, cells },
     {
       projectId: values.project,
       cycleId: values.cycle,

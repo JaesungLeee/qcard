@@ -186,6 +186,11 @@ export function SummaryTab({ d, index, projectId, projectName }: SheetProps) {
                         {oneLineSummary(r) ? ` · ${oneLineSummary(r)}` : ''}
                       </span>
                     </div>
+                    {r.defectId ? (
+                      <Mono className={`${textClass('caption1', 'medium')} qs-muted`}>{r.defectId}</Mono>
+                    ) : (
+                      r.verdict === 'fail' && <NoDefect />
+                    )}
                   </li>
                 );
               })}
@@ -194,6 +199,18 @@ export function SummaryTab({ d, index, projectId, projectName }: SheetProps) {
         </Card>
       </div>
     </TabBody>
+  );
+}
+
+/** 결함이 연결되지 않은 Fail 칸 (F-RP-19) — 등록을 잊지 않게 표시한다 */
+export function NoDefect() {
+  return (
+    <span
+      className={textClass('caption1', 'medium')}
+      style={{ color: token('qcard-verdict-fail-fg'), whiteSpace: 'nowrap' }}
+    >
+      결함 없음
+    </span>
   );
 }
 

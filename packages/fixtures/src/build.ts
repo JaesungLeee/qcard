@@ -908,16 +908,26 @@ type Special = {
   history?: CaseResult['history'];
   previousAttempts?: CaseResult['previousAttempts'];
   note?: string;
+  attachments?: CaseResult['attachments'];
 };
 
 const src = (id: string) => `${SPEC}/${id}`;
 
 const SPECIAL_130: Record<string, Partial<Record<string, Special>>> = {
+  // 수동 케이스: 실행자가 결과와 함께 스크린샷을 첨부했다 (F-RP-05)
+  [src('TS-020')]: {
+    [S24.id]: {
+      verdict: 'pass',
+      attachments: [
+        { kind: 'mock', screen: 'mate-invite' },
+        { kind: 'mock', screen: 'share-sheet' },
+      ],
+    },
+  },
   [src('EC-009')]: {
     [S24.id]: {
       verdict: 'fail',
       actual: '[초대 링크 복사]를 3번 누르자 토스트가 3개 겹쳐 쌓여 보였다.',
-      defectId: 'D-1',
       finalScreen: 'mate-toast',
       finalState: { toastCount: '3' },
       points: {
@@ -933,7 +943,7 @@ const SPECIAL_130: Record<string, Partial<Record<string, Special>>> = {
     [P8.id]: {
       verdict: 'fail',
       actual: '사용법 안내 스텝 3에서 뒤로가기를 누르자 스텝 2가 아니라 앱이 백그라운드로 갔다.',
-      defectId: 'D-2',
+      defectId: 'D-1',
       finalScreen: 'launcher',
       points: {
         0: {
@@ -998,7 +1008,7 @@ const SPECIAL_130: Record<string, Partial<Record<string, Special>>> = {
       agentVerdict: 'pass',
       human: PEOPLE.qa,
       actual: '본문 두 번째 문장 끝 마침표가 빠져 있다 ("…습관이 돼요 메이트가 들어오면").',
-      defectId: 'D-3',
+      defectId: 'D-2',
       history: [
         { at: T(16, 15, 40), by: PEOPLE.qa, from: 'pass', to: 'fail', note: '자동 Pass 반전 — 문구 마침표 누락' },
       ],
@@ -1078,6 +1088,7 @@ function result(
     points,
     history: sp?.history ?? [],
     ...(sp?.previousAttempts ? { previousAttempts: sp.previousAttempts } : {}),
+    ...(sp?.attachments ? { attachments: sp.attachments } : {}),
     tokens: tc.mode === 'manual' ? 0 : steps.length * 3800 + points.length * 1200,
     costUsd:
       tc.mode === 'manual' ? 0 : Math.round((steps.length * 3800 + points.length * 1200) * 0.0000042 * 1000) / 1000,
@@ -1112,6 +1123,7 @@ export const cycle130: TestCycle = {
   serverEnv: 'stage',
   snapshot: snapshotCases.map((c) => ({ tcId: c.tcId, contentHash: c.contentHash })),
   createdBy: PEOPLE.lead,
+  defectSeq: 2,
 };
 
 /** Pixel 8 Run은 준비 상태가 같은 케이스끼리 묶어 실행 중이고, TS-021(수동 스텝)에서 멈춰 있다. */
@@ -1159,18 +1171,6 @@ const caseBySrc = (id: string) => qaDocV130.cases.find((c) => c.sourceId === src
 export const defects130: Defect[] = [
   {
     id: 'D-1',
-    title: '[초대 링크 복사] 연타 시 토스트가 겹쳐 쌓임',
-    severity: 'minor',
-    tcId: caseBySrc('EC-009').tcId,
-    deviceId: S24.id,
-    repro: ['온보딩을 메이트 초대 스텝까지 진행', '[초대 링크 복사]를 빠르게 3번 누른다'],
-    expected: '토스트가 하나만 보인다 (EC-009)',
-    actual: '토스트 3개가 겹쳐 쌓여 보인다',
-    status: 'open',
-    trackerUrl: 'https://github.com/example/harukong-android/issues/412',
-  },
-  {
-    id: 'D-2',
     title: '사용법 안내 스텝 3에서 뒤로가기 시 앱이 백그라운드로 감',
     severity: 'major',
     tcId: caseBySrc('TS-034').tcId,
@@ -1181,7 +1181,7 @@ export const defects130: Defect[] = [
     status: 'open',
   },
   {
-    id: 'D-3',
+    id: 'D-2',
     title: '메이트 초대 안내 본문 마침표 누락',
     severity: 'trivial',
     tcId: caseBySrc('TS-016').tcId,
@@ -1192,6 +1192,24 @@ export const defects130: Defect[] = [
     status: 'fixed',
   },
 ];
+
+// ---------------------------------------------------------------- 시작 전 사이클 (1.3.0 Prod, Run·판정 없음)
+
+/** 회귀를 마치고 Prod에서 다시 볼 사이클을 미리 만들어 둔 것. 아직 아무도 실행하지 않았다 */
+export const cycle130Prod: TestCycle = {
+  id: 'cycle-130-2',
+  projectId: project.id,
+  name: '1.3.0 (130) Prod 확인',
+  docId: qaDocV130.id,
+  buildId: 'build-130',
+  targets: [S24],
+  period: { start: T(18, 9) },
+  serverEnv: 'prod',
+  snapshot: snapshotCases.map((c) => ({ tcId: c.tcId, contentHash: c.contentHash })),
+  createdBy: PEOPLE.lead,
+};
+
+const results130Prod: CaseResult[] = snapshotCases.map((tc) => ntResult(tc, S24));
 
 // ---------------------------------------------------------------- 이전 사이클 (1.2.1, 완료)
 
@@ -1204,9 +1222,11 @@ export const cycle121: TestCycle = {
   buildId: 'build-121',
   targets: devices,
   period: { start: T(3, 10), end: T(4, 18) },
+  completedBy: PEOPLE.lead,
   serverEnv: 'stage',
   snapshot: snapshot120.map((c) => ({ tcId: c.tcId, contentHash: c.contentHash })),
   createdBy: PEOPLE.lead,
+  defectSeq: 1,
 };
 
 const results121: CaseResult[] = snapshot120.flatMap((tc, i) =>
@@ -1220,7 +1240,7 @@ const results121: CaseResult[] = snapshot120.flatMap((tc, i) =>
         ? {
             verdict: 'fail',
             actual: '첫 습관 만들기 스텝에서 뒤로가기 시 닉네임 설정 스텝으로 되돌아감',
-            defectId: 'D-0',
+            defectId: 'D-1',
           }
         : undefined,
       `run-121-${k}`,
@@ -1230,7 +1250,7 @@ const results121: CaseResult[] = snapshot120.flatMap((tc, i) =>
 
 export const defects121: Defect[] = [
   {
-    id: 'D-0',
+    id: 'D-1',
     title: '첫 습관 만들기 스텝 뒤로가기가 닉네임 설정으로 되돌아감',
     severity: 'major',
     tcId: caseBySrc('EC-004').tcId,
@@ -1568,7 +1588,8 @@ export const jobs: Job[] = [
     finishedAt: T(16, 9, 31),
     result: {
       kind: 'revise',
-      reason: 'Q-3 답변(터치 영역 48dp, dot 중심을 누르면 됨)에 맞춰 dot을 누르는 단계를 "중심을 누른다"로 바꾸고 사전조건에 터치 영역을 적었다.',
+      reason:
+        'Q-3 답변(터치 영역 48dp, dot 중심을 누르면 됨)에 맞춰 dot을 누르는 단계를 "중심을 누른다"로 바꾸고 사전조건에 터치 영역을 적었다.',
       body: revised039.body,
       guessed: [],
       tokens: 3_100,
@@ -1620,12 +1641,16 @@ export function createFixtureDb(): FixtureDb {
     accounts,
     qaDocs: [qaDocV130, qaDocV120],
     builds,
-    cycles: [cycle130, cycle121],
+    cycles: [cycle130, cycle130Prod, cycle121],
     // QA 문서 케이스와 따로 복사한다 (한 번에 복사하면 같은 객체를 가리켜 문서를 고치면 사본도 바뀐다)
-    cycleCases: structuredClone({ [cycle130.id]: snapshotCases, [cycle121.id]: snapshot120 }),
-    results: { [cycle130.id]: results130, [cycle121.id]: results121 },
-    defects: { [cycle130.id]: defects130, [cycle121.id]: defects121 },
-    runs: { [cycle130.id]: runs130, [cycle121.id]: [] },
+    cycleCases: structuredClone({
+      [cycle130.id]: snapshotCases,
+      [cycle130Prod.id]: snapshotCases,
+      [cycle121.id]: snapshot120,
+    }),
+    results: { [cycle130.id]: results130, [cycle130Prod.id]: results130Prod, [cycle121.id]: results121 },
+    defects: { [cycle130.id]: defects130, [cycle130Prod.id]: [], [cycle121.id]: defects121 },
+    runs: { [cycle130.id]: runs130, [cycle130Prod.id]: [], [cycle121.id]: [] },
     prepFlows: PREP_FLOWS,
     jobs,
     jobParts,

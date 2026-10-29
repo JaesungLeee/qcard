@@ -4,11 +4,11 @@ import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { FirebaseError } from 'firebase/app';
-import { setLogLevel, type Firestore } from 'firebase/firestore';
+import { collection, doc, getDocs, setDoc, setLogLevel, updateDoc, type Firestore } from 'firebase/firestore';
 import { GITHUB, PEOPLE } from '@qcard/fixtures';
-import { MembershipError } from '@qcard/shared';
+import { MembershipError, type PrepFlow, type TestCycle } from '@qcard/shared';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ConflictError, PermissionError, RuleError } from '@qcard/data';
+import { ConflictError, NotFoundError, PermissionError, PrepFlowConflictError, RuleError } from '@qcard/data';
 import { createFirebaseApi, writeAll } from '@qcard/data/firebase';
 import { createMemoryApi } from '../../web/src/data/memory';
 import * as acc from '../src/accounts';
@@ -41,7 +41,12 @@ beforeEach(async () => {
 
 const CODE = { permission: 'permission-denied', rule: 'failed-precondition', not_found: 'not-found' } as const;
 
-const handlers = { ...h, ...acc };
+// Storage는 핸들러 테스트(handlers.test.ts)가 본다
+const handlers = {
+  ...h,
+  ...acc,
+  deleteCycle: (ctx: h.Ctx, data: unknown) => h.deleteCycle(ctx, data, async () => {}),
+};
 const box = localBox('test');
 
 /** 사람 이름(PEOPLE)으로 로그인한 Firestore 구현 */
@@ -129,7 +134,9 @@ describe('테스트 계정 (F-PF-08)', () => {
     const fb = apiAs(PEOPLE.lead);
     const got = await steps(fb as unknown as ReturnType<typeof memory>);
     expect(got).toEqual(await steps(memory()));
-    expect(got).toEqual([{ state: 'free', kind: '구독자', loginId: 'qa02@haru.test', note: undefined, usesTotp: false, by: PEOPLE.lead }]);
+    expect(got).toEqual([
+      { state: 'free', kind: '구독자', loginId: 'qa02@haru.test', note: undefined, usesTotp: false, by: PEOPLE.lead },
+    ]);
     expect(JSON.stringify(await fb.listAccounts('haru'))).not.toContain('pw-2');
   });
 
@@ -190,6 +197,143 @@ describe('QA 데이터 쓰기', () => {
     expect((await fb.getCycle(cref)).cases).toEqual(before.cases);
   });
 
+  it('결함 등록·변경이 메모리 구현과 같고, 번호는 사이클 안에서 이어진다 (F-RP-19)', async () => {
+    const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
+    const fb = apiAs(PEOPLE.qa);
+    const mem = memory();
+    mem.switchUser(PEOPLE.qa);
+    const before = await fb.getCycle(cref);
+    const fail = before.results.find((r) => r.verdict === 'fail' && !r.defectId)!;
+    const pass = before.results.find((r) => r.verdict === 'pass')!;
+    const input = {
+      ...cref,
+      tcId: fail.tcId,
+      deviceId: fail.deviceId,
+      title: ' 토스트가 겹쳐 쌓임 ',
+      severity: 'minor' as const,
+      repro: ['메이트 초대 스텝까지 진행', '', '[초대 링크 복사]를 연달아 누른다'],
+      expected: '토스트가 하나만 보인다',
+      actual: fail.actualSummary ?? '',
+    };
+    const made = await fb.createDefect(input);
+    const { createdAt: _, ...same } = made;
+    expect(await mem.createDefect(input)).toMatchObject(same);
+    expect(made).toMatchObject({ id: 'D-3', title: '토스트가 겹쳐 쌓임', status: 'open', createdBy: PEOPLE.qa });
+    expect(made.repro).toHaveLength(2);
+
+    const after = await fb.getCycle(cref);
+    expect(after.cycle.defectSeq).toBe(3);
+    expect(after.results.find((r) => r.tcId === fail.tcId && r.deviceId === fail.deviceId)?.defectId).toBe('D-3');
+    expect(after.defects.map((d) => d.id)).toEqual(['D-1', 'D-2', 'D-3']);
+    // 이미 결함이 있는 칸·Fail이 아닌 칸은 등록하지 못하고, Viewer는 아무것도 못 한다
+    await expect(fb.createDefect(input)).rejects.toBeInstanceOf(RuleError);
+    await expect(fb.createDefect({ ...input, tcId: pass.tcId, deviceId: pass.deviceId })).rejects.toBeInstanceOf(
+      RuleError,
+    );
+    await expect(apiAs(PEOPLE.planner).updateDefect(cref, 'D-3', { status: 'closed' })).rejects.toBeInstanceOf(
+      PermissionError,
+    );
+
+    const fixed = await fb.updateDefect(cref, 'D-3', { status: 'fixed', severity: 'major' });
+    expect(fixed).toEqual(
+      await mem
+        .updateDefect(cref, 'D-3', { status: 'fixed', severity: 'major' })
+        .then((d) => ({ ...d, createdAt: fixed.createdAt })),
+    );
+    expect((await fb.getCycle(cref)).defects.find((d) => d.id === 'D-3')).toMatchObject({
+      status: 'fixed',
+      severity: 'major',
+    });
+  });
+
+  it('사이클 완료·다시 열기가 메모리 구현과 같고, 완료된 사이클은 Run 요청을 받지 않는다 (F-CY-09)', async () => {
+    const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
+    const fb = apiAs(PEOPLE.qa);
+    const mem = memory();
+    mem.switchUser(PEOPLE.qa);
+    const omitEnd = (c: TestCycle) => ({ ...c, period: { start: c.period.start, ended: Boolean(c.period.end) } });
+    const done = await fb.completeCycle(cref);
+    expect(omitEnd(done)).toEqual(omitEnd(await mem.completeCycle(cref)));
+    expect(done).toMatchObject({ completedBy: PEOPLE.qa, period: { end: expect.any(String) } });
+    expect((await fb.getCycle(cref)).cycle).toEqual(done);
+    await expect(fb.completeCycle(cref)).rejects.toBeInstanceOf(RuleError);
+    const run = { cycleId: cref.cycleId, deviceId: 'galaxy-s24-15' };
+    await expect(fb.requestRun('haru', run)).rejects.toBeInstanceOf(RuleError);
+    await expect(mem.requestRun('haru', run)).rejects.toBeInstanceOf(RuleError);
+    // Viewer는 완료·다시 열기를 못 한다
+    await expect(apiAs(PEOPLE.planner).reopenCycle(cref)).rejects.toBeInstanceOf(PermissionError);
+
+    const open = await fb.reopenCycle(cref);
+    expect(open).toEqual(await mem.reopenCycle(cref));
+    expect(open.period.end).toBeUndefined();
+    expect(open.completedBy).toBeUndefined();
+    await expect(fb.requestRun('haru', run)).resolves.toMatchObject({ kind: 'run_cycle' });
+  });
+
+  it('사이클 삭제가 메모리 구현과 같고, 완료된 사이클·Viewer·틀린 이름은 거부한다 (F-CY-10)', async () => {
+    const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
+    const name = '1.3.0 (130) 1차 회귀';
+    const fb = apiAs(PEOPLE.qa);
+    const mem = memory();
+    mem.switchUser(PEOPLE.qa);
+    for (const api of [fb, mem]) {
+      await expect(api.deleteCycle(cref, '틀림')).rejects.toBeInstanceOf(RuleError);
+      await expect(api.deleteCycle({ ...cref, cycleId: 'cycle-121-1' }, '1.2.1 (121) 회귀')).rejects.toThrow(
+        '다시 연 뒤',
+      );
+    }
+    await expect(apiAs(PEOPLE.planner).deleteCycle(cref, name)).rejects.toBeInstanceOf(PermissionError);
+
+    await fb.deleteCycle(cref, name);
+    await mem.deleteCycle(cref, name);
+    const ids = async (api: typeof fb) => (await api.listCycles('haru')).map((s) => s.cycle.id).sort();
+    expect(await ids(fb)).toEqual(['cycle-121-1', 'cycle-130-2']);
+    expect(await ids(mem)).toEqual(await ids(fb));
+    await expect(fb.getCycle(cref)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(mem.getCycle(cref)).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('준비 플로우 추가·편집·삭제가 메모리 구현과 같고, 충돌·참조·Viewer는 거부한다 (F-PF-01)', async () => {
+    const input = { name: '로그인 상태', kind: 'login' as const, check: '홈 탭이 보인다', steps: ['[로그인]'] };
+    const fb = apiAs(PEOPLE.qa);
+    const mem = memory();
+    mem.switchUser(PEOPLE.qa);
+    const noTime = ({ updatedAt: _, ...f }: PrepFlow) => f;
+    for (const api of [fb, mem]) {
+      expect(noTime(await api.createPrepFlow('haru', input))).toMatchObject({ id: 'pf-login', rev: 1 });
+      expect((await api.createPrepFlow('haru', input)).id).toBe('pf-login-2');
+      await api.updatePrepFlow('haru', 'pf-done', { ...input, kind: 'data_state', name: '먼저' }, 0);
+      const err = await api.updatePrepFlow('haru', 'pf-done', input, 0).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(PrepFlowConflictError);
+      expect((err as PrepFlowConflictError).latest).toMatchObject({ name: '먼저', rev: 1 });
+      await expect(api.createPrepFlow('haru', { ...input, check: ' ' })).rejects.toBeInstanceOf(RuleError);
+      await expect(api.deletePrepFlow('haru', 'pf-clean')).rejects.toThrow('케이스가 사용 중');
+      await api.deletePrepFlow('haru', 'pf-login-2');
+    }
+    expect((await fb.listPrepFlows('haru')).map(noTime)).toEqual((await mem.listPrepFlows('haru')).map(noTime));
+    expect(await fb.listPrepFlowUses('haru')).toEqual(await mem.listPrepFlowUses('haru'));
+
+    const viewer = apiAs(PEOPLE.planner);
+    await expect(viewer.createPrepFlow('haru', input)).rejects.toBeInstanceOf(PermissionError);
+    await expect(viewer.updatePrepFlow('haru', 'pf-login', input, 1)).rejects.toBeInstanceOf(PermissionError);
+    await expect(viewer.deletePrepFlow('haru', 'pf-login')).rejects.toBeInstanceOf(PermissionError);
+  });
+
+  it('완료되지 않은 사이클만 쓰는 플로우도 지우지 못하고, 사이클을 완료하면 지운다 (F-PF-01)', async () => {
+    const fb = apiAs(PEOPLE.qa);
+    // QA 문서에서는 빼고 사이클 사본(cycle-130-1)에만 남긴다
+    await env.withSecurityRulesDisabled(async (c) => {
+      const db = c.firestore() as unknown as Firestore;
+      await setDoc(doc(db, 'projects/haru/prepFlows/pf-only-cycle'), { id: 'pf-only-cycle', name: 'x', kind: 'data_state', check: 'x', steps: ['x'] });
+      const copy = (await getDocs(collection(db, 'projects/haru/cycles/cycle-130-1/cases'))).docs[0]!;
+      await updateDoc(copy.ref, { prepFlowIds: ['pf-only-cycle'] });
+    });
+    await expect(fb.deletePrepFlow('haru', 'pf-only-cycle')).rejects.toThrow('사이클');
+    await fb.completeCycle({ projectId: 'haru', cycleId: 'cycle-130-1' });
+    await fb.deletePrepFlow('haru', 'pf-only-cycle');
+    expect((await fb.listPrepFlows('haru')).map((f) => f.id)).not.toContain('pf-only-cycle');
+  });
+
   it('구독하면 다른 사람이 확정한 판정이 바로 들어오고, 끊으면 더 받지 않는다 (F-CY-05·F-DB-07)', async () => {
     const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
     const watcher = apiAs(PEOPLE.lead);
@@ -227,6 +371,23 @@ describe('QA 데이터 쓰기', () => {
     expect(last).toMatchObject({ by: PEOPLE.qa, from: 'check', to: 'fail' });
     // 서버 시각 (에뮬레이터 시계와 몇 초 이내)
     expect(Math.abs(new Date(last.at).getTime() - before)).toBeLessThan(10_000);
+  });
+
+  it('첨부 스크린샷 경로가 판정과 함께 남고, 이력에 장수가 붙는다 (F-RP-05)', async () => {
+    const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
+    const qa = apiAs(PEOPLE.qa);
+    const r = (await qa.getCycle(cref)).results.find((x) => x.verdict === 'check')!;
+    const at = { ...cref, tcId: r.tcId, deviceId: r.deviceId };
+    const shot = { kind: 'storage' as const, path: `projects/haru/cycles/cycle-130-1/manual/x/a.png` };
+    await qa.confirmVerdict({ ...at, verdict: 'fail', actualSummary: '재현', attachments: { keep: [shot], add: [] } });
+    const after = (await qa.getCycle(cref)).results.find((x) => x.tcId === r.tcId && x.deviceId === r.deviceId)!;
+    expect(after.attachments).toEqual([shot]);
+    expect(after.history.at(-1)!.attachments).toBe(1);
+    // 이 테스트의 API에는 Storage가 없어 새 파일은 올리지 못한다
+    const png = { name: 'b.png', type: 'image/png', bytes: new Uint8Array([1]) };
+    await expect(
+      qa.confirmVerdict({ ...at, verdict: 'fail', actualSummary: '재현', attachments: { keep: [], add: [png] } }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('케이스 수정안: 요청·조회·처리가 메모리 구현과 같고, 처리는 요청한 사람만 한다 (F-QD-17)', async () => {

@@ -30,6 +30,7 @@ import {
   ClaudeCodeSetupError,
   createLlm,
   llmProviderFromEnv,
+  MODELS_FOR,
   PlanLimitError,
   UsageMeter,
   type UsageTotals,
@@ -74,7 +75,7 @@ const cases = [...picked].sort(
 
 // LLM: 본인 Claude Code가 준비됐는지 먼저 본다 (F-EX-17)
 if (llmProviderFromEnv() === 'claude-cli') {
-  const s = await assertClaudeCodeReady().catch((e: Error) => {
+  const s = await assertClaudeCodeReady(MODELS_FOR.run).catch((e: Error) => {
     console.error(e.message);
     process.exit(1);
   });

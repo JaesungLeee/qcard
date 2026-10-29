@@ -97,6 +97,14 @@ export class UploadQueue {
     return this;
   }
 
+  /**
+   * 큐를 거치지 않고 바로 보낸다. 순서가 필요 없고 덮어써도 되는 작업(Run 연결 신호)만 — 앞의 업로드가 밀려 있어도
+   * 늦지 않게. 로컬에 남기지 않으며 실패하면 그대로 던진다
+   */
+  sendNow(op: QueueOp): Promise<void> {
+    return this.apply(op);
+  }
+
   /** 로컬에 저장하면 끝난다 (보내기는 뒤에서) */
   async enqueue(op: QueueOp, file?: Uint8Array): Promise<void> {
     if (this.failure) throw this.failure;

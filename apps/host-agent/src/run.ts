@@ -10,6 +10,7 @@ import { holdAwake } from './awake';
 import { BuildInstallError, ensureBuild } from './build';
 import { ConsoleHub } from './console/hub';
 import type { AccountLeaser } from './accounts';
+import type { CellClaimer } from './cells';
 import type { UploadQueue } from './queue';
 import { runCycle, type RunCycleOutcome } from './runCycle';
 import { runSink } from './sink';
@@ -44,6 +45,8 @@ export type CycleRunDeps = {
   env?: Partial<Pick<AgentEnv, 'clock' | 'vision' | 'settleMs'>>;
   /** 테스트 계정 배정·반납 (F-PF-04). 없으면 계정이 필요한 케이스는 Blocked */
   accounts?: AccountLeaser;
+  /** 칸 자동 선점 (F-CY-06). 없으면 잡지 않고 돈다(테스트) */
+  cells?: CellClaimer;
 };
 
 export type RunAccount = { uid: string; hostId: string };
@@ -74,6 +77,10 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
   // 이어서 실행하면 그 Run의 큐를 그대로 쓴다 (남은 전체로 넓어지지 않게)
   const resumed = req.resumeRunId ? runs.find((r) => r.id === req.resumeRunId) : undefined;
   const tcIds = req.tcIds?.length ? req.tcIds : resumed?.tcIds?.length ? resumed.tcIds : undefined;
+  // 완료된 사이클은 새 Run도, 일시정지된 Run 이어서 실행도 받지 않는다 (F-CY-09)
+  if (cycle.period.end) {
+    throw new CycleRunError(`완료된 사이클입니다 (${cycle.name}). 웹에서 다시 열어야 실행할 수 있습니다.`);
+  }
   const target = cycle.targets.find((t) => t.model === info.model && t.osMajor === info.osMajor);
   if (!target) {
     throw new CycleRunError(
@@ -226,6 +233,8 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
       onCaseStart: (tc) => hub.caseStarted(tc),
       onPhase: (p) => hub.phase(p),
       accounts: deps.accounts,
+      cells: deps.cells,
+      onSkip: (tc) => hub.caseSkipped(tc),
       log,
     }).finally(async () => {
       await release();

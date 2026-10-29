@@ -80,6 +80,8 @@
 @media (max-width: 900px) {
   .qc-shell {
     grid-template-columns: minmax(0, 1fr);
+    /* 본문이 짧을 때 남는 높이는 본문이 받는다 (사이드바 행이 늘어나 줄 사이가 벌어지지 않게) */
+    grid-template-rows: auto 1fr;
     background: var(--qc-background-neutral-primary);
   }
   .qc-sidebar {
