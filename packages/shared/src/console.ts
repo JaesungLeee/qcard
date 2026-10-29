@@ -31,11 +31,18 @@ export type ClaudeCodeState = {
   installed: boolean;
   version?: string;
   loggedIn: boolean;
-  /** pro · max */
+  /** pro · max 등 Claude Code가 알려 주는 값 그대로 */
   plan?: string;
-  /** 플랜 사용 한도에 닿았으면 풀리는 시각 */
+  /** Run에 쓰는 모델에 필요한 최소 버전보다 낮으면 그 버전 (F-EX-17) */
+  requiredVersion?: string;
+  /** 플랜 사용 한도에 닿아 일시정지했다. 실패해야만 알 수 있어, 다시 시작할 때 풀었다가 또 닿으면 다시 켠다 */
+  limited?: boolean;
+  /** limited일 때 풀리는 시각 (오류 문구에 있을 때만) */
   limitedUntil?: string;
 };
+
+/** Run을 시작할 수 있는 Claude Code 상태인가 (설치·로그인·버전). 플랜 한도는 실패해야만 알 수 있어 막지 않는다 */
+export const claudeCodeReady = (s: ClaudeCodeState) => s.installed && s.loggedIn && !s.requiredVersion;
 
 /** 지금 케이스의 진행 단계 */
 export type ConsolePhase = 'running' | 'paused' | 'takeover' | 'manual' | 'approval' | 'verifying' | 'done' | 'aborted';

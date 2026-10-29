@@ -30,7 +30,12 @@ export function HostStatus() {
   const api = useApi();
   const hosts = useMyHosts();
   if (hosts.isPending) return null;
-  const online = (hosts.data ?? []).filter((h) => isOnline(h));
+  return <HostStatusView hosts={hosts.data ?? []} />;
+}
+
+/** 내 호스트 목록 → 연결 상태·Claude Code 문제 안내 (`/__ui` 카탈로그에서도 그린다) */
+export function HostStatusView({ hosts }: { hosts: Host[] }) {
+  const online = hosts.filter((h) => isOnline(h));
   const host = online[0];
   if (!host) {
     return (
@@ -56,9 +61,19 @@ export function HostStatus() {
     return (
       <SectionMessage
         variant="cautionary"
-        description="터미널에서 `claude`를 실행해 로그인하세요. 그 전에는 작업이 일시정지됩니다."
+        description="터미널에서 `claude`를 실행해 로그인하세요. 로그인할 때까지 요청한 생성은 시작하지 않고 기다립니다."
       >
         {host.name} · Claude Code 로그인 필요
+      </SectionMessage>
+    );
+  }
+  if (cc?.requiredVersion) {
+    return (
+      <SectionMessage
+        variant="cautionary"
+        description={`QA 문서 생성에 쓰는 모델은 Claude Code ${cc.requiredVersion} 이상이 필요합니다. 지금 ${cc.version ?? '?'} — 터미널에서 \`claude update\`를 실행하세요. 그 전에 요청한 생성은 시작하지 않고 기다립니다.`}
+      >
+        {host.name} · Claude Code 업데이트 필요
       </SectionMessage>
     );
   }

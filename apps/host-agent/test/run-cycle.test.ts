@@ -6,14 +6,23 @@ import { createFirebaseApi, writeAll } from '@qcard/data/firebase';
 import { seedDocs } from '@qcard/data/seed';
 import { DeviceDisconnectedError, FakeDevice } from '@qcard/device';
 import { APP_PACKAGE, GITHUB, onboardingScenario, PEOPLE } from '@qcard/fixtures';
-import { createLlm, PlanLimitError, SecretVault, UsageMeter, type LlmClient } from '@qcard/llm';
+import { ClaudeCodeSetupError, createLlm, PlanLimitError, SecretVault, UsageMeter, type LlmClient } from '@qcard/llm';
 import { deleteDoc, doc, getDoc, setDoc, setLogLevel, updateDoc, type Firestore } from 'firebase/firestore';
 import { getBytes, ref, uploadBytes, type FirebaseStorage } from 'firebase/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import type { ConsoleHome, ConsoleServerMessage } from '@qcard/shared';
-import { ConsoleService, firestoreApply, runCycle, runSink, startRunJobs, UploadQueue, type RunTarget } from '../src';
+import {
+  ConsoleService,
+  firestoreApply,
+  runCycle,
+  runSink,
+  startRunJobs,
+  UploadQueue,
+  type ConsoleServiceDeps,
+  type RunTarget,
+} from '../src';
 
 /*
  * 호스트 에이전트 실행 → Firestore·Storage 업로드를 에뮬레이터·보안 규칙 위에서 확인한다.
@@ -178,14 +187,28 @@ describe('runCycle → Firestore·Storage', () => {
 
   it('플랜 한도에 닿으면 결과를 쓰지 않고 Run을 일시정지한다', async () => {
     const { db, api, sink } = await host(PEOPLE.lead, 'run-host-2');
-    const limited: LlmClient = { create: () => Promise.reject(new PlanLimitError('5시간 한도')) };
+    const until = '2026-10-20T05:30:00.000Z';
+    const limited: LlmClient = { create: () => Promise.reject(new PlanLimitError('플랜 한도', until)) };
     const out = await runCycle({ api, sink, env: agentEnv(limited), ...REF, deviceId: DEVICE, runId: 'run-host-2' });
-    expect(out).toMatchObject({ status: 'paused', reason: 'plan_limit', results: [] });
+    // 풀리는 시각을 알면 함께 돌려준다 (콘솔 상단에 보인다, F-DB-09)
+    expect(out).toMatchObject({ status: 'paused', reason: 'plan_limit', limitedUntil: until, results: [] });
     const run = (await getDoc(doc(db, 'projects/haru/cycles/cycle-130-1/runs/run-host-2'))).data();
     expect(run).toMatchObject({ status: 'paused', pauseReason: 'plan_limit' });
     // 화면에 "일시정지 · 플랜 한도"로 보인다 (웹 API)
     const runs = (await api.getCycle(REF)).runs;
     expect(runs.find((r) => r.id === 'run-host-2')).toMatchObject({ status: 'paused', pauseReason: 'plan_limit' });
+  });
+
+  it('실행 중 Claude Code가 없어지면 "설치 필요"로 일시정지한다 (로그인 필요와 구분)', async () => {
+    const { db, api, sink } = await host(PEOPLE.lead, 'run-host-3');
+    const missing: LlmClient = {
+      create: () =>
+        Promise.reject(new ClaudeCodeSetupError('not_installed', 'Claude Code(claude)가 설치되어 있지 않습니다')),
+    };
+    const out = await runCycle({ api, sink, env: agentEnv(missing), ...REF, deviceId: DEVICE, runId: 'run-host-3' });
+    expect(out).toMatchObject({ status: 'paused', reason: 'claude_not_installed' });
+    const run = (await getDoc(doc(db, 'projects/haru/cycles/cycle-130-1/runs/run-host-3'))).data();
+    expect(run).toMatchObject({ status: 'paused', pauseReason: 'claude_not_installed' });
   });
 
   it('배정할 테스트 계정이 없으면 LLM을 부르지 않고 Blocked("계정 없음")로 올리고, 다음 케이스로 간다 (F-PF-04)', async () => {
@@ -343,7 +366,7 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     const s = onboardingScenario();
     return new FakeDevice({ ...s, info: { ...s.info, model: 'Galaxy S24' } });
   };
-  const serviceFor = async (device: FakeDevice) => {
+  const serviceFor = async (device: FakeDevice, more: Partial<ConsoleServiceDeps> = {}) => {
     const { api, storage, queue, target } = await host(PEOPLE.lead, 'unused');
     const msgs: ConsoleServerMessage[] = [];
     const service = new ConsoleService({
@@ -359,6 +382,7 @@ describe('로컬 콘솔 서비스 (serve)', () => {
       env: { clock: fakeClock(Date.UTC(2026, 9, 20)), vision: false },
       awakeDir: mkdtempSync(join(tmpdir(), 'qcard-awake-')),
       dashboardUrl: 'https://qcard.example',
+      ...more,
     });
     service.subscribe((m) => msgs.push(m));
     service.setDevice({ driver: device, info: await device.info() });
@@ -430,6 +454,38 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     expect(again.home().cycles.find((c) => c.cycleId === 'cycle-130-1')!.accountShortage).toEqual([
       { kind: '구독자', cases: 1 },
     ]);
+  });
+
+  it('Claude Code를 쓸 수 없으면 Run을 시작하지 않고 해결 방법을 알린다 — 디바이스는 건드리지 않는다 (F-EX-17)', async () => {
+    const device = galaxy();
+    const problem = new ClaudeCodeSetupError(
+      'outdated',
+      'Claude Code 2.1.250은(는) Sonnet 5.5를 지원하지 않습니다',
+      '2.1.284',
+    );
+    const { service, msgs } = await serviceFor(device, { checkClaudeCode: () => Promise.reject(problem) });
+    const out = await service.startRun({ projectId: 'haru', cycleId: 'cycle-130-1', tcIds: ['TC-ONBOARDING-004'] });
+    expect(out).toEqual({ error: problem.message });
+    expect(msgs.at(-1)).toEqual({ type: 'error', message: problem.message });
+    expect(service.running).toBe(false);
+    expect(device.log.filter((l) => l.startsWith('stay-on'))).toEqual([]);
+  });
+
+  it('플랜 한도에 닿으면 상단에 알리고, 시각이 지나거나 다시 시작하면 푼다 (F-DB-09)', async () => {
+    const { service, home } = await serviceFor(galaxy());
+    service.planLimited();
+    expect(home().claudeCode).toMatchObject({ limited: true });
+    expect(home().claudeCode.limitedUntil).toBeUndefined();
+    service.planLimited(new Date(Date.now() + 60_000).toISOString());
+    expect(home().claudeCode).toMatchObject({ limited: true, limitedUntil: expect.any(String) });
+    // 풀리는 시각이 지났다
+    service.planLimited(new Date(Date.now() - 1000).toISOString());
+    expect(home().claudeCode.limited).toBeUndefined();
+    // 시각을 모르면 다시 시작할 때 푼다 (또 닿으면 다시 일시정지한다)
+    service.planLimited();
+    await service.startRun({ projectId: 'haru', cycleId: 'cycle-130-1', tcIds: ['TC-ONBOARDING-004'] });
+    await service.idle();
+    expect(home().claudeCode.limited).toBeUndefined();
   });
 
   it('디바이스가 없어도 Claude Code 상태가 바뀌면 홈에 알린다', async () => {

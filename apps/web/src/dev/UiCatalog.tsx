@@ -1,4 +1,4 @@
-import { PauseReason, type Verdict } from '@qcard/shared';
+import { PauseReason, type Host, type Verdict } from '@qcard/shared';
 import {
   Button,
   Chip,
@@ -23,6 +23,7 @@ import { createFixtureDb, type ClaudeCodeState } from '@qcard/fixtures';
 import type { CSSProperties, ReactNode } from 'react';
 import { ClaudeCodeChip } from '../features/console/TopBar';
 import '../features/console/console.css';
+import { HostStatusView } from '../features/qa-doc/Jobs';
 import { RunState } from '../features/qa-sheet/parts';
 import '../features/qa-sheet/qa-sheet.css';
 import { MockScreen } from '../mock/MockScreen';
@@ -31,10 +32,27 @@ import { MockScreen } from '../mock/MockScreen';
 const CLAUDE_CODE_STATES: ClaudeCodeState[] = [
   { installed: true, version: '2.1.185', loggedIn: true, plan: 'max' },
   { installed: true, version: '2.1.185', loggedIn: true, plan: 'pro' },
-  { installed: true, version: '2.1.185', loggedIn: true, plan: 'max', limitedUntil: '2026-10-22T14:30:00+09:00' },
+  {
+    installed: true,
+    version: '2.1.185',
+    loggedIn: true,
+    plan: 'max',
+    limited: true,
+    limitedUntil: '2026-10-22T14:30:00+09:00',
+  },
+  { installed: true, version: '2.1.185', loggedIn: true, plan: 'pro', limited: true },
+  { installed: true, version: '2.1.250', loggedIn: true, plan: 'max', requiredVersion: '2.1.284' },
   { installed: true, version: '2.1.185', loggedIn: false },
   { installed: false, loggedIn: false },
 ];
+
+/** 지금 연결된 내 호스트 (Claude Code 상태만 바꿔 본다) */
+const demoHost = (claudeCode: Host['claudeCode']): Host => ({
+  id: 'macbook-pro',
+  name: '이재성의 MacBook Pro',
+  lastSeen: new Date().toISOString(),
+  claudeCode,
+});
 
 const MOCK_STEPS = createFixtureDb().console.current.steps;
 
@@ -202,6 +220,14 @@ export function UiCatalog() {
             <ClaudeCodeChip key={i} state={s} />
           ))}
         </div>
+        {/* 대시보드 QA 문서 작업 화면의 내 호스트 안내 (F-EX-17) */}
+        <HostStatusView hosts={[demoHost({ version: '2.1.308', loggedIn: true, subscriptionType: 'max' })]} />
+        <HostStatusView hosts={[demoHost({ version: '2.1.308', loggedIn: false })]} />
+        <HostStatusView
+          hosts={[
+            demoHost({ version: '2.1.250', loggedIn: true, subscriptionType: 'max', requiredVersion: '2.1.280' }),
+          ]}
+        />
       </Section>
 
       <Section title="안내">

@@ -32,3 +32,19 @@ export const MODELS: Record<LlmRole, string> = {
   /** QA Doc Generator (PRD §6.3) */
   generator: 'claude-opus-5-5',
 };
+
+/** 작업 종류별로 부르는 모델. 시작 전에 Claude Code가 이 모델들을 지원하는 버전인지 본다 (F-EX-17) */
+export const MODELS_FOR = {
+  run: [...new Set([MODELS.executor, MODELS.verifier, MODELS.locator])],
+  qadoc: [MODELS.generator],
+} as const satisfies Record<string, readonly string[]>;
+
+/**
+ * 모델을 처음 지원한 Claude Code 버전 (Claude Code CHANGELOG의 "Added Claude … (`model-id`)" 항목).
+ * 이보다 낮으면 그 모델 호출이 "version … or newer is required"로 거절된다. 모델을 바꾸면 함께 고친다
+ */
+export const CLAUDE_CODE_MIN_VERSION: Record<string, string> = {
+  'claude-opus-5-5': '2.1.280',
+  'claude-sonnet-5-5': '2.1.284',
+  'claude-haiku-5-5': '2.1.293',
+};

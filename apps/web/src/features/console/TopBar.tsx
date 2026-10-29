@@ -95,17 +95,23 @@ export function ClaudeCodeChip({ state }: { state: ClaudeCodeState }) {
           'Claude Code 로그인 필요',
           '터미널에서 claude를 실행해 로그인하세요. 로그인하면 일시정지된 Run을 재개할 수 있습니다.',
         ]
-      : state.limitedUntil
+      : state.requiredVersion
         ? [
             false,
-            `${plan} 한도 · ${fmtTime(state.limitedUntil)} 이후 재개`,
-            '플랜 사용 한도에 닿아 Run을 일시정지했습니다. 한도가 풀리면 재개하세요.',
+            `Claude Code 업데이트 필요 · ${state.requiredVersion} 이상`,
+            `지금 ${state.version ?? '?'} — Run에 쓰는 모델은 ${state.requiredVersion} 이상이 필요합니다. 터미널에서 claude update를 실행하세요.`,
           ]
-        : [
-            true,
-            `Claude Code · ${plan}`,
-            `Claude Code ${state.version ?? ''} — LLM 사용량은 내 ${plan}에서 차감됩니다.`,
-          ];
+        : state.limited || state.limitedUntil
+          ? [
+              false,
+              state.limitedUntil ? `${plan} 한도 · ${fmtTime(state.limitedUntil)} 이후 재개` : `${plan} 한도 도달`,
+              '플랜 사용 한도에 닿아 Run을 일시정지했습니다. 한도가 풀린 뒤 [이어서 실행]을 누르세요.',
+            ]
+          : [
+              true,
+              `Claude Code · ${plan}`,
+              `Claude Code ${state.version ?? ''} — LLM 사용량은 내 ${plan}에서 차감됩니다.`,
+            ];
   return (
     <span
       className={`qcc-phase ${textClass('caption1', 'medium')}`}

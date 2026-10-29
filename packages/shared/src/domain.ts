@@ -522,6 +522,7 @@ export const PauseReason = z.enum([
   'network',
   'plan_limit',
   'not_logged_in',
+  'claude_not_installed',
   'claude_outdated',
   'device_locked',
   'device_disconnected',
@@ -533,6 +534,7 @@ export const PAUSE_REASON_LABEL: Record<PauseReason, string> = {
   network: '네트워크 끊김',
   plan_limit: '플랜 한도',
   not_logged_in: 'Claude Code 로그인 필요',
+  claude_not_installed: 'Claude Code 설치 필요',
   claude_outdated: 'Claude Code 업데이트 필요',
   device_locked: '디바이스 잠김',
   device_disconnected: '디바이스 연결 끊김',
@@ -634,11 +636,18 @@ export const SpecBundle = z.object({
 export type SpecBundle = z.infer<typeof SpecBundle>;
 
 /** 작업 실패·일시정지 이유. 플랜 한도·Claude Code 문제는 해결 후 다시 시도한다 (F-EX-17) */
-export const JobErrorKind = z.enum(['plan_limit', 'not_logged_in', 'claude_outdated', 'failed']);
+export const JobErrorKind = z.enum([
+  'plan_limit',
+  'not_logged_in',
+  'claude_not_installed',
+  'claude_outdated',
+  'failed',
+]);
 export type JobErrorKind = z.infer<typeof JobErrorKind>;
 export const JOB_ERROR_LABEL: Record<JobErrorKind, string> = {
   plan_limit: '플랜 한도',
   not_logged_in: 'Claude Code 로그인 필요',
+  claude_not_installed: 'Claude Code 설치 필요',
   claude_outdated: 'Claude Code 업데이트 필요',
   failed: '오류',
 };
@@ -855,6 +864,8 @@ export const Host = z.object({
       version: z.string().optional(),
       loggedIn: z.boolean(),
       subscriptionType: z.string().optional(),
+      /** QA 문서 생성에 쓰는 모델에 필요한 최소 버전보다 낮으면 그 버전 (F-EX-17) */
+      requiredVersion: z.string().optional(),
     })
     .optional(),
   /**

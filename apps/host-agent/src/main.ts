@@ -14,7 +14,7 @@ import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveAdb } from '@qcard/device/node';
-import { claudeCodeStatus } from '@qcard/llm';
+import { claudeCodeProblem, claudeCodeStatus, MODELS_FOR } from '@qcard/llm';
 import { findScrcpy } from './console/video';
 
 process.env.QCARD_TARGET ??= 'prod';
@@ -52,6 +52,7 @@ const runs = (bin: string, args: string[]) =>
 async function doctor(log: (l: string) => void, verbose: boolean): Promise<boolean> {
   const adb = await runs(resolveAdb(), ['version']);
   const claude = await claudeCodeStatus();
+  const problem = claudeCodeProblem(claude, [...MODELS_FOR.run, ...MODELS_FOR.qadoc]);
   const scrcpy = await findScrcpy();
   const lines: [ok: boolean, text: string][] = [
     [
@@ -59,12 +60,10 @@ async function doctor(log: (l: string) => void, verbose: boolean): Promise<boole
       adb ? `adb ${/version ([\d.]+)/.exec(adb)?.[1] ?? ''}`.trim() : 'adb 없음 — brew install android-platform-tools',
     ],
     [
-      claude.installed && claude.loggedIn,
-      !claude.installed
-        ? 'Claude Code 없음 — https://claude.com/claude-code 에서 설치한 뒤 `claude`로 로그인'
-        : claude.loggedIn
-          ? `Claude Code ${claude.version ?? ''}${claude.subscriptionType ? ` (${claude.subscriptionType})` : ''}`
-          : 'Claude Code에 로그인되어 있지 않습니다 — 터미널에서 `claude`로 로그인',
+      !problem,
+      problem
+        ? problem.message
+        : `Claude Code ${claude.version ?? ''}${claude.subscriptionType ? ` (${claude.subscriptionType})` : ''}`,
     ],
     [
       !!scrcpy,
