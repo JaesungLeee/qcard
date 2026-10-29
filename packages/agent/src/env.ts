@@ -1,7 +1,7 @@
 import type { DeviceDriver, KeyboardState, UiElement } from '@qcard/device';
 import { formatTree } from '@qcard/device';
 import type { LlmClient, SecretVault } from '@qcard/llm';
-import type { Bounds, ExecStep, Screenshot, ThoughtEntry } from '@qcard/shared';
+import type { Bounds, ExecStep, RunLimits, Screenshot, ThoughtEntry } from '@qcard/shared';
 import type { RiskFinding, RiskLevel } from './risk';
 
 /** 시간. 테스트에서는 기다리지 않는 가짜 시계를 쓴다. */
@@ -62,6 +62,8 @@ export type AgentEnv = {
   onStep?: (step: ExecStep) => void;
   /** 실행자 제어: 일시정지·건너뛰기·Take over·중단 (F-DB-05). 없으면 Agent가 혼자 끝까지 간다 */
   control?: RunControl;
+  /** 실행 안전장치 (F-EX-08·12): 턴·반복·자가 복구 한도. 없으면 기본값 (`DEFAULT_RUN_LIMITS`) */
+  limits?: Pick<RunLimits, 'turnsPerStep' | 'extraTurns' | 'repeatLimit' | 'retryLimit'>;
 };
 
 /** 위험 액션 승인 요청 */

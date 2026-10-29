@@ -6,7 +6,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { FirebaseError } from 'firebase/app';
 import { collection, doc, getDocs, setDoc, setLogLevel, updateDoc, type Firestore } from 'firebase/firestore';
 import { GITHUB, PEOPLE } from '@qcard/fixtures';
-import { MembershipError, type PrepFlow, type TestCycle } from '@qcard/shared';
+import { DEFAULT_RUN_LIMITS, MembershipError, runLimitsOf, type PrepFlow, type TestCycle } from '@qcard/shared';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConflictError, NotFoundError, PermissionError, PrepFlowConflictError, RuleError } from '@qcard/data';
 import { createFirebaseApi, writeAll } from '@qcard/data/firebase';
@@ -87,7 +87,9 @@ describe('메모리 구현과 같은 결과', () => {
     expect(await fb.getQaDoc(ref)).toEqual(await mem.getQaDoc(ref));
     expect(await fb.listQaDocs('haru')).toEqual(expect.arrayContaining(await mem.listQaDocs('haru')));
     for (const docId of ['doc-130', 'doc-120']) {
-      expect(await fb.listPrepFlows({ projectId: 'haru', docId })).toEqual(await mem.listPrepFlows({ projectId: 'haru', docId }));
+      expect(await fb.listPrepFlows({ projectId: 'haru', docId })).toEqual(
+        await mem.listPrepFlows({ projectId: 'haru', docId }),
+      );
     }
     expect(byId(await fb.listCycles('haru'))).toEqual(byId(await mem.listCycles('haru')));
     const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
@@ -334,7 +336,13 @@ describe('QA 데이터 쓰기', () => {
     // QA 문서에서는 빼고 사이클 사본(cycle-130-1)에만 남긴다
     await env.withSecurityRulesDisabled(async (c) => {
       const db = c.firestore() as unknown as Firestore;
-      await setDoc(doc(db, 'projects/haru/qaDocs/doc-130/prepFlows/pf-only-cycle'), { id: 'pf-only-cycle', name: 'x', kind: 'data_state', check: 'x', steps: ['x'] });
+      await setDoc(doc(db, 'projects/haru/qaDocs/doc-130/prepFlows/pf-only-cycle'), {
+        id: 'pf-only-cycle',
+        name: 'x',
+        kind: 'data_state',
+        check: 'x',
+        steps: ['x'],
+      });
       const copy = (await getDocs(collection(db, 'projects/haru/cycles/cycle-130-1/cases'))).docs[0]!;
       await updateDoc(copy.ref, { prepFlowIds: ['pf-only-cycle'] });
     });
@@ -468,6 +476,21 @@ describe('프로젝트·초대 (callable)', () => {
     expect((await guest.listMyProjects()).map((s) => s.project.id)).toContain(p.id);
     await expect(guest.createInvitation(p.id, { role: 'qa' })).rejects.toBeInstanceOf(PermissionError);
     await expect(lead.leaveProject('widget')).rejects.toBeInstanceOf(RuleError);
+  });
+
+  it('실행 안전장치 저장이 메모리 구현과 같고, Admin이 아니거나 범위 밖이면 거부한다 (F-EX-12)', async () => {
+    const limits = { ...DEFAULT_RUN_LIMITS, tokensPerRun: 8_000_000, waitTimeoutMin: 5 };
+    const fb = apiAs(PEOPLE.lead);
+    const mem = memory();
+    for (const api of [fb, mem]) {
+      expect(runLimitsOf(await api.getProject('haru'))).toEqual(DEFAULT_RUN_LIMITS);
+      expect((await api.setRunLimits('haru', limits)).runLimits).toEqual(limits);
+      expect((await api.getProject('haru')).runLimits).toEqual(limits);
+      await expect(api.setRunLimits('haru', { ...limits, repeatLimit: 0 })).rejects.toThrow('같은 액션 반복');
+    }
+    await expect(apiAs(PEOPLE.qa).setRunLimits('haru', DEFAULT_RUN_LIMITS)).rejects.toBeInstanceOf(PermissionError);
+    // 호스트는 Run을 시작할 때 프로젝트 문서에서 읽는다
+    expect((await apiAs(PEOPLE.qa).getProject('haru')).runLimits).toEqual(limits);
   });
 
   it('시드 사용자는 닉네임이 있다', async () => {

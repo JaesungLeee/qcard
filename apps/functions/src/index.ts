@@ -63,6 +63,7 @@ export const registerProfile = call((ctx, data) => h.registerProfile(ctx, data, 
 export const createProject = call(h.createProject);
 export const deleteProject = call(h.deleteProject);
 export const restoreProject = call(h.restoreProject);
+export const setRunLimits = call(h.setRunLimits);
 export const setMemberRole = call(h.setMemberRole);
 export const removeMember = call(h.removeMember);
 export const leaveProject = call(h.leaveProject);

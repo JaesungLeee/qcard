@@ -27,6 +27,7 @@ import {
   requireEditor,
   requireMember,
   restoration,
+  runLimitsChange,
   type AccountSecret,
   type Actor,
   type CaseReviseJob,
@@ -320,6 +321,13 @@ export function createMemoryApi(
         restoration(membersOf(projectId), actor());
         delete p.deletedAt;
         delete p.purgeAt;
+        return p;
+      });
+    },
+    async setRunLimits(projectId, limits) {
+      const p = project(projectId);
+      return rules(() => {
+        p.runLimits = runLimitsChange(membersOf(projectId), actor(), limits);
         return p;
       });
     },

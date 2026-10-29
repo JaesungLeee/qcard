@@ -131,6 +131,17 @@ a.qp-project:focus-visible {
   color: var(--qc-foreground-neutral-secondary);
 }
 
+/* 실행 안전장치 */
+.qp-limits {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--qc-space-16);
+}
+.qp-limit-turns > :not(span) {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 /* 위험 구역 */
 .qp-danger {
   border-color: var(--qc-line-negative-primary);
