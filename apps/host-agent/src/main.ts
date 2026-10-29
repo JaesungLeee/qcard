@@ -11,11 +11,10 @@
  * 하위 명령은 저장소의 개발용 스크립트(pair.ts·serve.ts)와 같은 코드를 그대로 불러 실행한다.
  */
 import { execFile } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { resolveAdb } from '@qcard/device/node';
 import { claudeCodeProblem, claudeCodeStatus, MODELS_FOR } from '@qcard/llm';
 import { findScrcpy } from './console/video';
+import { hostVersion } from './version';
 
 process.env.QCARD_TARGET ??= 'prod';
 process.env.QCARD_CLI = '1';
@@ -39,9 +38,6 @@ const HELP = `qcard — 스펙 기반 QA 자동화 호스트 에이전트
 
 웹: https://qcard.dev`;
 
-/** 번들(dist/qcard.js)과 소스(src/main.ts) 모두 한 단계 위에 package.json이 있다 */
-const version = () =>
-  (JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf8')) as { version: string }).version;
 
 const runs = (bin: string, args: string[]) =>
   new Promise<string | undefined>((resolve) =>
@@ -80,7 +76,7 @@ const log = (l: string) => console.log(l);
 if (!command || command === '-h' || command === '--help' || command === 'help') {
   log(HELP);
 } else if (command === '-v' || command === '--version') {
-  log(version());
+  log(hostVersion());
 } else if (command === 'doctor') {
   process.exitCode = (await doctor(log, true)) ? 0 : 1;
 } else if (command === 'connect' || command === 'status' || command === 'disconnect') {

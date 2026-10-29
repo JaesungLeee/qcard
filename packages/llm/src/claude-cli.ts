@@ -4,6 +4,7 @@ import { appendFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { compareVersions } from '@qcard/shared';
 import { canonicalJson } from './canonical';
 import { ClaudeCodeSetupError, LlmOutputError, LlmTimeoutError, PlanLimitError } from './messages';
 import { CLAUDE_CODE_MIN_VERSION, type LlmClient, type LlmRequest, type LlmResponse, type LlmRetry } from './types';
@@ -518,16 +519,6 @@ export type ClaudeCodeStatus = {
   requiredVersion?: string;
 };
 
-/** "2.1.308 (Claude Code)"의 버전끼리 비교. a가 낮으면 음수 */
-export function compareVersions(a: string, b: string): number {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const d = (pa[i] || 0) - (pb[i] || 0);
-    if (d) return d;
-  }
-  return 0;
-}
 
 /** 실행 중 "version … or newer is required"로 알게 된 최소 버전 (이 프로세스 동안만. 업데이트하면 다음 점검에서 풀린다) */
 const learned = new Map<string, string>();

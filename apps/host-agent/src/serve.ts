@@ -42,6 +42,7 @@ import { RESTORED, restoreAwake } from './awake';
 import { claimJob, heartbeat, HOST_JOBS, pendingJobs, processJob, processReviseJob, startRunJobs } from './jobs';
 import { UploadQueue } from './queue';
 import { firestoreApply } from './sink';
+import { hostVersion } from './version';
 
 const { values } = parseArgs({
   options: {
@@ -111,6 +112,7 @@ async function beat() {
       ...(required ? { requiredVersion: required } : {}),
     },
     jobs: HOST_JOBS,
+    version: hostVersion(),
     ...(consoleUi ? { consoleUrl: consoleUi.webUrl() } : {}),
   }).catch((e: Error) => console.error(`연결 신호 실패: ${e.message}`));
   return s;

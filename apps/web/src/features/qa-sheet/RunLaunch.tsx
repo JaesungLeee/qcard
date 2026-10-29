@@ -4,6 +4,7 @@ import type { RunCycleJob } from '@qcard/shared';
 import { Button, SectionMessage, textClass } from '@qcard/ui';
 import type { CycleDetail } from '../../data/api';
 import { useApi, useJobs, useMyHosts, useMyRole, useRequestRun } from '../../data/hooks';
+import { INSTALL_COMMAND } from '../hosts/model';
 import { runLaunch } from './model';
 import { useNow } from './parts';
 
@@ -39,6 +40,11 @@ export function RunLaunchActions({ d, projectId }: { d: CycleDetail; projectId: 
       launch.devices.length
         ? `내 호스트의 폰(${launch.devices.join(', ')})은 이 사이클 대상이 아닙니다`
         : '내 호스트에 연결된 폰이 없습니다',
+    );
+  }
+  if (launch.state === 'outdated') {
+    return note(
+      `내 호스트(${launch.host.name})가 이전 버전${launch.host.version ? ` ${launch.host.version}` : ''}입니다. ${INSTALL_COMMAND}로 업데이트한 뒤 다시 켜세요`,
     );
   }
   if (launch.state === 'running') return note(`내 호스트(${launch.host.name})에서 실행 중입니다`);

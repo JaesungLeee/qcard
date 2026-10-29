@@ -13,6 +13,7 @@ import {
   leaseLive,
   leaving,
   mergeSecret,
+  MIN_HOST_VERSION,
   newAccount,
   newInvitation,
   newPrepFlow,
@@ -636,6 +637,8 @@ export function createMemoryApi(
           devices: [{ serial: '3A281FDH2000AB', model: 'Pixel 8', osMajor: 16, resolution: '1080×2400' }],
           claudeCode: { version: '2.1.308', loggedIn: true, subscriptionType: 'max' },
           jobs: ['qa_doc_generate', 'run_cycle', 'case_revise'],
+          // `?demo=host-outdated`: Run을 맡길 수 없는 이전 버전 호스트 (UI 스냅샷용)
+          version: globalThis.location?.search.includes('demo=host-outdated') ? '0.2.1' : MIN_HOST_VERSION,
         },
       ]);
     },

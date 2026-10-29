@@ -4,6 +4,7 @@ import {
   holdsCell,
   isRunStale,
   HOST_ONLINE_MS,
+  hostOutdated,
   type Host,
   type AutoConfirmCondition,
   type CaseResult,
@@ -68,11 +69,12 @@ export function deviceStats(
 
 /**
  * 웹에서 내 호스트로 Run 시작 (작업 kind `run_cycle`): 연결된 내 호스트의 폰이 이 사이클 대상인지,
- * 그 칸에 남은 자동 케이스·이어서 실행할 내 Run이 있는지
+ * 그 칸에 남은 자동 케이스·이어서 실행할 내 Run이 있는지. 그 호스트가 너무 오래된 버전이면 업데이트부터
  */
 export type RunLaunch =
   | { state: 'no_host' }
   | { state: 'no_device'; devices: string[] }
+  | { state: 'outdated'; host: Host }
   | {
       state: 'ready' | 'running';
       host: Host;
@@ -87,6 +89,7 @@ export function runLaunch(d: CycleDetail, hosts: Host[], me: string, now = Date.
     for (const dev of host.devices ?? []) {
       const target = d.cycle.targets.find((t) => t.model === dev.model && t.osMajor === dev.osMajor);
       if (!target) continue;
+      if (hostOutdated(host)) return { state: 'outdated', host };
       const mine = d.runs.filter((r) => r.executor === me && r.deviceId === target.id);
       const running = mine.some((r) => r.status === 'running' && !isRunStale(r, now));
       const paused = mine

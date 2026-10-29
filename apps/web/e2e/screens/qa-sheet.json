@@ -1,5 +1,6 @@
 [
   { "name": "qa-sheet-new-cycle", "path": "/p/haru/cycles/new", "waitFor": "1. QA 문서" },
+  { "name": "qa-sheet-launch-outdated", "path": "/p/haru/cycles/cycle-130-1?tab=summary&demo=host-outdated", "waitFor": "이전 버전 0.2.1" },
   { "name": "qa-sheet-cycles", "path": "/p/haru/cycles", "waitFor": "1.3.0 (130) 1차 회귀" },
   { "name": "qa-sheet-cycles-ready", "path": "/p/haru/cycles", "waitFor": "1.3.0 (130) 1차 회귀", "click": "시작 전", "then": "1.3.0 (130) Prod 확인" },
   { "name": "qa-sheet-cycles-done", "path": "/p/haru/cycles", "waitFor": "1.3.0 (130) 1차 회귀", "click": "완료", "then": "1.2.1 (121) 회귀" },
