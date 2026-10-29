@@ -11,7 +11,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "node scripts/emulators.mjs test 'vitest run'",
     "emulators": "pnpm build && node scripts/emulators.mjs dev 'tsx scripts/seed.ts --wait'",
-    "seed-generated": "tsx scripts/seed-generated.ts"
+    "seed-generated": "tsx scripts/seed-generated.ts",
+    "migrate-prep-flows": "tsx scripts/migrate-prep-flows.ts"
   },
   "dependencies": {
     "firebase-admin": "14.5.0",

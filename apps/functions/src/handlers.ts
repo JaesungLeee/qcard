@@ -226,30 +226,32 @@ export async function deleteCycle(ctx: Ctx, data: unknown, removeFiles: RemoveFi
   await ctx.db.recursiveDelete(ref);
 }
 
-const FlowId = ProjectId.extend({ flowId: z.string().min(1) });
+const FlowId = ProjectId.extend({ docId: z.string().min(1), flowId: z.string().min(1) });
 
 /**
- * 준비 플로우 삭제 (F-PF-01): 케이스가 참조 중이면 막는다(`prepFlowUses`). 보안 규칙으로는 참조를 질의할 수 없고
- * 클라이언트 트랜잭션은 질의를 못 해서, 여기서 한 트랜잭션 안에 참조를 읽고 지운다
+ * 준비 플로우 삭제 (F-PF-01): 그 QA 문서 버전의 케이스나 그 버전으로 만든 완료되지 않은 사이클이 참조 중이면 막는다
+ * (`prepFlowUses`). 보안 규칙으로는 참조를 질의할 수 없고 클라이언트 트랜잭션은 질의를 못 해서, 여기서 한 트랜잭션 안에
+ * 참조를 읽고 지운다
  */
 export async function deletePrepFlow(ctx: Ctx, data: unknown): Promise<void> {
-  const { projectId, flowId } = parse(FlowId, data);
+  const { projectId, docId, flowId } = parse(FlowId, data);
   const project = projectRef(ctx.db, projectId);
   await ctx.db.runTransaction(async (tx) => {
-    const ref = project.collection('prepFlows').doc(flowId);
+    const qaDoc = project.collection('qaDocs').doc(docId);
+    const ref = qaDoc.collection('prepFlows').doc(flowId);
     await read(tx, ref, '준비 플로우');
+    const meta = await read<QADocument>(tx, qaDoc, 'QA 문서');
     const members = await membersIn(tx, ctx.db, projectId);
     const casesOf = async (ref: DocumentReference) =>
       (await tx.get(ref.collection('cases'))).docs.map((d) => d.data() as TestCase);
-    const metas = (await tx.get(project.collection('qaDocs'))).docs;
-    const docs = await Promise.all(
-      metas.map(async (d) => ({ ...(d.data() as QADocument), id: d.id, cases: await casesOf(d.ref) })),
+    const open = (await tx.get(project.collection('cycles').where('docId', '==', docId))).docs.filter((d) =>
+      cycleUsesFlows(d.data() as TestCycle),
     );
-    const open = (await tx.get(project.collection('cycles'))).docs.filter((d) => cycleUsesFlows(d.data() as TestCycle));
     const cycles = await Promise.all(
       open.map(async (d) => ({ cycle: d.data() as TestCycle, cases: await casesOf(d.ref) })),
     );
-    prepFlowDeletion(members, await actorOf(ctx, tx), prepFlowUses(docs, cycles)[flowId] ?? []);
+    const doc = { ...meta, id: docId, cases: await casesOf(qaDoc) };
+    prepFlowDeletion(members, await actorOf(ctx, tx), prepFlowUses(doc, cycles)[flowId] ?? []);
     tx.delete(ref);
   });
 }

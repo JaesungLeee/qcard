@@ -46,7 +46,7 @@ const run = (over: Partial<GenerateInput> & Pick<GenerateInput, 'llm'>) =>
 
 describe('generateQaDoc — 첫 버전', async () => {
   const { llm, calls } = fakeGeneratorLlm();
-  const { doc, prepFlows, skipped, warnings } = await run({ llm });
+  const { doc, prepFlows, newPrepFlows, skipped, warnings } = await run({ llm });
   const byId = (src: string) => doc.cases.find((c) => c.sourceId === `sample/${src}`)!;
 
   it('스펙 계획 1번 + 케이스 변환 묶음으로 부르고, 모든 행이 신규 케이스가 된다', () => {
@@ -84,6 +84,7 @@ describe('generateQaDoc — 첫 버전', async () => {
     const { tcId: _, ...rest } = c;
     expect(c.contentHash).toBe(hash(Object.fromEntries(Object.entries(rest).filter(([k]) => BODY.includes(k)))));
     // 앱 데이터 초기화는 코드가 제공하는 플로우다 (모델은 env를 만들 수 없다)
+    expect(newPrepFlows).toEqual(prepFlows);
     expect(prepFlows.map((f) => [f.id, f.kind])).toEqual([
       ['pf-clean', 'env'],
       ['pf-home', 'data_state'],
@@ -248,8 +249,19 @@ describe('generateQaDoc — 응답 확인', () => {
 
   it('기존 준비 플로우가 있으면 다시 만들지 않는다', async () => {
     const home = { id: 'pf-home', name: '홈', kind: 'data_state' as const, check: '홈', steps: [] };
-    const { prepFlows } = await run({ llm: fakeGeneratorLlm().llm, prepFlows: [CLEAN_FLOW, home] });
-    expect(prepFlows).toEqual([]);
+    const { newPrepFlows } = await run({ llm: fakeGeneratorLlm().llm, prepFlows: [CLEAN_FLOW, home] });
+    expect(newPrepFlows).toEqual([]);
+  });
+
+  it('이전 버전의 플로우는 케이스가 참조하는 것만 사람이 고친 내용 그대로 이어받는다 (F-QD-08)', async () => {
+    const home = { id: 'pf-home', name: '홈 (사람이 고침)', kind: 'data_state' as const, check: '홈', steps: ['a'], rev: 3 };
+    const unused = { id: 'pf-old', name: '옛 플로우', kind: 'data_state' as const, check: '-', steps: ['-'] };
+    const { prepFlows, newPrepFlows } = await run({
+      llm: fakeGeneratorLlm().llm,
+      prepFlows: [CLEAN_FLOW, unused, home],
+    });
+    expect(prepFlows.map((f) => f.id)).toEqual(['pf-clean', 'pf-home', ...newPrepFlows.map((f) => f.id)]);
+    expect(prepFlows.find((f) => f.id === 'pf-home')).toEqual(home);
   });
 
   it('로그인 준비 플로우를 쓰는데 계정 종류가 없으면 기본 종류로 채운다 (F-QD-04)', async () => {

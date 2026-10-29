@@ -141,7 +141,8 @@ export async function processJob(deps: JobDeps, job: QaDocJob): Promise<Job> {
     const prevBundle: ParsedBundle | undefined = prev
       ? (await loadBundle(db, storage, job.projectId, prev.specBundleId))?.parsed
       : undefined;
-    const prepFlows = await api.listPrepFlows(job.projectId);
+    // 이전 버전의 준비 플로우를 이어받는다 (F-QD-08). 첫 버전은 빈 목록에서 시작
+    const prepFlows = prev ? await api.listPrepFlows({ projectId: job.projectId, docId: prev.id }) : [];
     const docId = await docIdFor(db, job);
     log(`${job.input.appVersion}: 스펙 ${bundle.parsed.specs.length}개${prev ? ` · 이전 ${prev.appVersion}` : ''}`);
 
@@ -169,7 +170,7 @@ export async function processJob(deps: JobDeps, job: QaDocJob): Promise<Job> {
       },
     });
 
-    // 저장: 문서 → 케이스(순서 _i) → 새 준비 플로우. 한 번에 500개까지라 나눠 쓴다
+    // 저장: 케이스(순서 _i) → 이 버전의 준비 플로우 → 문서 머리. 한 번에 500개까지라 나눠 쓴다
     recorder.progress({ phase: 'save', done: 0, total: result.doc.cases.length, active: [] });
     await recorder.flush();
     const { cases, ...meta } = result.doc;
@@ -177,11 +178,7 @@ export async function processJob(deps: JobDeps, job: QaDocJob): Promise<Job> {
     const writes: [ReturnType<typeof doc>, unknown][] = [
       ...cases.map((c, i) => [doc(db, ...base, 'cases', c.tcId), { ...c, _i: i }] as [ReturnType<typeof doc>, unknown]),
       ...result.prepFlows.map(
-        (f, i) =>
-          [doc(db, 'projects', job.projectId, 'prepFlows', f.id), { ...f, _i: prepFlows.length + i }] as [
-            ReturnType<typeof doc>,
-            unknown,
-          ],
+        (f, i) => [doc(db, ...base, 'prepFlows', f.id), { ...f, _i: i }] as [ReturnType<typeof doc>, unknown],
       ),
     ];
     for (let i = 0; i < writes.length; i += 450) {
@@ -196,7 +193,7 @@ export async function processJob(deps: JobDeps, job: QaDocJob): Promise<Job> {
     recorder.event(
       'done',
       'done',
-      `케이스 ${cases.length}개 · 확인 질문 ${questions}개 · 새 준비 플로우 ${result.prepFlows.length}개 → QA 문서 ${job.input.appVersion}`,
+      `케이스 ${cases.length}개 · 확인 질문 ${questions}개 · 새 준비 플로우 ${result.newPrepFlows.length}개 → QA 문서 ${job.input.appVersion}`,
     );
     await recorder.flush();
     const latest = (await getDoc(r)).data() as QaDocJob | undefined;
@@ -211,7 +208,7 @@ export async function processJob(deps: JobDeps, job: QaDocJob): Promise<Job> {
         cases: cases.length,
         generated: cases.filter((c) => c.change === 'new' || c.change === 'changed').length,
         questions,
-        newPrepFlows: result.prepFlows.length,
+        newPrepFlows: result.newPrepFlows.length,
         tokens: meter.run.tokens,
         costUsd: meter.run.costUsd,
       },
@@ -261,7 +258,7 @@ export async function processReviseJob(deps: JobDeps, job: CaseReviseJob): Promi
       current,
       spec,
       questions: d.questions.filter((q) => job.input.questionIds.includes(q.id)),
-      prepFlows: await api.listPrepFlows(job.projectId),
+      prepFlows: await api.listPrepFlows({ projectId: job.projectId, docId: d.id }),
       llm: withUsage(deps.llmFor(job), meter),
     });
     const usage = { tokens: meter.run.tokens, costUsd: meter.run.costUsd };

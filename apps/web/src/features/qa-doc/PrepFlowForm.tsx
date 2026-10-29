@@ -11,7 +11,7 @@ import {
 } from '@qcard/ui';
 import { useState, type ReactNode } from 'react';
 import { fmtDateTime } from '../../components/format';
-import { PrepFlowConflictError } from '../../data/api';
+import { PrepFlowConflictError, type DocRef } from '../../data/api';
 import { useCreatePrepFlow, useUpdatePrepFlow } from '../../data/hooks';
 import { PREP_KIND_HINT, PREP_KIND_LABEL } from './params';
 import { SortableSteps } from './SortableSteps';
@@ -34,11 +34,22 @@ const same = (a: PrepFlowInput, b: PrepFlowInput) => JSON.stringify(a) === JSON.
 
 /**
  * 준비 플로우 추가·편집 폼 (F-PF-01). 편집은 낙관적 잠금 — 다른 사람이 먼저 저장했으면 최신 내용을 보이고
- * 내 편집을 그 위에 다시 쓸지 버릴지 고른다. 사이클에 고정되지 않아 진행 중인 사이클도 다음 Run부터 바뀐다
+ * 내 편집을 그 위에 다시 쓸지 버릴지 고른다. 편집은 그 QA 문서 버전에만 적용되고, 사이클에 고정되지 않아
+ * 그 버전으로 만든 진행 중인 사이클도 다음 Run부터 바뀐다
  */
-export function PrepFlowForm({ projectId, flow, onDone }: { projectId: string; flow?: PrepFlow; onDone: () => void }) {
-  const create = useCreatePrepFlow(projectId);
-  const update = useUpdatePrepFlow(projectId);
+export function PrepFlowForm({
+  docRef,
+  appVersion,
+  flow,
+  onDone,
+}: {
+  docRef: DocRef;
+  appVersion: string;
+  flow?: PrepFlow;
+  onDone: () => void;
+}) {
+  const create = useCreatePrepFlow(docRef);
+  const update = useUpdatePrepFlow(docRef);
   const save = flow ? update : create;
   const [base, setBase] = useState(() => ({ input: toInput(flow), rev: flow?.rev ?? 0 }));
   const [draft, setDraft] = useState<PrepFlowInput>(() => toInput(flow));
@@ -124,9 +135,9 @@ export function PrepFlowForm({ projectId, flow, onDone }: { projectId: string; f
       {flow && (
         <SectionMessage
           variant="info"
-          description="준비 플로우는 사이클에 고정되지 않습니다. 저장하면 진행 중인 사이클도 다음 실행부터 바뀐 내용으로 준비합니다."
+          description={`QA 문서 ${appVersion}의 플로우만 바뀌고, 다른 버전의 같은 플로우는 그대로입니다. 준비 플로우는 사이클에 고정되지 않아 이 버전으로 만든 진행 중인 사이클도 다음 실행부터 바뀐 내용으로 준비합니다.`}
         >
-          다음 실행부터 적용됩니다
+          QA 문서 {appVersion}에만 적용됩니다
         </SectionMessage>
       )}
 

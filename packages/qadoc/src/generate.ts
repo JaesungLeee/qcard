@@ -2,6 +2,7 @@ import { cachedSystem, LlmOutputError, MODELS, outputFormat, parseOutput, type L
 import {
   CaseBody,
   DEFAULT_ACCOUNT_KIND,
+  flowsUsedBy,
   hash,
   type PrepFlow,
   type QADocument,
@@ -34,7 +35,7 @@ export type GenerateInput = {
   prev?: QADocument;
   /** 이전 버전 스펙 묶음. 있으면 변경 행에 이전 행 본문을 함께 넘긴다 */
   prevBundle?: SpecBundle;
-  /** 프로젝트에 이미 있는 준비 플로우 (F-PF-01) */
+  /** 이전 버전 QA 문서의 준비 플로우 (F-PF-01). 새 문서는 이 중 케이스가 참조하는 것을 같은 ID·내용으로 이어받는다 */
   prepFlows: PrepFlow[];
   llm: LlmClient;
   meta: GenerateMeta;
@@ -69,8 +70,10 @@ export type GenerateProgress =
 
 export type GenerateResult = {
   doc: QADocument;
-  /** 이번 생성에서 새로 만든 준비 플로우 (프로젝트에 추가할 것) */
+  /** 새 문서의 준비 플로우 (F-QD-08): 이어받은 것과 새로 만든 것 중 활성 케이스가 참조하는 것, 목록 순서대로 */
   prepFlows: PrepFlow[];
+  /** 그중 이번 생성에서 새로 만든 것 */
+  newPrepFlows: PrepFlow[];
   /** 케이스로 만들지 않은 행 (MVP는 공통·Android만, F-QD-06) */
   skipped: { sourceId: string; reason: string }[];
   warnings: string[];
@@ -340,7 +343,8 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
     questions,
     suggestions,
   };
-  return { doc, prepFlows: added, skipped, warnings: warnings.list };
+  const prepFlows = flowsUsedBy(flows, cases);
+  return { doc, prepFlows, newPrepFlows: prepFlows.filter((f) => added.includes(f)), skipped, warnings: warnings.list };
 }
 
 /** 진행 화면용 생성 계획: 스펙마다 행과 매칭 결과. 변경 행에는 비교할 이전 케이스를 붙인다 */

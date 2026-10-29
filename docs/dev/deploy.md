@@ -48,6 +48,20 @@ callable 함수의 공개 호출 권한(Cloud Run Invoker `allUsers`)은 CLI가 
 
 웹 주소는 `https://qcard.dev`(Hosting 커스텀 도메인, 가비아 DNS). 기본 주소 `qcard-d2ade.web.app`·`qcard-d2ade.firebaseapp.com`으로 들어오면 `apps/web/index.html`의 스크립트가 같은 경로의 `qcard.dev`로 보낸다(로그인 핸들러 `/__/auth/*`는 그대로). Hosting은 모든 경로를 `index.html`로 보낸다(SPA).
 
+## 데이터 옮기기
+
+### 준비 플로우를 QA 문서 버전별로 (PRD v0.17)
+
+준비 플로우가 `projects/{p}/prepFlows`에서 `projects/{p}/qaDocs/{d}/prepFlows`로 옮겨 갔다. 새 보안 규칙은 옛 위치를 막으므로, 이 변경이 `main`에 들어가 배포되기 **전에** 사본을 만들고 배포 **뒤에** 옛 위치를 지운다. 사람이 실행한다(`gcloud auth application-default login`).
+
+```sh
+pnpm --filter @qcard/functions migrate-prep-flows --project qcard-d2ade              # 미리 보기
+pnpm --filter @qcard/functions migrate-prep-flows --project qcard-d2ade --apply      # 배포 전: 버전별 사본 만들기
+pnpm --filter @qcard/functions migrate-prep-flows --project qcard-d2ade --delete-old # 배포 뒤: 사본 확인 후 옛 위치 지우기
+```
+
+버전마다 그 버전 케이스가 참조하는 플로우를, 어느 케이스도 참조하지 않는 플로우는 최신 버전에 복사한다. 이미 있는 사본은 덮어쓰지 않아 여러 번 실행해도 된다. 이 릴리스의 호스트보다 낮은 호스트는 옛 위치를 읽고 써서 동작하지 않으므로 `MIN_HOST_VERSION`을 올린다([branching.md](branching.md)).
+
 ## 호스트 에이전트 (npm `@qcard/host`)
 
 운영 설정은 `apps/host-agent/src/connect.ts`의 `PROD_TARGET`에 들어 있다. 웹 주소·Firebase 프로젝트를 바꾸면 여기도 바꾸고 새 버전을 올린다.

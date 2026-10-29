@@ -93,7 +93,9 @@ export function runOrder(cases: TestCase[]): TestCase[] {
 
 export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
   const { api, sink, projectId, cycleId, deviceId } = input;
-  const [detail, prepFlows] = await Promise.all([api.getCycle({ projectId, cycleId }), api.listPrepFlows(projectId)]);
+  const detail = await api.getCycle({ projectId, cycleId });
+  // 준비 플로우는 사이클의 QA 문서 버전 것 (F-PF-01). 사이클에 고정하지 않아 Run을 시작할 때 읽는다
+  const prepFlows = await api.listPrepFlows({ projectId, docId: detail.cycle.docId });
   if (!detail.cycle.targets.some((t) => t.id === deviceId)) {
     throw new Error(`이 사이클의 대상 디바이스가 아닙니다: ${deviceId}`);
   }

@@ -50,7 +50,7 @@ describe('connectedPcs', () => {
     const pcs = connectedPcs(
       [conn('new'), conn('old'), conn('legacy'), conn('off')],
       [
-        { id: 'new', name: 'new', lastSeen: on, version: '0.3.0' },
+        { id: 'new', name: 'new', lastSeen: on, version: '0.4.0' },
         { id: 'old', name: 'old', lastSeen: on, version: '0.2.1' },
         { id: 'legacy', name: 'legacy', lastSeen: on },
         { id: 'off', name: 'off', lastSeen: '2026-10-24T09:00:00Z' },
@@ -58,7 +58,7 @@ describe('connectedPcs', () => {
       now,
     );
     expect(pcs.map((p) => [p.id, p.version, p.outdated])).toEqual([
-      ['new', '0.3.0', false],
+      ['new', '0.4.0', false],
       ['old', '0.2.1', true],
       ['legacy', undefined, true],
       ['off', undefined, false],

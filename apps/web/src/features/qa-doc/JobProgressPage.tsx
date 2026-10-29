@@ -269,7 +269,8 @@ function Rows({
   const spec = specs.find((s) => s.spec === specName) ?? specs[0]!;
   const hideSame = params.get('same') === 'hide';
   const drafts = useJobDrafts(projectId, job.id, spec.spec, active);
-  const prepFlows = usePrepFlows(projectId);
+  // 만든 문서가 생기면 그 버전의 플로우, 그 전에는 이어받을 이전 버전의 플로우로 이름을 보인다
+  const prepFlows = usePrepFlows(projectId, job.result?.docId ?? job.input.prevDocId);
   const prepName = useMemo(() => {
     const byId = new Map((prepFlows.data ?? []).map((p) => [p.id, p.name]));
     return (id: string) => byId.get(id) ?? id;
