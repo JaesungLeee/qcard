@@ -48,7 +48,7 @@ callable 함수의 공개 호출 권한(Cloud Run Invoker `allUsers`)은 CLI가 
 
 웹 주소는 `https://qcard.dev`(Hosting 커스텀 도메인, 가비아 DNS). 기본 주소 `qcard-d2ade.web.app`·`qcard-d2ade.firebaseapp.com`으로 들어오면 `apps/web/index.html`의 스크립트가 같은 경로의 `qcard.dev`로 보낸다(로그인 핸들러 `/__/auth/*`는 그대로). Hosting은 모든 경로를 `index.html`로 보낸다(SPA).
 
-개인정보처리방침 `/privacy`·이용약관 `/terms`는 로그인 없이 열린다. 시행일은 2026-11-01(`apps/web/src/features/legal/policy.ts`의 `EFFECTIVE_DATE`, 비우면 두 문서가 "초안"으로 보인다). 내용을 바꾸면 시행일도 새로 정하고 변경 공지 기간을 지킨다. 데이터 처리 방식(수집 항목·보관 위치·삭제)을 바꾸면 `PrivacyPage.tsx`도 함께 고친다.
+개인정보처리방침 `/privacy`·이용약관 `/terms`는 로그인 없이 열린다. 시행일은 2026-11-03(`apps/web/src/features/legal/policy.ts`의 `EFFECTIVE_DATE`, 비우면 두 문서가 "초안"으로 보인다). 내용을 바꾸면 시행일도 새로 정하고 변경 공지 기간을 지킨다. 데이터 처리 방식(수집 항목·보관 위치·삭제)을 바꾸면 `PrivacyPage.tsx`도 함께 고친다.
 
 시작 가이드 `/guide`·스펙 작성 규칙 `/guide/spec`(`apps/web/src/features/guide/`)도 로그인 없이 열린다. 화면 흐름·버튼 이름을 바꾸면 가이드 문구와 스크린샷을 함께 고친다: `pnpm --filter @qcard/web guide:shots`가 `public/guide/*.jpg`를 다시 찍고(공개 화면이라 테스트 데이터의 운영자 실명은 가상 이름으로 바꿔 찍는다), 스펙 파서 형식을 바꾸면 `/guide/spec`을, 하루콩 스펙을 바꾸면 `guide:example`로 예시 ZIP을 다시 만든다.
 

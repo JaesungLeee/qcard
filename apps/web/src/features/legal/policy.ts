@@ -8,6 +8,6 @@ export const OPERATOR = 'qcard 운영자';
 /** 개인정보 문의·정보주체 권리 행사 이메일. 공개 전 확정 */
 export const CONTACT_EMAIL: string | undefined = 'viki0114@naver.com';
 /** 시행일 (YYYY-MM-DD). 바꾸면 변경 공지 기간(시행 7일 전, 불리하면 30일 전)을 지킨다 */
-export const EFFECTIVE_DATE: string | undefined = '2026-11-01';
+export const EFFECTIVE_DATE: string | undefined = '2026-11-03';
 
 export const isDraft = () => !CONTACT_EMAIL || !EFFECTIVE_DATE;

@@ -43,7 +43,7 @@ describe('웹에서 내 호스트로 Run 시작 (runLaunch)', () => {
   const host = (
     devices: { model: string; osMajor: number }[],
     lastSeen = new Date().toISOString(),
-    version: string | null = '0.4.0',
+    version: string | null = '0.5.0',
   ) => ({
     id: 'h1',
     name: '내 맥',
@@ -81,7 +81,7 @@ describe('웹에서 내 호스트로 Run 시작 (runLaunch)', () => {
     const at = new Date().toISOString();
     expect(runLaunch(d, [host(p8, at, '0.2.1')], '이재성').state).toBe('outdated');
     expect(runLaunch(d, [host(p8, at, null)], '이재성').state).toBe('outdated');
-    expect(runLaunch(d, [host(p8, at, '0.4.1')], '이재성').state).toBe('ready');
+    expect(runLaunch(d, [host(p8, at, '0.5.1')], '이재성').state).toBe('ready');
     expect(runLaunch(d, [host(p8, at, '0.10.0')], '이재성').state).toBe('ready');
   });
 });
