@@ -3,6 +3,24 @@
 qcard의 버전별 변경 사항입니다. 버전 하나는 웹 서비스와, 바뀐 경우 PC에 설치하는 호스트(`@qcard/host`)를 함께 가리킵니다.
 버전은 [Semantic Versioning](https://semver.org/)을 따릅니다.
 
+## [0.5.0](https://github.com/JaesungLeee/qcard/compare/v0.4.0...v0.5.0) - 2026-11-03
+
+> ⚠ **호스트 업데이트가 필요합니다.** 호스트 0.4.0 이하로는 이 버전에서 테스트를 실행할 수 없습니다.
+> PC에서 `npm i -g @qcard/host`로 0.5.0으로 업데이트한 뒤 `qcard serve`를 다시 켜 주세요.
+
+### Added
+
+- 테스트를 실행할 때 **돌릴 케이스를 골라** 실행할 수 있습니다. 사이클 화면과 로컬 콘솔의 [케이스 고르기]에서 내 기기의 판정(남은 칸·Fail·Blocked·확인필요)과 우선순위로 거르고, 기능 단위로 한꺼번에 고릅니다. 결과가 있는 칸을 고르면 다시 실행합니다. ([#38](https://github.com/JaesungLeee/qcard/pull/38))
+- Admin이 프로젝트 설정에서 **실행 안전장치**를 정할 수 있습니다. 케이스당 턴·LLM 호출·토큰, Run당 토큰, 실행자 대기 시간을 바꾸면 진행 중인 사이클에도 다음 Run부터 적용됩니다. ([#32](https://github.com/JaesungLeee/qcard/pull/32))
+- 한 Run이 쓴 토큰이 Run당 한도를 넘으면 다음 케이스를 시작하기 전에 Run을 **일시정지**합니다. 한도를 올린 뒤 이어서 실행하세요. ([#32](https://github.com/JaesungLeee/qcard/pull/32))
+- 처음 쓰는 팀을 위한 **시작 가이드**와 **스펙 작성 규칙**을 추가했습니다. 로그인하지 않아도 볼 수 있고, 예시 스펙을 내려받을 수 있습니다. ([#34](https://github.com/JaesungLeee/qcard/pull/34))
+- **개인정보처리방침**과 **이용약관**을 추가했습니다. 로그인 화면과 데이터 처리 안내에서 볼 수 있습니다. ([#33](https://github.com/JaesungLeee/qcard/pull/33), [#35](https://github.com/JaesungLeee/qcard/pull/35))
+
+### Changed
+
+- 테스트 결과에 기기의 **정확한 OS 빌드 번호와 보안 패치**를 기록합니다. ([#37](https://github.com/JaesungLeee/qcard/pull/37))
+- Wi-Fi로 연결한 기기에서는 네트워크를 끄는 케이스를 실행하지 않고 Blocked로 끝냅니다. 연결이 끊겨 Run이 멈추지 않도록, 네트워크를 끄는 케이스는 USB로 연결해 실행하세요. ([#37](https://github.com/JaesungLeee/qcard/pull/37))
+
 ## [0.4.0](https://github.com/JaesungLeee/qcard/compare/v0.3.0...v0.4.0) - 2026-10-29
 
 > ⚠ **호스트 업데이트가 필요합니다.** 호스트 0.3.0 이하로는 이 버전에서 테스트를 실행할 수 없습니다.

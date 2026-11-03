@@ -2,6 +2,7 @@ import { createFixtureDb } from '@qcard/fixtures';
 import { isRunStale, type CaseResult } from '@qcard/shared';
 import { describe, expect, it } from 'vitest';
 import { createMemoryApi } from '../../data/memory';
+import { defaultPicked, pickRows } from '../../components/case-pick/rules';
 import { consoleUrlOf } from '../console/Open';
 import {
   autoConfirmChecks,
@@ -42,7 +43,7 @@ describe('웹에서 내 호스트로 Run 시작 (runLaunch)', () => {
   const host = (
     devices: { model: string; osMajor: number }[],
     lastSeen = new Date().toISOString(),
-    version: string | null = '0.4.0',
+    version: string | null = '0.5.0',
   ) => ({
     id: 'h1',
     name: '내 맥',
@@ -80,7 +81,7 @@ describe('웹에서 내 호스트로 Run 시작 (runLaunch)', () => {
     const at = new Date().toISOString();
     expect(runLaunch(d, [host(p8, at, '0.2.1')], '이재성').state).toBe('outdated');
     expect(runLaunch(d, [host(p8, at, null)], '이재성').state).toBe('outdated');
-    expect(runLaunch(d, [host(p8, at, '0.4.1')], '이재성').state).toBe('ready');
+    expect(runLaunch(d, [host(p8, at, '0.5.1')], '이재성').state).toBe('ready');
     expect(runLaunch(d, [host(p8, at, '0.10.0')], '이재성').state).toBe('ready');
   });
 });
@@ -241,5 +242,17 @@ describe('primaryDevice', () => {
     expect(primaryDevice(targets, { a: r('nt'), b: r('pass'), c: r('nt') })).toBe('b');
     expect(primaryDevice(targets, { a: r('nt'), b: r('nt') })).toBe('a');
     expect(primaryDevice([], {})).toBeUndefined();
+  });
+});
+
+describe('Run 케이스 고르기 (F-CY-07)', () => {
+  it('시드 사이클: 남은 칸 기본값이 [내 호스트에서 실행]의 남은 건수와 같다', async () => {
+    const d = await load();
+    const host = { id: 'h', name: '맥', lastSeen: new Date().toISOString(), version: '9.9.9' };
+    const launch = runLaunch(d, [{ ...host, devices: [{ serial: 's', model: 'Pixel 8', osMajor: 16 }] }], '이재성');
+    if (launch.state !== 'ready') throw new Error(launch.state);
+    const index = indexResults(d.results);
+    const mine = pickRows(d.cases, (c) => index.get(resultKey(c.tcId, launch.target.id))?.verdict);
+    expect(defaultPicked(mine).size).toBe(launch.remaining);
   });
 });

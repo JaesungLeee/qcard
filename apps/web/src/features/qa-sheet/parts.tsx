@@ -1,7 +1,7 @@
 // QA 시트 화면들이 함께 쓰는 작은 조각.
 import { PAUSE_REASON_LABEL, VERDICT_LABEL, type PauseReason, type Verdict } from '@qcard/shared';
 import { Icons, VerdictBadge, textClass, token } from '@qcard/ui';
-import { useEffect, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import type { VerdictCounts } from '../../data/api';
 import { fmtDate } from '../../components/format';
 import { VERDICTS } from './model';
@@ -95,6 +95,24 @@ export const SERVER_ENV_LABEL = { dev: 'Dev', stage: 'Stage', prod: 'Prod' } as 
 
 export function Mono({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <span className={`qc-mono ${className}`}>{children}</span>;
+}
+
+/**
+ * 결과에 기록된 OS 빌드 (`Android 15 · AP3A.240905.015.A2 · 보안 패치 2024-10-01`, F-CY-01).
+ * 빌드 번호·날짜 중간에서 끊기지 않게 ` · ` 사이에서만 줄을 바꾼다. 예전 결과(`Android 15`)도 그대로 보인다
+ */
+export function OsBuild({ value }: { value: string }) {
+  const parts = value.split(' · ');
+  return (
+    <Mono>
+      {parts.map((p, i) => (
+        <Fragment key={i}>
+          {i > 0 && ' · '}
+          <span className="qs-nowrap">{p}</span>
+        </Fragment>
+      ))}
+    </Mono>
+  );
 }
 
 /** 실행 중 / 일시정지 표시 (아이콘 + 글자). 일시정지면 이유를 붙인다 (F-DB-07) */

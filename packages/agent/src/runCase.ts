@@ -1,4 +1,4 @@
-import { DeviceDisconnectedError, type NetworkKind } from '@qcard/device';
+import { DeviceDisconnectedError, type DeviceInfo, type NetworkKind } from '@qcard/device';
 import { ClaudeCodeSetupError, PlanLimitError, type UsageMeter } from '@qcard/llm';
 import type { CaseResult, PrepFlow, TestCase } from '@qcard/shared';
 import { clockOf, RunAbortedError, thought, type AgentEnv } from './env';
@@ -67,7 +67,9 @@ export async function prepare(
       env,
       start,
       'system',
-      tc.cleanState || !resetApp ? '준비: 앱 데이터 초기화 후 실행' : '준비: 이전 테스트 계정을 지우려고 앱 데이터 초기화 후 실행',
+      tc.cleanState || !resetApp
+        ? '준비: 앱 데이터 초기화 후 실행'
+        : '준비: 이전 테스트 계정을 지우려고 앱 데이터 초기화 후 실행',
     );
     await d.clearAppData(env.appPackage);
   } else {
@@ -168,6 +170,16 @@ export async function runCase(env: AgentEnv, input: RunCaseInput): Promise<CaseR
   }
 }
 
+/**
+ * 결과에 남길 OS 빌드 (F-CY-01): `Android 15 · AP3A.240905.015.A2 · 보안 패치 2024-10-01`.
+ * 대상은 모델 + OS 메이저로 맞추고, 정확한 빌드·보안 패치는 여기에 기록한다. 읽지 못한 값은 뺀다
+ */
+export function osBuildOf(info: Pick<DeviceInfo, 'osMajor' | 'build' | 'securityPatch'>): string {
+  return [`Android ${info.osMajor}`, info.build, info.securityPatch && `보안 패치 ${info.securityPatch}`]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 type ResultOf = (r: Partial<CaseResult> & Pick<CaseResult, 'verdict'>) => CaseResult;
 
 /** 이 케이스의 결과를 만드는 함수 (시작 시각·디바이스 OS·사용량을 채운다) */
@@ -185,7 +197,7 @@ async function resultOf(env: AgentEnv, input: Pick<RunCaseInput, 'testCase' | 'd
       attempts: 1,
       executor: 'agent',
       executedAt: startedAt,
-      osBuild: `Android ${info.osMajor}`,
+      osBuild: osBuildOf(info),
       runId: input.runId,
       steps: [],
       points: [],
@@ -280,7 +292,7 @@ async function afterPrep(
         .join('\n'),
     });
     if (exec.status !== 'done') {
-      const j = judge(exec, []);
+      const j = judge(exec, [], env.limits?.retryLimit);
       const r = result({
         verdict: j.verdict,
         agentVerdict: j.agentVerdict,
@@ -297,7 +309,7 @@ async function afterPrep(
     const points = await verifyPoints(env, { caseId: tc.tcId, points: tc.verificationPoints, evidence });
     const start = clock.now();
     for (const p of points) thought(env, start, 'verify', `${p.pointId} ${p.result} · ${p.reason}`);
-    const j = judge(exec, points);
+    const j = judge(exec, points, env.limits?.retryLimit);
     const misses = points.filter((p) => p.result !== 'match');
     const r = result({
       verdict: j.verdict,

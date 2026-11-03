@@ -7,6 +7,7 @@ import {
   EnvActionUnavailableError,
   findElement,
   UnsupportedInputError,
+  type DeviceInfo,
   type Point,
 } from '@qcard/device';
 import {
@@ -20,7 +21,15 @@ import {
   parseToolUse,
   toolUses,
 } from '@qcard/llm';
-import { EXECUTOR_TOOL_INPUTS, RISK_KIND_LABEL, type CaseStep, type ExecStep, type ExecutorToolInput } from '@qcard/shared';
+import {
+  DEFAULT_RUN_LIMITS,
+  EXECUTOR_TOOL_INPUTS,
+  maxTurnsFor,
+  RISK_KIND_LABEL,
+  type CaseStep,
+  type ExecStep,
+  type ExecutorToolInput,
+} from '@qcard/shared';
 import {
   clockOf,
   imageBlock,
@@ -93,11 +102,11 @@ export type RunStepsInput = {
   steps: CaseStep[];
   /** 케이스 제목·사전조건·데이터 */
   context: string;
-  /** 최대 LLM 턴 (기본: 단계 수 × 3 + 10) */
+  /** 최대 LLM 턴 (기본: 단계 수 × env.limits.turnsPerStep + extraTurns) */
   maxTurns?: number;
   /** 첫 관찰 번호. 준비 플로우와 본 단계가 이어서 매겨 스크린샷이 겹치지 않게 한다 */
   firstIndex?: number;
-  /** 같은 화면 + 같은 액션 반복 한도 (기본 3) */
+  /** 같은 화면 + 같은 액션 반복 한도 (기본 env.limits.repeatLimit) */
   repeatLimit?: number;
 };
 
@@ -124,8 +133,9 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
   const clock = clockOf(env);
   const start = clock.now();
   const { caseId, steps } = input;
-  const maxTurns = input.maxTurns ?? steps.length * 3 + 10;
-  const repeatLimit = input.repeatLimit ?? 3;
+  const limits = { ...DEFAULT_RUN_LIMITS, ...env.limits };
+  const maxTurns = input.maxTurns ?? maxTurnsFor(limits, steps.length);
+  const repeatLimit = input.repeatLimit ?? limits.repeatLimit;
   const info = await env.device.info();
   const timeline: ExecStep[] = [];
   const repeats = new Map<string, number>();
@@ -454,7 +464,7 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
       const at = clock.now();
       const before = last.screenshot;
       try {
-        const step = await act(env, call, last, info.size);
+        const step = await act(env, call, last, info);
         record({ ...step, ...(risk ? { risk } : {}), screenshot: before, durationMs: clock.now() - at }, at);
         if (call.name !== 'wait') operated.add(pointer);
         thought(env, start, 'act', `${call.name} · ${step.intent}`);
@@ -512,7 +522,7 @@ async function act(
   env: AgentEnv,
   call: Call,
   o: Observation,
-  size: { w: number; h: number },
+  { size, connection }: DeviceInfo,
 ): Promise<Omit<ExecStep, 'index' | 'videoTs' | 'caseStepIndex' | 'screenshot' | 'durationMs'>> {
   const d = env.device;
   const resolve = (ref: string) => {
@@ -580,6 +590,12 @@ async function act(
     case 'set_network': {
       if (!env.allowNetworkToggle) throw new ActionInputError('이 실행에서는 네트워크 조작이 허용되지 않습니다');
       const { wifi, data } = call.input;
+      // 네트워크를 끄는 케이스는 USB 연결에서만 (F-EX-16). 기기를 건드리기 전에 막는다 — 켜기만 하는 것은 그대로
+      if (connection === 'wifi' && (!wifi || !data)) {
+        throw new EnvActionUnavailableError(
+          'Wi-Fi ADB로 연결된 디바이스에서는 네트워크를 끌 수 없습니다 (USB 연결 필요)',
+        );
+      }
       await d.setNetwork('wifi', wifi);
       await d.setNetwork('data', data);
       return {

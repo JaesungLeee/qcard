@@ -1,6 +1,6 @@
 import { Button, SectionMessage, textClass } from '@qcard/ui';
 import { useState } from 'react';
-import { Navigate, useNavigate, useSearchParams } from 'react-router';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import { TEST_USERS, usingEmulator } from '../data/firebaseClient';
 import '../features/projects/projects.css';
 import { useAuth } from './AuthGate';
@@ -33,7 +33,10 @@ export function LoginPage() {
 
   return (
     <PlainShell showUser={false}>
-      <div className="qp-card qp-form-col" style={{ margin: '0 auto', width: '100%', maxWidth: 400, wordBreak: 'keep-all' }}>
+      <div
+        className="qp-card qp-form-col"
+        style={{ margin: '0 auto', width: '100%', maxWidth: 400, wordBreak: 'keep-all' }}
+      >
         <div className="qp-stack" style={{ gap: 8 }}>
           <h1 className={textClass('title3', 'bold')}>qcard에 로그인</h1>
           <p className={`${textClass('label1')} qp-muted`} style={{ margin: 0 }}>
@@ -73,7 +76,22 @@ export function LoginPage() {
           </Button>
         )}
         <span className={`${textClass('caption1')} qp-faint`}>
-          GitHub 계정으로만 로그인합니다. 프로젝트 초대는 GitHub 사용자명 기준입니다.
+          GitHub 계정으로만 로그인합니다. 프로젝트 초대는 GitHub 사용자명 기준입니다. 로그인하면{' '}
+          <Link to="/terms" className="qp-link">
+            이용약관
+          </Link>
+          과{' '}
+          <Link to="/privacy" className="qp-link">
+            개인정보처리방침
+          </Link>
+          에 동의하게 됩니다.
+        </span>
+        <span className={`${textClass('caption1')} qp-faint`}>
+          처음이라면{' '}
+          <Link to="/guide" className="qp-link">
+            시작 가이드
+          </Link>
+          에서 준비물과 순서를 볼 수 있습니다.
         </span>
         {error && (
           <SectionMessage variant="negative" description={error}>

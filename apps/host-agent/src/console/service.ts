@@ -194,9 +194,8 @@ export class ConsoleService implements ConsoleBackend {
         const target = s.cycle.targets.find((t) => t.model === info.model && t.osMajor === info.osMajor);
         if (!target) continue;
         const d = await api.getCycle({ projectId: project.id, cycleId: s.cycle.id });
-        const done = new Set(
-          d.results.filter((r) => r.deviceId === target.id && r.verdict !== 'nt').map((r) => r.tcId),
-        );
+        const verdicts = new Map(d.results.filter((r) => r.deviceId === target.id).map((r) => [r.tcId, r.verdict]));
+        const done = new Set([...verdicts].filter(([, v]) => v !== 'nt').map(([tcId]) => tcId));
         // 이 디바이스로 돌리던 내 Run이 호스트 신호 없이 "실행 중"으로 남아 있으면(호스트가 죽음) 일시정지로 정리한다 (F-DV-04)
         const runs = d.runs.map((r) => {
           if (!mine(r) || r.deviceId !== target.id || r.id === this.run?.runId) return r;
@@ -226,7 +225,15 @@ export class ConsoleService implements ConsoleBackend {
           deviceId: target.id,
           cases: d.cases
             .filter((c) => c.mode === 'auto')
-            .map((c) => ({ tcId: c.tcId, title: c.title, done: done.has(c.tcId) })),
+            .map((c) => ({
+              tcId: c.tcId,
+              title: c.title,
+              done: done.has(c.tcId),
+              feature: c.feature,
+              subFeature: c.subFeature,
+              priority: c.priority,
+              verdict: verdicts.get(c.tcId) ?? 'nt',
+            })),
           ...(accountShortage.length ? { accountShortage } : {}),
           ...(paused
             ? {

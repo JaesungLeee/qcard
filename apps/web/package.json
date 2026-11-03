@@ -9,7 +9,9 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests --dir src",
     "ui:snap": "playwright test",
-    "dev:firebase": "VITE_DATA=firebase VITE_FIREBASE_EMULATOR=true vite"
+    "dev:firebase": "VITE_DATA=firebase VITE_FIREBASE_EMULATOR=true vite",
+    "guide:shots": "GUIDE_SHOTS=1 playwright test guide-shots --project=desktop",
+    "guide:example": "node scripts/guide-example.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",

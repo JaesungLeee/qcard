@@ -18,6 +18,9 @@
 .qp-faint {
   color: var(--qc-foreground-neutral-tertiary);
 }
+.qp-link {
+  color: var(--qc-foreground-brand-primary);
+}
 .qp-field {
   display: flex;
   flex-direction: column;
@@ -126,6 +129,17 @@ a.qp-project:focus-visible {
   width: 20px;
   height: 20px;
   color: var(--qc-foreground-neutral-secondary);
+}
+
+/* 실행 안전장치 */
+.qp-limits {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--qc-space-16);
+}
+.qp-limit-turns > :not(span) {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 /* 위험 구역 */

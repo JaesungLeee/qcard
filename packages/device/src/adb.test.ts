@@ -29,6 +29,9 @@ function fakeAdb(outputs: Record<string, string> = {}) {
 const INFO = {
   'getprop ro.product.model': 'SM-S921N\n',
   'getprop ro.build.version.release': '15\n',
+  'getprop ro.build.display.id': 'AP3A.240905.015.A2.S921NKSU2BXK1\n',
+  'getprop ro.build.id': 'AP3A.240905.015.A2\n',
+  'getprop ro.build.version.security_patch': '2025-09-01\n',
   'wm size': 'Physical size: 1080x2340\n',
   'wm density': 'Physical density: 450\nOverride density: 420\n',
 };
@@ -78,10 +81,23 @@ describe('AdbDriver 명령', () => {
       serial: 'R3CX123',
       model: 'SM-S921N',
       osMajor: 15,
+      build: 'AP3A.240905.015.A2.S921NKSU2BXK1',
+      securityPatch: '2025-09-01',
       size: { w: 1080, h: 2340 },
       density: 420,
       connection: 'usb',
     });
+  });
+
+  it('빌드 번호는 display.id가 비면 build.id, 값이 없는 속성은 넣지 않는다 (F-CY-01)', async () => {
+    const { exec } = fakeAdb({
+      ...INFO,
+      'getprop ro.build.display.id': '\n',
+      'getprop ro.build.version.security_patch': '',
+    });
+    const info = await new AdbDriver('R3CX123', { exec }).info();
+    expect(info.build).toBe('AP3A.240905.015.A2');
+    expect(info).not.toHaveProperty('securityPatch');
   });
 
   it('트리는 덤프 파일을 받아 파싱한다', async () => {

@@ -24,6 +24,14 @@ export function ProjectListPage() {
             <Button
               variant="outlined"
               color="assistive"
+              leadingContent={<Icons.IconCircleInfo />}
+              onClick={() => void navigate('/guide')}
+            >
+              시작 가이드
+            </Button>
+            <Button
+              variant="outlined"
+              color="assistive"
               leadingContent={<Icons.IconDesktop />}
               onClick={() => void navigate('/hosts')}
             >
@@ -43,7 +51,10 @@ export function ProjectListPage() {
       <QueryState query={projects}>
         {(list) =>
           list.length === 0 ? (
-            <SectionMessage variant="info" description="새 프로젝트를 만들거나, 받은 초대 링크를 열어 참여하세요.">
+            <SectionMessage
+              variant="info"
+              description="새 프로젝트를 만들거나, 받은 초대 링크를 열어 참여하세요. 처음이라면 시작 가이드에서 순서를 볼 수 있습니다."
+            >
               아직 속한 프로젝트가 없습니다
             </SectionMessage>
           ) : (

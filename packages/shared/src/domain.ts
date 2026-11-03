@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RunLimits } from './runLimits';
 import { Verdict } from './verdict';
 
 /** 도메인 스키마 (PRD §6.4). Firestore 문서·fixture·LLM 구조화 출력이 같은 정의를 쓴다. */
@@ -15,6 +16,8 @@ export const Project = z.object({
   deletedAt: z.string().optional(),
   /** 이 시각이 지나면 데이터·비밀값을 영구 삭제한다 */
   purgeAt: z.string().optional(),
+  /** 실행 안전장치 (F-EX-12). 없으면 기본값 (`runLimitsOf`) */
+  runLimits: RunLimits.optional(),
 });
 export type Project = z.infer<typeof Project>;
 
@@ -527,6 +530,7 @@ export const PauseReason = z.enum([
   'device_locked',
   'device_disconnected',
   'host_lost',
+  'run_limit',
 ]);
 export type PauseReason = z.infer<typeof PauseReason>;
 export const PAUSE_REASON_LABEL: Record<PauseReason, string> = {
@@ -539,6 +543,7 @@ export const PAUSE_REASON_LABEL: Record<PauseReason, string> = {
   device_locked: '디바이스 잠김',
   device_disconnected: '디바이스 연결 끊김',
   host_lost: '호스트 연결 끊김',
+  run_limit: 'Run 토큰 한도',
 };
 
 export const Run = z.object({
@@ -874,7 +879,9 @@ export const Host = z.object({
    */
   consoleUrl: z.string().optional(),
   /** 이 호스트가 처리할 수 있는 작업 종류. 없으면 이 필드보다 오래된 호스트다 (QA 문서 생성·Run 시작만) */
-  jobs: z.array(z.string()).optional(),  /** 호스트 에이전트 버전 (`@qcard/host`). 없으면 이 필드보다 오래된 호스트다 (0.2.x 이하) */
+  jobs: z
+    .array(z.string())
+    .optional() /** 호스트 에이전트 버전 (`@qcard/host`). 없으면 이 필드보다 오래된 호스트다 (0.2.x 이하) */,
   version: z.string().optional(),
 });
 export type Host = z.infer<typeof Host>;
@@ -898,8 +905,9 @@ export function compareVersions(a: string, b: string): number {
  * Run을 맡길 수 있는 가장 낮은 호스트 버전. 웹·Functions·보안 규칙과 호환되지 않게 바뀐 호스트 릴리스에서 올린다.
  * 0.3.0: Run의 지금 칸(`currentTcId`)을 Functions(claimCell)만 정해서, 그 전 호스트는 첫 케이스에서 보안 규칙에 막힌다 (F-CY-06)
  * 0.4.0: 준비 플로우를 QA 문서 버전마다 둬서(`qaDocs/{d}/prepFlows`), 그 전 호스트는 옛 위치를 읽다 보안 규칙에 막힌다 (F-PF-01)
+ * 0.5.0: 실행 안전장치를 프로젝트 설정으로 옮겨(`runLimits`), 그 전 호스트는 설정한 한도와 Run당 토큰 한도를 무시하고 돈다 (F-EX-12)
  */
-export const MIN_HOST_VERSION = '0.4.0';
+export const MIN_HOST_VERSION = '0.5.0';
 /** 이 호스트로는 Run을 시작할 수 없다. 버전을 알리지 않는 호스트는 그 필드보다 오래된 것이다 */
 export const hostOutdated = (host: Pick<Host, 'version'>) =>
   !host.version || compareVersions(host.version, MIN_HOST_VERSION) < 0;
