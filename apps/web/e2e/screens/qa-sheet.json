@@ -7,6 +7,8 @@
   { "name": "qa-sheet-cycles-local", "path": "/p/haru/cycles", "waitFor": "1.3.0 (130) 1차 회귀", "click": "로컬 실행", "then": "설치된 앱" },
   { "name": "qa-sheet-summary", "path": "/p/haru/cycles/cycle-130-1?tab=summary", "waitFor": "진행 매트릭스" },
   { "name": "qa-sheet-cases", "path": "/p/haru/cycles/cycle-130-1?tab=cases", "waitFor": "TC-ONBOARDING-001" },
+  { "name": "qa-sheet-pick-modal", "path": "/p/haru/cycles/cycle-130-1?tab=summary&pick=modal", "waitFor": "모두 고르기" },
+  { "name": "qa-sheet-pick-modal-all", "path": "/p/haru/cycles/cycle-130-1?tab=summary&pick=modal", "waitFor": "모두 고르기", "click": "전체", "then": "0 / 13" },
   { "name": "qa-sheet-defects", "path": "/p/haru/cycles/cycle-130-1?tab=defects", "waitFor": "앱이 백그라운드로 감" },
   { "name": "qa-sheet-traceability", "path": "/p/haru/cycles/cycle-130-1?tab=traceability", "waitFor": "요구사항별 연결 케이스" },
   { "name": "qa-sheet-env", "path": "/p/haru/cycles/cycle-130-1?tab=env", "waitFor": "서명 인증서 SHA-1" },

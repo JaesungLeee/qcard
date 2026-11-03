@@ -589,6 +589,15 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     const option = home().cycles.find((c) => c.cycleId === 'cycle-130-1');
     expect(option).toMatchObject({ projectId: 'haru', deviceId: DEVICE });
     expect(option!.cases.some((c) => c.tcId === 'TC-ONBOARDING-004')).toBe(true);
+    // 케이스 고르기(F-CY-07)용: 기능·세부 기능·우선순위와 이 기기 칸의 판정
+    expect(option!.cases.find((c) => c.tcId === 'TC-ONBOARDING-004')).toMatchObject({
+      feature: expect.any(String),
+      subFeature: expect.any(String),
+      priority: expect.stringMatching(/^(high|medium|low)$/),
+      verdict: 'pass',
+      done: true,
+    });
+    expect(option!.cases.every((c) => c.done === (c.verdict !== 'nt'))).toBe(true);
     // 대상이 아닌 사이클은 보이지 않는다
     expect(home().cycles.every((c) => c.deviceId === DEVICE)).toBe(true);
 
@@ -740,6 +749,7 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     const option = home().cycles.find((c) => c.cycleId === 'cycle-130-1')!;
     expect(option.cases.length).toBeGreaterThan(1);
     expect(option.cases.filter((c) => !c.done).map((c) => c.tcId)).toEqual(['TC-ONBOARDING-004']);
+    expect(option.cases.find((c) => c.tcId === 'TC-ONBOARDING-004')?.verdict).toBe('nt');
 
     service.handle({ type: 'start', ...REF });
     let first: ConsoleServerMessage | undefined;

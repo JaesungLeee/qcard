@@ -5,13 +5,13 @@ import { Button, SectionMessage, textClass } from '@qcard/ui';
 import type { CycleDetail } from '../../data/api';
 import { useApi, useJobs, useMyHosts, useMyRole, useRequestRun } from '../../data/hooks';
 import { INSTALL_COMMAND } from '../hosts/model';
-import { runLaunch } from './model';
+import { runLaunch, type RunLaunch } from './model';
 import { useNow } from './parts';
 
 /** 방금 끝난 요청의 결과를 보여 주는 시간 */
 const RECENT_MS = 10 * 60_000;
 
-function useRunLaunch(d: CycleDetail, projectId: string) {
+export function useRunLaunch(d: CycleDetail, projectId: string) {
   const api = useApi();
   const role = useMyRole(projectId);
   const hosts = useMyHosts();
@@ -26,30 +26,36 @@ function useRunLaunch(d: CycleDetail, projectId: string) {
   );
   const pending = request.isPending || latest?.status === 'queued' || latest?.status === 'running';
   const recent = latest?.finishedAt && now - Date.parse(latest.finishedAt) < RECENT_MS ? latest : undefined;
-  return { usable, launch: runLaunch(d, hosts.data ?? [], api.currentUser, now), pending, recent, request };
+  const launch = runLaunch(d, hosts.data ?? [], api.currentUser, now);
+  /** 고른 케이스만 돌릴 때 `tcIds` (F-CY-07). 결과가 있는 칸도 다시 실행한다 */
+  const start = (opts: { resumeRunId?: string; tcIds?: string[] } = {}) => {
+    if (launch.state !== 'ready') return;
+    request.mutate({ cycleId: d.cycle.id, deviceId: launch.target.id, ...opts });
+  };
+  return { usable, launch, pending, recent, request, start };
+}
+
+/** 웹에서 실행할 수 없을 때의 안내. 실행할 수 있으면 undefined */
+export function launchNote(launch: RunLaunch): string | undefined {
+  if (launch.state === 'no_host') return '내 호스트 에이전트가 꺼져 있어 웹에서 실행할 수 없습니다';
+  if (launch.state === 'no_device') {
+    return launch.devices.length
+      ? `내 호스트의 폰(${launch.devices.join(', ')})은 이 사이클 대상이 아닙니다`
+      : '내 호스트에 연결된 폰이 없습니다';
+  }
+  if (launch.state === 'outdated') {
+    return `내 호스트(${launch.host.name})가 이전 버전${launch.host.version ? ` ${launch.host.version}` : ''}입니다. ${INSTALL_COMMAND}로 업데이트한 뒤 다시 켜세요`;
+  }
+  if (launch.state === 'running') return `내 호스트(${launch.host.name})에서 실행 중입니다`;
+  return undefined;
 }
 
 /** 페이지 머리의 [내 호스트에서 실행] */
 export function RunLaunchActions({ d, projectId }: { d: CycleDetail; projectId: string }) {
-  const { usable, launch, pending, request } = useRunLaunch(d, projectId);
+  const { usable, launch, pending, start } = useRunLaunch(d, projectId);
   if (!usable) return null;
-  const note = (text: string) => <span className={`${textClass('caption1')} qs-muted`}>{text}</span>;
-  if (launch.state === 'no_host') return note('내 호스트 에이전트가 꺼져 있어 웹에서 실행할 수 없습니다');
-  if (launch.state === 'no_device') {
-    return note(
-      launch.devices.length
-        ? `내 호스트의 폰(${launch.devices.join(', ')})은 이 사이클 대상이 아닙니다`
-        : '내 호스트에 연결된 폰이 없습니다',
-    );
-  }
-  if (launch.state === 'outdated') {
-    return note(
-      `내 호스트(${launch.host.name})가 이전 버전${launch.host.version ? ` ${launch.host.version}` : ''}입니다. ${INSTALL_COMMAND}로 업데이트한 뒤 다시 켜세요`,
-    );
-  }
-  if (launch.state === 'running') return note(`내 호스트(${launch.host.name})에서 실행 중입니다`);
-  const start = (resumeRunId?: string) =>
-    request.mutate({ cycleId: d.cycle.id, deviceId: launch.target.id, ...(resumeRunId ? { resumeRunId } : {}) });
+  const note = launchNote(launch);
+  if (note || launch.state !== 'ready') return <span className={`${textClass('caption1')} qs-muted`}>{note}</span>;
   return (
     <>
       {launch.paused && (
@@ -58,7 +64,7 @@ export function RunLaunchActions({ d, projectId }: { d: CycleDetail; projectId: 
           variant="outlined"
           color="assistive"
           disabled={pending}
-          onClick={() => start(launch.paused!.id)}
+          onClick={() => start({ resumeRunId: launch.paused!.id })}
         >
           이어서 실행
         </Button>
