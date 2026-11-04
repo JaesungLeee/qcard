@@ -11,7 +11,7 @@
 
 스펙 문서를 넣으면 AI Agent가 **앱 버전별 QA 문서(테스트 케이스)를 만들고**, 실행자 PC에 연결된 **Android 디바이스에서 직접 수행**하는 QA 자동화 플랫폼이다. 실행자는 로컬 콘솔에서 디바이스 화면과 Agent의 판단을 실시간으로 지켜보고, 팀은 웹 대시보드에서 진행 상태와 결과를 함께 본다.
 
-서비스: [qcard.dev](https://qcard.dev) · 호스트 에이전트: npm [`@qcard/host`](https://www.npmjs.com/package/@qcard/host)
+**[시작 가이드](https://qcard.dev/guide)** · [스펙 작성법](https://qcard.dev/guide/spec) · [qcard.dev](https://qcard.dev) · npm [`@qcard/host`](https://www.npmjs.com/package/@qcard/host)
 
 ## 왜 만들었나
 
@@ -28,6 +28,8 @@
 4. **실행** — 각 실행자가 자기 PC의 호스트 에이전트로 Run을 시작한다. Agent가 스크립트 없이 화면을 보고 조작하며, 검증 포인트마다 증거를 남긴다. 위험한 액션이나 본인인증은 사람에게 넘긴다.
 5. **결과** — 조건을 모두 채운 Pass는 자동 확정되고, 나머지는 사람이 판정 추적 화면에서 근거를 따라가 확정한다. 웹 QA 시트로 팀이 같은 결과를 본다.
 
+처음 쓰는 방법은 [시작 가이드](https://qcard.dev/guide)에 화면과 함께 있다 — 호스트 설치·PC 연결부터 첫 사이클 결과 확정까지. 스펙 형식은 [스펙 작성법](https://qcard.dev/guide/spec).
+
 LLM은 **각 사용자 PC에 설치된 본인의 Claude Code**로 부른다. 비용은 각자의 Claude 구독 플랜에서 차감되고, qcard는 Claude 자격 증명을 다루지 않는다.
 
 ## 범위
@@ -39,6 +41,7 @@ LLM은 **각 사용자 PC에 설치된 본인의 Claude Code**로 부른다. 비
 
 | 문서                                         | 내용                                                                                                                                                                                                                                                                                                                   |
 | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [시작 가이드](https://qcard.dev/guide)       | 사용자용 — 설치·연결·QA 문서·사이클·결과 확정 (웹)                                                                                                                                                                                                                                                                     |
 | [docs/concepts.md](docs/concepts.md)         | 용어, 판정, 데이터 모델                                                                                                                                                                                                                                                                                                |
 | [docs/architecture.md](docs/architecture.md) | 구성 요소, Agent 구조, 기술 스택, 테스트 전략                                                                                                                                                                                                                                                                          |
 | [docs/product/](docs/product/)               | 기능별 동작 규칙 — [QA 문서](docs/product/qa-doc.md) · [준비 플로우·테스트 계정](docs/product/prep-flows.md) · [사이클](docs/product/cycles.md) · [Agent 실행](docs/product/execution.md) · [로컬 콘솔](docs/product/console.md) · [결과·QA 시트](docs/product/results.md) · [프로젝트·멤버](docs/product/projects.md) |
