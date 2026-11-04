@@ -1,10 +1,12 @@
-# 태그 host-v<버전>을 푸시하면 호스트 에이전트(@qcard/host)를 npm에 올린다.
+# 호스트 에이전트(@qcard/host)를 npm에 올린다. 보통은 deploy.yml이 host-v<버전> 태그를 달고 그 태그로 workflow_dispatch한다
+# (GITHUB_TOKEN으로 푸시한 태그는 push 트리거를 띄우지 않는다). 사람이 태그를 푸시해도 돈다.
 # 태그 버전은 apps/host-agent/package.json의 version과 같아야 한다. npm 인증은 Trusted Publishing(토큰 없음) — docs/dev/ci.md
 name: publish-host
 
 on:
   push:
     tags: ['host-v*']
+  workflow_dispatch:
 
 env:
   # 로컬 콘솔에 넣는 웹 빌드용 Firebase 설정 (공개값)
