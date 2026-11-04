@@ -5,14 +5,9 @@ qcard의 버전별 변경 사항입니다. 버전 하나는 웹 서비스와, �
 
 ## [1.0.0](https://github.com/JaesungLeee/qcard/compare/v0.5.0...v1.0.0) - 2026-11-04
 
-<!-- 초안: 사용자 관점의 "~합니다"체로 다듬고 이 줄을 지우세요 (docs/dev/branching.md#changelog) -->
+첫 정식 버전입니다. 0.5.0과 기능은 같고, 지금까지의 기능을 1.0.0으로 묶어 안정 버전으로 내보냅니다.
 
-> 호스트 1.0.0. PC에서 `npm i -g @qcard/host`로 1.0.0으로 업데이트한 뒤 `qcard serve`를 다시 켜 주세요.
-> (이전 호스트로 실행할 수 없게 바꿨다면 `MIN_HOST_VERSION`을 올리고 맨 앞에 "⚠ **호스트 업데이트가 필요합니다.**"를 쓰세요)
-
-### Changed
-
-- (변경 내용)
+> 호스트 1.0.0. 호스트 0.5.0도 그대로 쓸 수 있습니다. 업데이트하려면 PC에서 `npm i -g @qcard/host`로 1.0.0으로 올린 뒤 `qcard serve`를 다시 켜 주세요.
 
 ## [0.5.0](https://github.com/JaesungLeee/qcard/compare/v0.4.0...v0.5.0) - 2026-11-03
 
