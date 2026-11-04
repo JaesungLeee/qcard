@@ -2,7 +2,7 @@ import type { Member, PrepFlow, PrepFlowKind, TestCase, TestCycle } from './doma
 import { MembershipError, requireEditor, type Actor } from './membership';
 
 /*
- * 준비 플로우 편집 규칙 (F-PF-01). 메모리 구현·Firestore 구현·Cloud Functions(삭제)가 같은 함수를 쓰고,
+ * 준비 플로우 편집 규칙. 메모리 구현·Firestore 구현·Cloud Functions(삭제)가 같은 함수를 쓰고,
  * 화면은 삭제를 막는 이유를 미리 보인다. 플로우는 QA 문서 버전마다 사본을 두어 편집은 그 버전에만 적용되고,
  * 사이클 스냅샷에는 들어가지 않아 그 버전으로 만든 사이클에는 다음 Run부터 적용된다.
  */
@@ -82,7 +82,7 @@ const refs = (c: TestCase) => [...c.prepFlowIds, ...(c.restoreFlowId ? [c.restor
 const active = (cases: TestCase[]) => cases.filter((c) => c.change !== 'removed');
 
 /**
- * 새 QA 문서가 이전 버전에서 이어받을 플로우 (F-QD-08): 활성 케이스가 참조하는 것만, 목록 순서 그대로.
+ * 새 QA 문서가 이전 버전에서 이어받을 플로우: 활성 케이스가 참조하는 것만, 목록 순서 그대로.
  * 쓰이지 않게 된 플로우는 이전 버전에만 남는다
  */
 export function flowsUsedBy(flows: PrepFlow[], cases: TestCase[]): PrepFlow[] {
@@ -91,7 +91,7 @@ export function flowsUsedBy(flows: PrepFlow[], cases: TestCase[]): PrepFlow[] {
 }
 
 /**
- * 프로젝트 공용 목록(PRD v0.16까지)을 QA 문서 버전별 사본으로 나눈다: 그 버전의 케이스가 참조하는 플로우를 버전마다,
+ * 이전의 프로젝트 공용 목록을 QA 문서 버전별 사본으로 나눈다: 그 버전의 케이스가 참조하는 플로우를 버전마다,
  * 어느 케이스도 참조하지 않는 플로우(사람이 만들고 아직 연결하지 않은 것)는 최신 버전에. 문서가 없으면 빈 결과
  */
 export function splitPrepFlowsByDoc(

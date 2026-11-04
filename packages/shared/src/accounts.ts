@@ -2,7 +2,7 @@ import { DEFAULT_ACCOUNT_KIND, RUN_STALE_MS, type AccountSecret, type Member, ty
 import { MembershipError, requireEditor, type Actor } from './membership';
 
 /*
- * 테스트 계정 풀 규칙 (F-PF-04·08·09, F-EX-09). 메모리 구현과 Cloud Functions가 같은 함수를 쓴다.
+ * 테스트 계정 풀 규칙. 메모리 구현과 Cloud Functions가 같은 함수를 쓴다.
  * membership과 같이 상태를 바꾸지 않고 규칙을 검사한 뒤 저장할 값을 돌려준다.
  * 비밀값(비밀번호·TOTP 시드)은 여기서 평문으로 다루고, 암호화·저장은 호출하는 쪽이 한다.
  */
@@ -55,7 +55,7 @@ function loginIdOf(raw: string, accounts: TestAccount[], self?: string) {
 
 const noteOf = (raw: string | undefined) => raw?.trim() || undefined;
 
-/** 계정 등록 (F-PF-08): Admin·QA만. 비밀번호는 필수 */
+/** 계정 등록: Admin·QA만. 비밀번호는 필수 */
 export function newAccount(
   members: Member[],
   accounts: TestAccount[],
@@ -131,7 +131,7 @@ export function accountDeletion(members: Member[], actor: Actor, account: TestAc
   if (account.lease && leaseLive) throw rule('실행 중인 Run이 쓰고 있는 계정은 삭제할 수 없습니다.');
 }
 
-/** 로그인 실패 표시·격리 해제 (F-PF-08·09): Admin·QA만 */
+/** 로그인 실패 표시·격리 해제: Admin·QA만 */
 export function flagClearing(members: Member[], actor: Actor, account: TestAccount, flag: 'loginFailed' | 'quarantine') {
   requireEditor(members, actor.uid);
   if (!account[flag]) throw rule(flag === 'quarantine' ? '격리된 계정이 아닙니다.' : '로그인 실패 표시가 없습니다.');
@@ -149,7 +149,7 @@ export function leaseLive(run: Pick<Run, 'status' | 'heartbeatAt'> | undefined, 
   return Date.parse(now) - Date.parse(run.heartbeatAt) <= RUN_STALE_MS;
 }
 
-/** 끊긴 배정을 푼다. 원복 플로우가 있는 케이스 중에 끊겼으면 상태를 알 수 없어 격리한다 (F-PF-09) */
+/** 끊긴 배정을 푼다. 원복 플로우가 있는 케이스 중에 끊겼으면 상태를 알 수 없어 격리한다 */
 export function expiredLease(account: TestAccount, now: string): TestAccount {
   const { lease, ...rest } = account;
   if (!lease?.restoring) return rest;
@@ -171,7 +171,7 @@ export type ClaimRequest = {
 };
 
 /**
- * 케이스 단위 배정 (F-PF-04). `accounts`는 끊긴 배정을 이미 푼(expiredLease) 상태여야 한다.
+ * 케이스 단위 배정. `accounts`는 끊긴 배정을 이미 푼(expiredLease) 상태여야 한다.
  * 빈 계정이 없으면 undefined — 그 케이스는 Blocked("계정 없음")
  */
 export function claiming(
@@ -213,7 +213,7 @@ export type ReleaseOutcome =
   | { kind: 'restore_failed'; detail?: string };
 
 /**
- * 반납: 종류 전환·Run 종료 (F-PF-04), 로그인 실패 표시 (F-PF-08), 원복 실패 격리 (F-PF-09).
+ * 반납: 종류 전환·Run 종료, 로그인 실패 표시, 원복 실패 격리.
  * 이 Run의 배정이 아니면(신호가 끊겨 이미 풀렸으면) 바꿀 것이 없어 undefined
  */
 export function releasing(

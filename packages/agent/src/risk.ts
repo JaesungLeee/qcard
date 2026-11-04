@@ -3,7 +3,7 @@ import type { CaseStep, RiskKind } from '@qcard/shared';
 import type { Observation } from './env';
 
 /*
- * 위험 액션 (F-EX-10). Agent가 액션에 붙인 위험 표시와 코드 안전장치(여기)로 이중 판별한다 —
+ * 위험 액션. Agent가 액션에 붙인 위험 표시와 코드 안전장치(여기)로 이중 판별한다 —
  * LLM이 놓쳐도 앱 밖 탭·민감한 권한·결제·발송·본인인증 화면은 멈춘다. 오탐은 멈추고 묻는 것뿐이라 넓게 잡는다.
  *
  *   등급: identity → 사람 전용(Agent는 입력·탭하지 않고 실행자가 직접), 나머지 → 승인 필요

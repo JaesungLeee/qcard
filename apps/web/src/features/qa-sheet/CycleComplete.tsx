@@ -1,4 +1,4 @@
-// 사이클 완료·다시 열기 (F-CY-09): QA 권한자가 완료로 표시하면 새 Run을 받지 않는다. 사람 확정은 계속 된다.
+// 사이클 완료·다시 열기: QA 권한자가 완료로 표시하면 새 Run을 받지 않는다. 사람 확정은 계속 된다.
 // 남은 확인필요·N/T 칸과 끝나지 않은 Run을 먼저 알리고 확인받는다. 다시 열기는 되돌릴 수 있어 바로 한다.
 import { completionWarnings } from '@qcard/data';
 import { Button, Icons, SectionMessage } from '@qcard/ui';

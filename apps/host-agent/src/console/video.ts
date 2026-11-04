@@ -6,7 +6,7 @@ import { execAdb, resolveAdb } from '@qcard/device/node';
 import type { ConsoleVideoConfig } from '@qcard/shared';
 
 /*
- * 디바이스 화면 스트림 (F-DB-01): scrcpy 서버를 디바이스에서 띄워 H.264를 받아 로컬 콘솔로 중계한다.
+ * 디바이스 화면 스트림: scrcpy 서버를 디바이스에서 띄워 H.264를 받아 로컬 콘솔로 중계한다.
  * 서버 디바이스 → 이 PC(adb forward) → 브라우저(WebSocket, WebCodecs로 디코딩). 화면은 서버를 거치지 않는다.
  *   - scrcpy 서버는 /data/local/tmp에 올려 app_process로 실행하고, 끝나면 지운다(cleanup). 앱 설치·데이터와 무관하다
  *   - 입력 제어는 끈다(control=false) — 조작은 Agent(adb)와 실행자의 손으로만 한다

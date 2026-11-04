@@ -8,8 +8,8 @@ export function canonicalJson(value: unknown): string {
 }
 
 /**
- * FNV-1a 32bit 결정적 내용 해시. 케이스 내용 해시(승인 기준, F-QD-10)와
- * 스펙 행 해시(버전 간 동일·변경 판정, F-QD-08)에 쓴다.
+ * FNV-1a 32bit 결정적 내용 해시. 케이스 내용 해시(승인 기준)와
+ * 스펙 행 해시(버전 간 동일·변경 판정)에 쓴다.
  */
 export function hash(value: unknown): string {
   const s = canonicalJson(value);

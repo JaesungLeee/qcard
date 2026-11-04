@@ -18,7 +18,7 @@ import { actorOf, fail, membersIn, nowOf, parse, ProjectId, read, type Ctx } fro
 import type { SecretBox } from './secretBox';
 
 /*
- * 테스트 계정 풀 (F-PF-04·08·09, F-EX-09). 규칙은 @qcard/shared accounts — 메모리 구현도 같은 함수를 쓴다.
+ * 테스트 계정 풀. 규칙은 @qcard/shared accounts — 메모리 구현도 같은 함수를 쓴다.
  * 계정 문서는 멤버가 읽고, 비밀값은 암호화해 따로 두며 클라이언트는 읽지 못한다(보안 규칙).
  * 비밀값은 배정(claimAccount) 응답으로만, 그 Run을 실행 중인 실행자의 호스트에 나간다. 나갈 때마다 기록을 남긴다.
  */
@@ -56,7 +56,7 @@ const opt = z
   .nullish()
   .transform((v) => v ?? undefined);
 
-/** 계정 등록 (F-PF-08): Admin·QA */
+/** 계정 등록: Admin·QA */
 export async function createAccount(ctx: Ctx, data: unknown): Promise<TestAccount> {
   const input = parse(
     ProjectId.extend({ kind: opt, loginId: z.string(), note: opt, password: z.string(), totp: opt }),
@@ -115,7 +115,7 @@ export async function deleteAccount(ctx: Ctx, data: unknown): Promise<void> {
   });
 }
 
-/** 로그인 실패 표시 지우기·격리 해제 (F-PF-08·09) */
+/** 로그인 실패 표시 지우기·격리 해제 */
 export async function clearAccountFlag(ctx: Ctx, data: unknown): Promise<TestAccount> {
   const input = parse(AccountId.extend({ flag: z.enum(['loginFailed', 'quarantine']) }), data);
   return ctx.db.runTransaction(async (tx) => {
@@ -137,7 +137,7 @@ const ClaimInput = ProjectId.extend({
 });
 
 /**
- * 케이스 단위 배정 (F-PF-04): 호스트만, 자기 사용자가 실행 중인 Run에 대해서만. 끊긴 배정은 먼저 풀고
+ * 케이스 단위 배정: 호스트만, 자기 사용자가 실행 중인 Run에 대해서만. 끊긴 배정은 먼저 풀고
  * (원복 중 끊긴 계정은 격리), 빈 계정 하나를 잠근 뒤 비밀값을 돌려준다. 빈 계정이 없으면 `account: null`.
  * `accountId`로 이미 받은 계정을 이어 쓰면 배정만 갱신하고 비밀값은 다시 보내지 않는다
  */
@@ -185,7 +185,7 @@ export async function claimAccount(
   });
 }
 
-/** 반납 (F-PF-04): 호스트만. 로그인 실패·원복 실패면 표시·격리한다. 이미 풀린 배정이면 아무것도 하지 않는다 */
+/** 반납: 호스트만. 로그인 실패·원복 실패면 표시·격리한다. 이미 풀린 배정이면 아무것도 하지 않는다 */
 export async function releaseAccount(ctx: Ctx, data: unknown): Promise<void> {
   if (!ctx.host) throw fail('permission', '테스트 계정은 배정받은 호스트만 반납할 수 있습니다.');
   const input = parse(

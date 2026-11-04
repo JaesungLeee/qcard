@@ -8,7 +8,7 @@ import { loginErrorMessage, safeNext } from './loginRedirect';
 import { PlainShell } from './PlainShell';
 
 /**
- * 로그인 페이지 `/login?next=<돌아갈 주소>` (F-TM-01). GitHub 로그인만 있고, 로그인하면 next로 돌아간다.
+ * 로그인 페이지 `/login?next=<돌아갈 주소>`. GitHub 로그인만 있고, 로그인하면 next로 돌아간다.
  * 에뮬레이터는 시드 사용자를 고르고, 메모리 구현(로그인 없음)은 버튼을 누르면 그대로 들어간다(화면 확인용).
  */
 export function LoginPage() {

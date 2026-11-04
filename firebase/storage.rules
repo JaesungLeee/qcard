@@ -2,9 +2,9 @@ rules_version = '2';
 
 // qcard Cloud Storage 보안 규칙 — 스펙·빌드·증거(스크린샷·녹화)는 프로젝트 폴더 아래에 둔다
 //   projects/{p}/cycles/{c}/runs/{run}/{tc}/obs-NN.png   (호스트가 올리는 Run 스크린샷)
-//   projects/{p}/cycles/{c}/manual/{tc}__{device}/{id}.png  (사람이 올리는 수동 결과 첨부, F-RP-05)
+//   projects/{p}/cycles/{c}/manual/{tc}__{device}/{id}.png  (사람이 올리는 수동 결과 첨부)
 // 읽기는 멤버만, 쓰기는 Admin·QA만 (Firestore 멤버 문서를 본다). 프로젝트 간 증거는 서로 보이지 않는다.
-// 호스트 토큰은 그 연결(hostConnections)이 있는 동안만 통과한다 (F-TM-14, firestore.rules와 같은 규칙)
+// 호스트 토큰은 그 연결(hostConnections)이 있는 동안만 통과한다 (firestore.rules와 같은 규칙)
 service firebase.storage {
   match /b/{bucket}/o {
     function member(p) {
@@ -19,7 +19,7 @@ service firebase.storage {
           || (firestore.exists(connection()) && firestore.get(connection()).data.uid == request.auth.uid));
     }
 
-    // 빌드(APK)는 크다. 한 번 올린 파일은 덮어쓰지 않는다 (F-DV-05).
+    // 빌드(APK)는 크다. 한 번 올린 파일은 덮어쓰지 않는다.
     // `create`만으로는 기존 파일 위 업로드가 막히지 않으므로 `resource == null`(아직 없는 파일)을 함께 본다
     match /projects/{p}/builds/{id}/{file} {
       allow read: if signedIn() && firestore.exists(member(p));
@@ -43,7 +43,7 @@ service firebase.storage {
         && request.resource.size < 20 * 1024 * 1024;
     }
 
-    // 사람이 결과를 입력하며 첨부한 스크린샷 (F-RP-05): 웹에서 Admin·QA가 올린다. 한 번 올린 파일은 덮어쓰지 않는다.
+    // 사람이 결과를 입력하며 첨부한 스크린샷: 웹에서 Admin·QA가 올린다. 한 번 올린 파일은 덮어쓰지 않는다.
     // 완료된 사이클도 사람 확정은 계속 되므로 막지 않고, 삭제 중인 사이클(deletingAt)만 막는다.
     // 형식·크기는 packages/data/src/logic.ts의 attachmentProblem과 같다
     match /projects/{p}/cycles/{c}/manual/{result}/{file} {
@@ -59,7 +59,7 @@ service firebase.storage {
         && request.resource.size <= 10 * 1024 * 1024;
     }
 
-    // 스펙 스냅샷은 변경 불가 (F-IN-03). 업로드마다 묶음 id가 새로 생기므로 덮어쓸 일이 없다
+    // 스펙 스냅샷은 변경 불가. 업로드마다 묶음 id가 새로 생기므로 덮어쓸 일이 없다
     match /projects/{p}/specBundles/{bundle}/{rest=**} {
       allow read: if signedIn() && firestore.exists(member(p));
       allow create: if signedIn()

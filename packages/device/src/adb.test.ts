@@ -89,7 +89,7 @@ describe('AdbDriver 명령', () => {
     });
   });
 
-  it('빌드 번호는 display.id가 비면 build.id, 값이 없는 속성은 넣지 않는다 (F-CY-01)', async () => {
+  it('빌드 번호는 display.id가 비면 build.id, 값이 없는 속성은 넣지 않는다', async () => {
     const { exec } = fakeAdb({
       ...INFO,
       'getprop ro.build.display.id': '\n',
@@ -145,7 +145,7 @@ describe('AdbDriver 명령', () => {
     expect(calls).toEqual(['-s R3CX123 shell pm clear com.example.harukong']);
   });
 
-  it('Wi-Fi ADB 디바이스에서는 Wi-Fi를 끌 수 없다 (F-EX-16)', async () => {
+  it('Wi-Fi ADB 디바이스에서는 Wi-Fi를 끌 수 없다', async () => {
     const { exec, calls } = fakeAdb(INFO);
     const wifi = new AdbDriver('192.168.0.5:5555', { exec });
     await expect(wifi.setNetwork('wifi', false)).rejects.toBeInstanceOf(EnvActionUnavailableError);

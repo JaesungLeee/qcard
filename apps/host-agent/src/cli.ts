@@ -1,6 +1,6 @@
 /**
  * 호스트 에이전트: 사이클의 케이스를 연결된 실기기에서 실행하고 결과·증거를 Firebase에 올린다.
- * LLM은 이 PC에 로그인된 Claude Code(본인 플랜)로 부른다 (PRD §8 옵션 D).
+ * LLM은 이 PC에 로그인된 Claude Code(본인 플랜)로 부른다 (docs/security.md).
  *
  * 개발·자동화용 명령. 사용자는 상주 모드(serve)의 로컬 콘솔에서 사이클을 골라 Run을 시작한다.
  *
@@ -18,7 +18,7 @@
  *
  * 결과·증거는 업로드 큐(~/.qcard/upload-queue/<프로젝트>/<사용자>)를 거친다. 네트워크가 끊겨도 로컬에 남았다가 다음 실행 때 이어서 보낸다.
  *
- * 먼저 `connect`로 이 PC를 계정에 연결해 둔다(F-TM-14).
+ * 먼저 `connect`로 이 PC를 계정에 연결해 둔다.
  */
 import { parseArgs } from 'node:util';
 import { AdbDriver, devAppPackage, listDevices } from '@qcard/device/node';
@@ -79,14 +79,14 @@ if (!serial) throw new Error('연결된 디바이스가 없습니다');
 const device = new AdbDriver(serial, { allowDestructive: true });
 const info = await device.info();
 
-// 업로드 큐: 지난 실행에서 못 보낸 작업이 있으면 먼저 보내기 시작한다 (F-EX-13)
+// 업로드 큐: 지난 실행에서 못 보낸 작업이 있으면 먼저 보내기 시작한다
 const queue = await new UploadQueue(queueDir, firestoreApply(db, storage), {
   onDrop: (op, reason) => log(`보내지 못한 업로드를 뺐습니다 (${queueDir}/dropped): ${op.path} — ${reason}`),
 }).open();
 const leftover = await queue.pending();
 if (leftover) log(`지난 실행에서 남은 업로드 ${leftover}건을 보냅니다`);
 
-// ---------------------------------------------------------------- 대상 확인·빌드 설치 (F-CY-01, F-DV-05·06)
+// ---------------------------------------------------------------- 대상 확인·빌드 설치
 let prepared: Awaited<ReturnType<typeof prepareCycleRun>>;
 try {
   prepared = await prepareCycleRun(
@@ -106,7 +106,7 @@ try {
   process.exit(1);
 }
 
-// ---------------------------------------------------------------- 로컬 콘솔 (F-DB-01·05)
+// ---------------------------------------------------------------- 로컬 콘솔
 const consoleUi = values.headless ? undefined : await launchConsole(hubBackend(prepared.hub), log);
 const video = consoleUi ? await attachScreen(consoleUi.server, serial, log) : undefined;
 

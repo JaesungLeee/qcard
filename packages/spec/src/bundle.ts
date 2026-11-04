@@ -1,7 +1,7 @@
 import { parseSpec, type SpecDoc } from './parse';
 
 /*
- * 스펙 묶음 (F-IN-03·08): 앱 버전 하나의 스펙 폴더 전체 스냅샷. 폴더·ZIP에서 읽은 파일 목록을 받아
+ * 스펙 묶음: 앱 버전 하나의 스펙 폴더 전체 스냅샷. 폴더·ZIP에서 읽은 파일 목록을 받아
  * `<스펙 이름>/spec.md`만 입력으로 쓴다 (폴더 이름 = 스펙 이름). 같은 폴더의 plan·tasks·research 등은 무시한다.
  */
 

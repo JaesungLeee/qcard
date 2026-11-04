@@ -1,4 +1,4 @@
-/* Run 케이스 고르기 모달 (F-CY-07). 웹 QA 시트와 로컬 콘솔이 함께 쓴다. 색은 --qc-* 토큰만 쓴다. */
+/* Run 케이스 고르기 모달. 웹 QA 시트와 로컬 콘솔이 함께 쓴다. 색은 --qc-* 토큰만 쓴다. */
 .qcp-row {
   display: flex;
   flex-wrap: wrap;

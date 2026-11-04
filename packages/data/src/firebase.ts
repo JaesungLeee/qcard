@@ -129,7 +129,7 @@ const ordered = <T>(docs: { data: () => DocumentData }[]): T[] =>
 const resultId = (tcId: string, deviceId: string) => `${tcId}__${deviceId}`;
 
 /**
- * 판정 변경 이력 (F-RP-04)은 결과 문서가 아니라 `cycles/{c}/verdictLog`에 한 건씩 쌓는다.
+ * 판정 변경 이력은 결과 문서가 아니라 `cycles/{c}/verdictLog`에 한 건씩 쌓는다.
  * 배열 안에는 서버 시각을 넣을 수 없고, 보안 규칙이 판정자·시각을 확인하고 바꾸지 못하게 하려면 문서여야 한다.
  * 결과 문서의 `_decision`은 그 판정을 남긴 로그 id (규칙이 같은 요청에 로그가 생겼는지 본다)
  */
@@ -365,7 +365,7 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
           const snap = await tx.get(ref);
           if (!snap.exists()) throw new NotFoundError(`케이스 없음: ${tcId}`);
           const current = strip<TestCase>(snap.data());
-          // 낙관적 잠금 (F-QD-09)
+          // 낙관적 잠금
           if (current.rev !== expectedRev) throw new ConflictError(current);
           const next = nextCase(current, input, me().name, now());
           tx.set(ref, clean({ ...next, _i: snap.data()._i }));
@@ -447,7 +447,7 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
     // 참조 확인은 질의가 필요해 Functions 트랜잭션에서 한다 (클라이언트는 플로우를 지우지 못한다)
     deletePrepFlow: ({ projectId, docId }, flowId) => call<void>('deletePrepFlow', { projectId, docId, flowId }),
 
-    // ------------------------------------------------------------ 테스트 계정 (F-PF-04·08·09)
+    // ------------------------------------------------------------ 테스트 계정
     // 쓰기는 Functions만 (비밀값 봉인·배정 규칙). 배정이 살아 있는지는 그 Run의 연결 신호로 본다
     listAccounts: (projectId) =>
       guard(async () => {
@@ -472,7 +472,7 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       call<TestAccount>('clearAccountFlag', { projectId, accountId, flag }),
 
     // ------------------------------------------------------------ 테스트 사이클
-    // ------------------------------------------------------------ 빌드·사이클 만들기 (F-DV-05, F-CY-01·02)
+    // ------------------------------------------------------------ 빌드·사이클 만들기
     listBuilds: (projectId) =>
       guard(async () =>
         ordered<Build>((await getDocs(collection(db, P(projectId), 'builds'))).docs).sort((a, b) =>
@@ -612,7 +612,7 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
     },
     confirmVerdict: (input) =>
       guard(async () => {
-        // 첨부(F-RP-05)는 먼저 올리고 판정과 함께 경로를 남긴다. 판정 저장이 실패하면 올린 파일은 사이클 삭제 때 지워진다
+        // 첨부는 먼저 올리고 판정과 함께 경로를 남긴다. 판정 저장이 실패하면 올린 파일은 사이클 삭제 때 지워진다
         const a = input.attachments;
         let attachments: Screenshot[] | undefined;
         if (a) {
@@ -664,7 +664,7 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
         });
       }),
 
-    // 결함 (F-RP-19): 결함·사이클 번호·결과 칸을 한 트랜잭션으로 쓴다 (보안 규칙이 번호가 함께 올랐는지 본다)
+    // 결함: 결함·사이클 번호·결과 칸을 한 트랜잭션으로 쓴다 (보안 규칙이 번호가 함께 올랐는지 본다)
     createDefect: (input) =>
       guard(() =>
         runTransaction(db, async (tx) => {
@@ -697,7 +697,7 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
     // 하위 문서·Storage 증거까지 지워야 해서 Functions가 한다 (보안 규칙이 직접 삭제를 막는다)
     deleteCycle: (ref, confirmName) => call<void>('deleteCycle', { ...ref, confirmName }),
 
-    // ------------------------------------------------------------ QA 문서 생성 작업 (PRD §5.2, §6.2)
+    // ------------------------------------------------------------ QA 문서 생성 작업 (docs/product/qa-doc.md, docs/architecture.md)
     requestQaDoc: (projectId, input) =>
       guard(async () => {
         if (!deps.storage) throw new NotFoundError('스펙을 올릴 저장소가 연결되지 않았습니다');

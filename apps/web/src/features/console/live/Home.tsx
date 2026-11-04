@@ -17,7 +17,7 @@ import { LiveScreen } from './LiveScreen';
 import type { HostLink, StartRun } from './useLiveConsole';
 
 /**
- * 로컬 콘솔 홈 (Run이 없을 때, PRD §4 ⑤): 연결된 디바이스 화면을 실시간으로 보여 주고,
+ * 로컬 콘솔 홈 (Run이 없을 때): 연결된 디바이스 화면을 실시간으로 보여 주고,
  * 이 디바이스가 대상인 사이클을 골라 Run을 시작하거나 일시정지된 Run을 이어서 실행한다.
  */
 export function Home({
@@ -49,7 +49,7 @@ export function Home({
 }) {
   const width = useScreenWidth();
   const { device } = home;
-  // 설치·로그인·버전 문제를 알면 미리 막는다. 호스트도 시작 직전에 다시 점검한다 (F-EX-17)
+  // 설치·로그인·버전 문제를 알면 미리 막는다. 호스트도 시작 직전에 다시 점검한다
   const canStart = link === 'open' && !!device && !home.deviceProblem && !starting && claudeCodeReady(home.claudeCode);
   return (
     <div className="qcc">
@@ -167,7 +167,7 @@ function Notices({
   );
 }
 
-/** Claude Code를 쓸 수 없어 Run을 시작할 수 없을 때 해결 방법 (F-DB-09) */
+/** Claude Code를 쓸 수 없어 Run을 시작할 수 없을 때 해결 방법 */
 function ClaudeCodeNotice({ state }: { state: ClaudeCodeState }) {
   if (claudeCodeReady(state)) return null;
   const again = '30초 안에 다시 확인해 실행 버튼이 켜집니다.';
@@ -269,7 +269,7 @@ function CycleCard({
   const remaining = c.cases.filter((x) => !x.done);
   const resumeLeft = c.pausedRun?.left ?? 0;
   const resumeTotal = c.pausedRun?.total;
-  // 케이스 고르기 (F-CY-07): 웹 QA 시트와 같은 모달·규칙. 판정은 이 디바이스 칸 기준
+  // 케이스 고르기: 웹 QA 시트와 같은 모달·규칙. 판정은 이 디바이스 칸 기준
   const [picking, setPicking] = useState(initialPicking);
   const rows = useMemo(() => pickRows(c.cases, (x) => x.verdict), [c.cases]);
   const ref = { projectId: c.projectId, cycleId: c.cycleId };

@@ -10,7 +10,7 @@ import { PlainShell } from '../../shell/PlainShell';
 import { DataNotice, ErrorMessage, RoleBadge } from './parts';
 import './projects.css';
 
-/** 초대 수락 (F-TM-10): 데이터 처리 안내를 확인하고 수락하면 멤버가 된다 */
+/** 초대 수락: 데이터 처리 안내를 확인하고 수락하면 멤버가 된다 */
 export function InvitePage() {
   const { token = '' } = useParams();
   const view = useInvitation(token);

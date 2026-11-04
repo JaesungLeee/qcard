@@ -1,0 +1,201 @@
+<!doctype html>
+<!-- README 대표 이미지. render.mjs가 ?theme=light|dark로 열어 찍는다. 화면은 apps/web/public/guide/의 시작 가이드 스크린샷 -->
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @font-face {
+        font-family: Pretendard;
+        font-weight: 400;
+        src: url('../../packages/ui/fonts/Pretendard-Regular.subset.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: Pretendard;
+        font-weight: 700;
+        src: url('../../packages/ui/fonts/Pretendard-Bold.subset.woff2') format('woff2');
+      }
+      :root {
+        --brand: #0066ff;
+        --bg-a: #eef4ff;
+        --bg-b: #f7f9fc;
+        --text: #171719;
+        --sub: #5a5c63;
+        --chrome: #ffffff;
+        --chrome-line: #e1e2e4;
+        --shadow: 0 30px 80px rgba(23, 38, 77, 0.18), 0 6px 18px rgba(23, 38, 77, 0.08);
+        --url: #f4f4f5;
+      }
+      .dark {
+        --brand: #3385ff;
+        --bg-a: #0c1a33;
+        --bg-b: #111214;
+        --text: #f7f7f8;
+        --sub: #aeb0b6;
+        --chrome: #1b1c1e;
+        --chrome-line: #2e2f33;
+        --shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 6px 18px rgba(0, 0, 0, 0.35);
+        --url: #26272a;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+      body {
+        width: 1600px;
+        height: 900px;
+        overflow: hidden;
+        font-family: Pretendard, 'Apple SD Gothic Neo', sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(1100px 700px at 85% 15%, color-mix(in srgb, var(--brand) 22%, transparent), transparent 70%),
+          linear-gradient(160deg, var(--bg-a), var(--bg-b) 60%);
+        position: relative;
+      }
+      .head {
+        position: absolute;
+        left: 80px;
+        top: 70px;
+        width: 420px;
+      }
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 40px;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+      }
+      .logo img {
+        width: 52px;
+        height: 52px;
+      }
+      .tagline {
+        margin-top: 28px;
+        font-size: 30px;
+        line-height: 1.4;
+        font-weight: 700;
+        letter-spacing: -0.4px;
+      }
+      .tagline em {
+        font-style: normal;
+        color: var(--brand);
+      }
+      .points {
+        margin-top: 28px;
+        list-style: none;
+        padding: 0;
+        font-size: 19px;
+        line-height: 1.5;
+        color: var(--sub);
+      }
+      .points li {
+        margin-top: 12px;
+        padding-left: 26px;
+        position: relative;
+      }
+      .points li::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 9px;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--brand);
+      }
+      .window {
+        position: absolute;
+        border-radius: 14px;
+        overflow: hidden;
+        background: var(--chrome);
+        border: 1px solid var(--chrome-line);
+        box-shadow: var(--shadow);
+      }
+      .bar {
+        height: 40px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--chrome-line);
+      }
+      .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--chrome-line);
+      }
+      .url {
+        margin-left: 14px;
+        flex: 0 1 360px;
+        height: 24px;
+        border-radius: 6px;
+        background: var(--url);
+        font-size: 13px;
+        line-height: 24px;
+        padding: 0 12px;
+        color: var(--sub);
+      }
+      .window img.shot {
+        display: block;
+        width: 100%;
+      }
+      .web {
+        left: 560px;
+        top: 60px;
+        width: 960px;
+      }
+      .console {
+        left: 470px;
+        top: 410px;
+        width: 760px;
+      }
+      .label {
+        position: absolute;
+        font-size: 15px;
+        font-weight: 700;
+        color: #fff;
+        background: var(--brand);
+        padding: 6px 12px;
+        border-radius: 999px;
+        box-shadow: 0 6px 16px color-mix(in srgb, var(--brand) 40%, transparent);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="head">
+      <div class="logo"><img src="../../apps/web/public/favicon.svg" alt="" />qcard</div>
+      <p class="tagline">스펙을 넣으면<br /><em>Agent가 실기기에서</em><br />QA를 수행합니다</p>
+      <ul class="points">
+        <li>스펙에서 앱 버전별 QA 문서 생성</li>
+        <li>스크립트 없이 Android 디바이스 조작·판정</li>
+        <li>판정 근거와 결과를 팀이 웹에서 공유</li>
+      </ul>
+    </div>
+
+    <div class="window web">
+      <div class="bar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">qcard.dev</span>
+      </div>
+      <img class="shot" data-shot="sheet-cases" alt="" />
+    </div>
+    <span class="label" style="left: 1380px; top: 30px">웹 대시보드 · 팀 공유</span>
+
+    <div class="window console">
+      <div class="bar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span
+        ><span class="url">localhost · 로컬 콘솔</span>
+      </div>
+      <img class="shot" data-shot="console-running" alt="" />
+    </div>
+    <span class="label" style="left: 440px; top: 384px">로컬 콘솔 · 실행자 PC</span>
+
+    <script>
+      const theme = new URLSearchParams(location.search).get('theme') === 'dark' ? 'dark' : 'light';
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+      for (const img of document.querySelectorAll('[data-shot]')) {
+        img.src = `../../apps/web/public/guide/${img.dataset.shot}-${theme}.jpg`;
+      }
+    </script>
+  </body>
+</html>

@@ -1,4 +1,4 @@
-// ④ 추적성 매트릭스 (PRD §5.10): 요구사항 × TC, 요구사항별 커버리지·통과 여부
+// ④ 추적성 매트릭스 (docs/product/results.md): 요구사항 × TC, 요구사항별 커버리지·통과 여부
 import { VERDICT_LABEL } from '@qcard/shared';
 import {
   Chip,

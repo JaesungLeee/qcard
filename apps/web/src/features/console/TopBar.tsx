@@ -23,7 +23,7 @@ export type TopBarInfo = {
   dashboardUrl?: string;
 };
 
-/** 상단 바: 호스트 연결 · 사이클 · 빌드 · 디바이스 선택 · 대시보드로 (F-DV-03, F-DV-04) */
+/** 상단 바: 호스트 연결 · 사이클 · 빌드 · 디바이스 선택 · 대시보드로 */
 export function TopBar({ session }: { session: TopBarInfo }) {
   const { build, host } = session;
   return (
@@ -82,7 +82,7 @@ export function TopBar({ session }: { session: TopBarInfo }) {
 }
 
 /**
- * 이 PC의 Claude Code 상태 (F-DB-09). LLM 호출은 실행자 본인의 Claude Code·플랜으로 한다(PRD §8).
+ * 이 PC의 Claude Code 상태. LLM 호출은 실행자 본인의 Claude Code·플랜으로 한다(docs/security.md).
  * 문제가 있으면 무엇을 해야 하는지 글로 알린다 — 색 점만으로 구분하지 않는다.
  */
 export function ClaudeCodeChip({ state }: { state: ClaudeCodeState }) {

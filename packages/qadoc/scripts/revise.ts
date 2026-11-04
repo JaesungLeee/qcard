@@ -1,5 +1,5 @@
 /**
- * 답변 기반 케이스 수정안을 실제 모델로 만들어 본다 (F-QD-17, 본인 Claude Code·Opus — 플랜 사용량 차감).
+ * 답변 기반 케이스 수정안을 실제 모델로 만들어 본다 (본인 Claude Code·Opus — 플랜 사용량 차감).
  * 웹·호스트 흐름 전에 수정안 품질을 확인하는 개발용 명령이다. 결과는 화면에 출력만 한다(Firestore에 올리지 않음).
  *
  *   pnpm --filter @qcard/qadoc revise <docs/specs 폴더> --doc <generate 결과.json> --tc <TC ID> [옵션]

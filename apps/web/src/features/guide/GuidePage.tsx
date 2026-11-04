@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { Code, GuideLayout, Note, Shot, Steps, Ui, type GuideSection } from './GuideLayout';
 
 /*
- * 시작 가이드 `/guide`: 처음 온 팀이 문서만 보고 첫 사이클 결과까지 가는 순서 (PRD §10 공개 출시 완료 기준).
+ * 시작 가이드 `/guide`: 처음 온 팀이 문서만 보고 첫 사이클 결과까지 가는 순서 (docs/roadmap.md 공개 출시 완료 기준).
  * 버튼·메뉴 이름은 화면과 같게 쓴다. 화면 흐름을 바꾸면 이 문서와 스크린샷(`pnpm --filter @qcard/web guide:shots`)도 고친다.
  */
 

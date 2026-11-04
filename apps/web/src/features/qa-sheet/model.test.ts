@@ -99,7 +99,7 @@ describe('사이드바 [로컬 콘솔] 주소', () => {
   });
 });
 
-describe('호스트 연결 끊김 (F-DV-04)', () => {
+describe('호스트 연결 끊김', () => {
   const now = Date.parse('2026-10-23T10:00:00Z');
   const run = { status: 'running' as const, heartbeatAt: '2026-10-23T09:59:00Z' };
   it('실행 중 Run은 신호가 90초 넘게 없으면 끊긴 것으로 본다. 일시정지·신호 없는 예전 Run은 아니다', () => {
@@ -135,7 +135,7 @@ describe('progressMatrix', () => {
   });
 });
 
-describe('cellRun (F-CY-06)', () => {
+describe('cellRun', () => {
   const now = Date.parse('2026-10-23T10:00:00Z');
   const base = { cycleId: 'c', deviceId: 'd1', currentTcId: 'TC-1', startedAt: '2026-10-23T09:00:00Z' };
   const paused = { ...base, id: 'r-paused', executor: '이재성', status: 'paused' as const, heartbeatAt: '2026-10-23T09:59:50Z' };
@@ -245,7 +245,7 @@ describe('primaryDevice', () => {
   });
 });
 
-describe('Run 케이스 고르기 (F-CY-07)', () => {
+describe('Run 케이스 고르기', () => {
   it('시드 사이클: 남은 칸 기본값이 [내 호스트에서 실행]의 남은 건수와 같다', async () => {
     const d = await load();
     const host = { id: 'h', name: '맥', lastSeen: new Date().toISOString(), version: '9.9.9' };

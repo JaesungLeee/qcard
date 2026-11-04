@@ -10,7 +10,7 @@ import { ClaudeCodeSetupError, LlmOutputError, LlmTimeoutError, PlanLimitError }
 import { CLAUDE_CODE_MIN_VERSION, type LlmClient, type LlmRequest, type LlmResponse, type LlmRetry } from './types';
 
 /*
- * 사용자 PC에 설치·로그인된 Claude Code를 헤드리스(`claude -p`)로 실행해 LLM을 부른다 (PRD §8 옵션 D).
+ * 사용자 PC에 설치·로그인된 Claude Code를 헤드리스(`claude -p`)로 실행해 LLM을 부른다 (docs/security.md).
  * 사용자 본인의 Claude 플랜으로 과금되고, qcard는 자격 증명을 읽거나 전달하지 않는다.
  *
  * 요청·응답은 다른 구현과 같은 Messages API 형태로 주고받는다. 그래서 녹화·재생·사용량·비밀값 검사는 그대로 쓴다.
@@ -541,7 +541,7 @@ const run = (args: string[]) =>
   );
 
 /**
- * 설치·로그인·버전 상태 (F-EX-17). models를 주면 그 모델들에 필요한 버전보다 낮은지 본다.
+ * 설치·로그인·버전 상태. models를 주면 그 모델들에 필요한 버전보다 낮은지 본다.
  * 계정 식별 정보(이메일·조직)는 돌려주지 않는다
  */
 export async function claudeCodeStatus(models: readonly string[] = []): Promise<ClaudeCodeStatus> {

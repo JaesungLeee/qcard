@@ -11,7 +11,7 @@ import { CONNECT_COMMAND, connectedPcs, INSTALL_COMMAND, INSTALL_NOTE, type Conn
 import './hosts.css';
 
 /**
- * 연결된 PC (F-TM-14): 내 계정에 연결한 호스트 에이전트 목록과 연결 해제.
+ * 연결된 PC: 내 계정에 연결한 호스트 에이전트 목록과 연결 해제.
  * 해제하면 그 PC는 바로 읽기·쓰기가 막힌다. 웹에서 로그아웃해도 연결은 남는다
  */
 export function HostsPage() {

@@ -118,7 +118,7 @@ describe('프로젝트', () => {
   });
 });
 
-describe('사이클 삭제 (F-CY-10)', () => {
+describe('사이클 삭제', () => {
   const T0 = '2026-10-28T10:00:00.000Z';
   const NAME = '1.0.0 (7) 통합테스트';
   /** 사이클 c1(하위 문서·증거 포함)과, 지우면 안 되는 사이클 c10·빌드 */
@@ -245,7 +245,7 @@ describe('프로필', () => {
   });
 });
 
-describe('호스트 연결 (F-TM-14)', () => {
+describe('호스트 연결', () => {
   const mint = async (uid: string, claims: { host: string }) => `token:${uid}:${claims.host}`;
 
   it('연결하면 비밀값은 해시로만 남고, 그 비밀값으로 호스트 토큰을 받는다', async () => {

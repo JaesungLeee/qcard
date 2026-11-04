@@ -1,4 +1,4 @@
-// 수동 결과의 첨부 스크린샷 (F-RP-05, 선택): 입력 패널의 첨부 칸과 판정 추적 뷰의 첨부 목록
+// 수동 결과의 첨부 스크린샷 (선택): 입력 패널의 첨부 칸과 판정 추적 뷰의 첨부 목록
 import type { Screenshot } from '@qcard/shared';
 import { Button, IconButton, Icons, textClass, token } from '@qcard/ui';
 import { useRef } from 'react';

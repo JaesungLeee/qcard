@@ -14,7 +14,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { claimJob, heartbeat, HOST_JOBS, pendingJobs, processJob, processReviseJob } from '../src';
 
 /*
- * QA 문서 생성 작업 (PRD §5.2, §6.2): 웹이 스펙을 올려 작업을 만들고 → 요청자의 호스트가 받아 생성 → Firestore에 저장.
+ * QA 문서 생성 작업 (docs/product/qa-doc.md, docs/architecture.md): 웹이 스펙을 올려 작업을 만들고 → 요청자의 호스트가 받아 생성 → Firestore에 저장.
  * 에뮬레이터·보안 규칙 위에서, 모델은 가짜(fakeGeneratorLlm)로 확인한다.
  */
 
@@ -111,7 +111,7 @@ describe('QA 문서 생성 작업', () => {
       ['TC-SAMPLE-003', 'new'],
     ]);
     expect(doc.specs).toEqual([{ name: 'sample', feature: '샘플 기능', file: 'docs/specs/sample/spec.md' }]);
-    // 첫 버전이라 준비 플로우를 모두 새로 만들어 이 문서 아래에 둔다 (F-PF-01)
+    // 첫 버전이라 준비 플로우를 모두 새로 만들어 이 문서 아래에 둔다
     const flows = await qa.api.listPrepFlows({ projectId: PROJECT, docId: 'doc-2.0.0' });
     expect(flows.map((f) => f.id)).toEqual(['pf-clean', 'pf-home', 'pf-undo']);
     expect((await qa.api.listJobs(PROJECT))[0]).toMatchObject({
@@ -164,7 +164,7 @@ describe('QA 문서 생성 작업', () => {
     expect(doc.prevDocId).toBe('doc-2.0.0');
     expect(doc.cases.map((c) => c.change)).toEqual(['same', 'changed', 'same']);
 
-    // 준비 플로우는 이전 버전에서 사람이 고친 내용 그대로 이어받고, 이후 편집은 그 버전에만 적용된다 (F-QD-08)
+    // 준비 플로우는 이전 버전에서 사람이 고친 내용 그대로 이어받고, 이후 편집은 그 버전에만 적용된다
     const v210 = { projectId: PROJECT, docId: 'doc-2.1.0' };
     expect(done.result).toMatchObject({ newPrepFlows: 0 });
     expect((await lead.api.listPrepFlows(v210)).find((f) => f.id === 'pf-home')).toEqual(edited);
@@ -172,7 +172,7 @@ describe('QA 문서 생성 작업', () => {
     expect((await lead.api.listPrepFlows(v200)).find((f) => f.id === 'pf-home')).toEqual(edited);
   });
 
-  it('플랜 한도면 일시정지로 남기고, 요청자만 다시 시도할 수 있다 (F-EX-17)', async () => {
+  it('플랜 한도면 일시정지로 남기고, 요청자만 다시 시도할 수 있다', async () => {
     const lead = as(PEOPLE.lead);
     const job = await lead.api.requestQaDoc(PROJECT, { appVersion: '2.0.0', files: FILES });
     const { llm } = fakeGeneratorLlm({ failOn: { call: 2, error: new PlanLimitError('5시간 한도') } });
@@ -198,7 +198,7 @@ describe('QA 문서 생성 작업', () => {
     );
   });
 
-  it('케이스 수정안: 답변한 뒤 요청하면 내 호스트가 출처 행과 답변으로 수정안을 만들고, 케이스는 그대로 둔다 (F-QD-17)', async () => {
+  it('케이스 수정안: 답변한 뒤 요청하면 내 호스트가 출처 행과 답변으로 수정안을 만들고, 케이스는 그대로 둔다', async () => {
     const lead = as(PEOPLE.lead);
     const first = await lead.api.requestQaDoc(PROJECT, { appVersion: '2.0.0', files: FILES });
     await processJob(lead.deps(fakeGeneratorLlm().llm), (await claimJob(lead.db, first, 'pc', 'now'))!);
@@ -280,7 +280,7 @@ describe('QA 문서 생성 작업', () => {
     ).rejects.toThrow();
   });
 
-  it('호스트 연결 신호는 연결된 그 호스트만 쓰고 본인 웹에서 보인다 (F-TM-14)', async () => {
+  it('호스트 연결 신호는 연결된 그 호스트만 쓰고 본인 웹에서 보인다', async () => {
     const lead = as(PEOPLE.lead);
     await env.withSecurityRulesDisabled(async (c) => {
       const { doc, setDoc } = await import('firebase/firestore');

@@ -33,7 +33,7 @@ const toInput = (f?: PrepFlow): PrepFlowInput =>
 const same = (a: PrepFlowInput, b: PrepFlowInput) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
- * 준비 플로우 추가·편집 폼 (F-PF-01). 편집은 낙관적 잠금 — 다른 사람이 먼저 저장했으면 최신 내용을 보이고
+ * 준비 플로우 추가·편집 폼. 편집은 낙관적 잠금 — 다른 사람이 먼저 저장했으면 최신 내용을 보이고
  * 내 편집을 그 위에 다시 쓸지 버릴지 고른다. 편집은 그 QA 문서 버전에만 적용되고, 사이클에 고정되지 않아
  * 그 버전으로 만든 진행 중인 사이클도 다음 Run부터 바뀐다
  */

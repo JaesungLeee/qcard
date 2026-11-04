@@ -2,15 +2,15 @@ import { RunAbortedError, type ControlSignal, type RiskAnswer, type RiskRequest,
 import type { CaseResult, ConsoleControl, ExecStep, LiveConsole, TestCase, ThoughtEntry } from '@qcard/shared';
 
 /*
- * 로컬 콘솔 허브: 사이클 실행의 상태를 모아 화면에 밀어 주고(LiveConsole), 화면의 제어를 Agent에 전한다 (F-DB-05).
+ * 로컬 콘솔 허브: 사이클 실행의 상태를 모아 화면에 밀어 주고(LiveConsole), 화면의 제어를 Agent에 전한다.
  *   - 일시정지·Take over: 다음 턴 사이에서 Agent가 멈춘다. 누른 사이 Agent가 고른 액션은 실행하지 않는다
  *   - 건너뛰기: 지금 단계를 끝난 것으로 넘긴다 · 중단: 지금 케이스는 판정하지 않고 Run을 끝낸다
- *   - 수동 스텝: 실행자가 [완료]를 누를 때까지 기다린다 (10분 지나면 Blocked, F-EX-11)
- *   - 위험 액션: [승인](승인 필요만) 또는 [직접 실행] → [Agent에 반환]. 10분 안에 답이 없으면 Blocked (F-EX-10).
+ *   - 수동 스텝: 실행자가 [완료]를 누를 때까지 기다린다 (10분 지나면 Blocked)
+ *   - 위험 액션: [승인](승인 필요만) 또는 [직접 실행] → [Agent에 반환]. 10분 안에 답이 없으면 Blocked.
  *     직접 실행하는 동안은 시간을 재지 않는다
  */
 
-/** 수동 스텝 대기 한도 (F-EX-12 임시 기본값) */
+/** 수동 스텝 대기 한도 (임시 기본값) */
 export const MANUAL_TIMEOUT_MS = 10 * 60 * 1000;
 
 type Init = Omit<LiveConsole, 'queue' | 'current' | 'phase' | 'run' | 'usage'> & { caseTokenLimit: number };
@@ -172,7 +172,7 @@ export class ConsoleHub implements RunControl {
     });
   }
 
-  /** 다른 Run이 잡았거나 끝낸 칸 (F-CY-06): 이 Run의 큐에서 뺀다 */
+  /** 다른 Run이 잡았거나 끝낸 칸: 이 Run의 큐에서 뺀다 */
   caseSkipped(tc: TestCase) {
     this.set({ queue: this.state.queue.filter((q) => q.tcId !== tc.tcId) });
   }

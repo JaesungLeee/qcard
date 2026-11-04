@@ -24,7 +24,7 @@ import { HostStatus } from './Jobs';
 import './qa-doc.css';
 
 /*
- * 스펙 업로드 → QA 문서 생성 요청 (PRD §5.2, F-IN-03·08, F-QD-08).
+ * 스펙 업로드 → QA 문서 생성 요청 (docs/product/qa-doc.md).
  * 폴더·ZIP을 브라우저에서 읽어 `<스펙>/spec.md`만 파싱하고, 이전 버전과의 매칭(동일·변경·신규·삭제)을
  * LLM 없이 미리 보여 준다. 요청하면 스펙 묶음을 올리고 작업을 만든다 — 생성은 내 호스트 에이전트가 한다.
  */

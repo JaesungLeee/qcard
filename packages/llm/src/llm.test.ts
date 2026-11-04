@@ -126,7 +126,7 @@ describe('녹화·재생', () => {
   });
 });
 
-describe('사용량·한도 (F-EX-12)', () => {
+describe('사용량·한도', () => {
   it('캐시 읽기는 0.1배, 캐시 쓰기는 1.25배로 계산한다', () => {
     const usage = {
       input_tokens: 1_000,
@@ -168,7 +168,7 @@ describe('사용량·한도 (F-EX-12)', () => {
   });
 });
 
-describe('비밀값 (F-EX-09)', () => {
+describe('비밀값', () => {
   it('플레이스홀더 ↔ 실제 값, 로그용 마스킹', () => {
     const v = new SecretVault();
     const ph = v.set('owner_password', 'pa55word!');

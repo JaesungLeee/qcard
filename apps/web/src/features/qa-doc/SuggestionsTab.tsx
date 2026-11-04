@@ -12,7 +12,7 @@ export function suggestionsText(doc: Pick<QADocument, 'appVersion' | 'suggestion
   return lines.join('\n');
 }
 
-/** 스펙 보강 제안 (F-QD-05). 케이스가 아니라 스펙에 TS·EC를 더하자는 제안이다. */
+/** 스펙 보강 제안. 케이스가 아니라 스펙에 TS·EC를 더하자는 제안이다. */
 export function SuggestionsTab({ doc }: { doc: QADocument }) {
   const [copied, setCopied] = useState<'ok' | 'fail' | null>(null);
   const groups = useMemo(() => {

@@ -37,7 +37,7 @@ import { z } from 'zod';
 import type { SecretBox } from './secretBox';
 
 /*
- * 프로젝트·멤버·초대 쓰기 (F-TM-09~13). 클라이언트는 이 문서들을 직접 쓰지 못하고(보안 규칙),
+ * 프로젝트·멤버·초대 쓰기. 클라이언트는 이 문서들을 직접 쓰지 못하고(보안 규칙),
  * callable 함수가 트랜잭션 안에서 @qcard/shared membership 규칙을 검사한 뒤 쓴다.
  *
  * Firestore 구조
@@ -46,7 +46,7 @@ import type { SecretBox } from './secretBox';
  *   projects/{p}/members/{uid}               Member
  *   projects/{p}/invitations/{id}            Invitation
  *   invitationTokens/{token}                 { projectId, invitationId } — 토큰으로 초대를 찾는 색인
- *   hostConnections/{hostId}                 HostConnection + secretHash — 호스트 연결 (F-TM-14)
+ *   hostConnections/{hostId}                 HostConnection + secretHash — 호스트 연결
  *   users/{uid}/hosts/{hostId}               호스트 연결 신호 (호스트가 씀, 연결 해제 때 여기서 지움)
  *   projects/{p}/accounts/{id}               테스트 계정 (accounts.ts)
  *   projects/{p}/accountSecrets/{id}         테스트 계정 비밀값 (암호화, Functions만 읽는다)
@@ -183,7 +183,7 @@ export async function restoreProject(ctx: Ctx, data: unknown): Promise<Project> 
 export type RemoveFiles = (prefix: string) => Promise<void>;
 
 /**
- * 삭제 유예가 지난 프로젝트를 영구 삭제한다 (예약 실행, F-TM-12) — Storage 파일(스펙·빌드·스크린샷), 초대 토큰,
+ * 삭제 유예가 지난 프로젝트를 영구 삭제한다 (예약 실행) — Storage 파일(스펙·빌드·스크린샷), 초대 토큰,
  * 프로젝트 문서와 하위 문서(테스트 계정 비밀값·감사 로그 포함). Storage를 먼저 지워, 중간에 실패해도 `purgeAt`이
  * 남은 프로젝트를 다음 실행이 처음부터 다시 지운다. 한 프로젝트가 실패해도 나머지는 계속한다.
  * 지운 프로젝트 id를 돌려준다
@@ -209,7 +209,7 @@ export async function purgeDeletedProjects(db: Firestore, now: string, removeFil
 const CycleId = ProjectId.extend({ cycleId: z.string().min(1), confirmName: z.string() });
 
 /**
- * 사이클 삭제 (F-CY-10): 유예 없이 사이클 문서·하위 문서(케이스 사본·결과·Run·이전 시도·결함·판정 이력)와
+ * 사이클 삭제: 유예 없이 사이클 문서·하위 문서(케이스 사본·결과·Run·이전 시도·결함·판정 이력)와
  * Storage 증거를 지운다. 빌드·QA 문서는 남는다. 먼저 트랜잭션에서 규칙을 보고 삭제 중 표시를 남겨(새 Run을 막는다)
  * 그 뒤에 지운다 — 중간에 실패하면 표시가 남은 사이클을 다시 삭제해 이어서 지운다
  */
@@ -231,7 +231,7 @@ export async function deleteCycle(ctx: Ctx, data: unknown, removeFiles: RemoveFi
 const FlowId = ProjectId.extend({ docId: z.string().min(1), flowId: z.string().min(1) });
 
 /**
- * 준비 플로우 삭제 (F-PF-01): 그 QA 문서 버전의 케이스나 그 버전으로 만든 완료되지 않은 사이클이 참조 중이면 막는다
+ * 준비 플로우 삭제: 그 QA 문서 버전의 케이스나 그 버전으로 만든 완료되지 않은 사이클이 참조 중이면 막는다
  * (`prepFlowUses`). 보안 규칙으로는 참조를 질의할 수 없고 클라이언트 트랜잭션은 질의를 못 해서, 여기서 한 트랜잭션 안에
  * 참조를 읽고 지운다
  */
@@ -258,7 +258,7 @@ export async function deletePrepFlow(ctx: Ctx, data: unknown): Promise<void> {
   });
 }
 
-/** 실행 안전장치 저장 (F-EX-12). Admin만 */
+/** 실행 안전장치 저장. Admin만 */
 export async function setRunLimits(ctx: Ctx, data: unknown): Promise<Project> {
   // 범위 검사는 runLimitsChange가 한다 (화면과 같은 문구로)
   const { projectId, limits } = parse(ProjectId.extend({ limits: z.record(z.string(), z.number()) }), data);
@@ -370,7 +370,7 @@ export async function acceptInvitation(ctx: Ctx, data: unknown): Promise<Project
   });
 }
 
-// ------------------------------------------------------------------ 호스트 연결 (F-TM-14)
+// ------------------------------------------------------------------ 호스트 연결
 
 const connectionRef = (db: Firestore, hostId: string) => db.doc(`hostConnections/${hostId}`);
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');

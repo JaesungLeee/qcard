@@ -3,7 +3,7 @@ import type { Verdict } from '@qcard/shared';
 import { Icons, VerdictBadge, textClass, token } from '@qcard/ui';
 import { useEffect, useRef } from 'react';
 
-/** 실행 큐 (F-EX-11: 계정 역할·준비 상태가 같은 케이스끼리 묶인 실행 순서 그대로) */
+/** 실행 큐 (계정 역할·준비 상태가 같은 케이스끼리 묶인 실행 순서 그대로) */
 export function QueuePanel({ queue, aborted }: { queue: ConsoleQueueItem[]; aborted: boolean }) {
   const listRef = useRef<HTMLOListElement>(null);
   const done = queue.filter((q) => q.status === 'done').length;
@@ -96,7 +96,7 @@ function QueueStatus({ item, aborted }: { item: ConsoleQueueItem; aborted: boole
   return <span className={`${textClass('caption1')} qcc-faint`}>대기</span>;
 }
 
-/** 연결된 디바이스 정보 (F-DV-03) */
+/** 연결된 디바이스 정보 */
 export function DeviceInfo({ device }: { device: ConsoleDevice }) {
   return (
     <section className="qcc-card" aria-label="디바이스">

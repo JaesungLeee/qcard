@@ -43,9 +43,9 @@ export type CycleRunDeps = {
   awakeDir?: string;
   /** Agent 환경 덮어쓰기 (테스트: 시계·비전) */
   env?: Partial<Pick<AgentEnv, 'clock' | 'vision' | 'settleMs'>>;
-  /** 테스트 계정 배정·반납 (F-PF-04). 없으면 계정이 필요한 케이스는 Blocked */
+  /** 테스트 계정 배정·반납. 없으면 계정이 필요한 케이스는 Blocked */
   accounts?: AccountLeaser;
-  /** 칸 자동 선점 (F-CY-06). 없으면 잡지 않고 돈다(테스트) */
+  /** 칸 자동 선점. 없으면 잡지 않고 돈다(테스트) */
   cells?: CellClaimer;
 };
 
@@ -74,12 +74,12 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
   // 지난 Run에서 멈춘 업로드가 있으면 다시 보내 본다 (같은 오류면 이번 Run도 멈추고 알린다)
   deps.queue.retry();
   const { cycle, build, runs } = await api.getCycle({ projectId: req.projectId, cycleId: req.cycleId });
-  // 실행 안전장치 (F-EX-12): 사이클에 고정하지 않아 Run을 시작할 때마다 프로젝트 설정을 읽는다
+  // 실행 안전장치: 사이클에 고정하지 않아 Run을 시작할 때마다 프로젝트 설정을 읽는다
   const limits = runLimitsOf(await api.getProject(req.projectId));
   // 이어서 실행하면 그 Run의 큐를 그대로 쓴다 (남은 전체로 넓어지지 않게)
   const resumed = req.resumeRunId ? runs.find((r) => r.id === req.resumeRunId) : undefined;
   const tcIds = req.tcIds?.length ? req.tcIds : resumed?.tcIds?.length ? resumed.tcIds : undefined;
-  // 완료된 사이클은 새 Run도, 일시정지된 Run 이어서 실행도 받지 않는다 (F-CY-09)
+  // 완료된 사이클은 새 Run도, 일시정지된 Run 이어서 실행도 받지 않는다
   if (cycle.period.end) {
     throw new CycleRunError(`완료된 사이클입니다 (${cycle.name}). 웹에서 다시 열어야 실행할 수 있습니다.`);
   }
@@ -162,7 +162,7 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
   }
 
   async function start(): Promise<CycleRunOutcome> {
-    // 이 Run에 배정된 테스트 계정 비밀값 (메모리에만, 반납·Run 종료 때 비운다). LLM 요청에 섞이면 보내지 않는다 (F-EX-09)
+    // 이 Run에 배정된 테스트 계정 비밀값 (메모리에만, 반납·Run 종료 때 비운다). LLM 요청에 섞이면 보내지 않는다
     const vault = new SecretVault();
     const inner = deps.llm
       ? withSecretGuard(deps.llm(meter), vault)
@@ -219,7 +219,7 @@ export async function prepareCycleRun(deps: CycleRunDeps, req: CycleRunRequest) 
         },
         onStep: hub.step,
         control: hub,
-        // 실행자를 기다리는 동안 웹에 "승인 대기"·"실행자 대기"를 보인다 (승인은 로컬 콘솔에서만, F-EX-10)
+        // 실행자를 기다리는 동안 웹에 "승인 대기"·"실행자 대기"를 보인다 (승인은 로컬 콘솔에서만)
         onManual: (instruction) => waitFor('human', () => hub.onManual(instruction)),
         onRisk: (req) => waitFor(req.level, () => hub.onRisk(req)),
       },

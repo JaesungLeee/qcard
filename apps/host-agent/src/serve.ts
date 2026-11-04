@@ -12,14 +12,14 @@
  * - 로컬 콘솔: 시작할 때 한 번만 열 수 있는 주소를 출력한다(터미널에서 Enter를 누르면 새 주소). 연결된 폰 화면을 실시간으로 보여 주고, 이 폰이 대상인
  *   사이클을 골라 Run을 시작·이어서 실행한다. 폰을 뺐다 꽂으면 30초 안에 알아챈다
  *
- * - 30초마다 연결 신호(+ Claude Code 상태)를 보내 웹이 "호스트 연결됨"을 표시한다 (F-DB-09)
+ * - 30초마다 연결 신호(+ Claude Code 상태)를 보내 웹이 "호스트 연결됨"을 표시한다
  * - 웹에서 요청한 Run 시작(작업 kind `run_cycle`)을 받아 로컬 콘솔의 [실행]과 같은 경로로 시작한다. QA 문서 생성 중이어도 기다리지 않는다
  * - 내 작업만 받는다(요청자 = 나). 한 번에 하나씩, 처리 중에는 맥이 잠들지 않게 한다(caffeinate).
- *   케이스 수정안(F-QD-17)은 대기 중인 QA 문서 생성보다 먼저 한다 — 진행 중인 생성은 끊지 않는다
+ *   케이스 수정안은 대기 중인 QA 문서 생성보다 먼저 한다 — 진행 중인 생성은 끊지 않는다
  * - 작업마다 호출을 ~/.qcard/jobs/<작업>/llm에 녹화한다. 플랜 한도로 멈춘 작업을 웹에서 다시 시도하면
  *   끝난 호출은 재생하고 남은 것만 부른다
  *
- * 먼저 `connect`로 이 PC를 계정에 연결해 둔다(F-TM-14). 연결이 해제됐으면 시작하지 않는다.
+ * 먼저 `connect`로 이 PC를 계정에 연결해 둔다. 연결이 해제됐으면 시작하지 않는다.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { homedir } from 'node:os';
@@ -117,7 +117,7 @@ async function beat() {
   }).catch((e: Error) => console.error(`연결 신호 실패: ${e.message}`));
   return s;
 }
-// ---------------------------------------------------------------- 로컬 콘솔 (F-DB-01·05, PRD §4 ⑤)
+// ---------------------------------------------------------------- 로컬 콘솔
 const log = (l: string) => console.log(l);
 const queue = await new UploadQueue(queueDir, firestoreApply(db, storage), {
   onDrop: (op, reason) => log(`보내지 못한 업로드를 뺐습니다 (${queueDir}/dropped): ${op.path} — ${reason}`),
@@ -139,7 +139,7 @@ const service = new ConsoleService({
       ? { requiredVersion: versionShortfall(claude?.version, MODELS_FOR.run) }
       : {}),
   }),
-  // 웹에서 요청한 Run도 같은 경로로 시작하므로 여기서 함께 막는다 (F-EX-17)
+  // 웹에서 요청한 Run도 같은 경로로 시작하므로 여기서 함께 막는다
   checkClaudeCode: async () => {
     const problem = claudeCodeProblem(await readClaude(), MODELS_FOR.run);
     if (problem) throw problem;
@@ -212,7 +212,7 @@ console.log(
 );
 
 // ---------------------------------------------------------------- 작업 처리 (한 번에 하나)
-// 작업이 하나 끝날 때마다 대기열을 다시 읽는다 — 긴 QA 문서 생성 중에 들어온 케이스 수정안이 다음 차례가 된다 (F-QD-17)
+// 작업이 하나 끝날 때마다 대기열을 다시 읽는다 — 긴 QA 문서 생성 중에 들어온 케이스 수정안이 다음 차례가 된다
 let busy = false;
 let again = false;
 async function drain() {
@@ -226,7 +226,7 @@ async function drain() {
         if (again) continue;
         break;
       }
-      // 맡기 전에 점검한다: 쓸 수 없으면 작업을 대기열에 그대로 두고 웹에는 연결 신호로 이유를 알린다 (F-EX-17)
+      // 맡기 전에 점검한다: 쓸 수 없으면 작업을 대기열에 그대로 두고 웹에는 연결 신호로 이유를 알린다
       const problem = claudeCodeProblem(await readClaude(), MODELS_FOR.qadoc);
       if (problem) {
         if (!waitingForClaude) console.log(`\n작업을 시작하지 않고 기다립니다: ${problem.message}`);

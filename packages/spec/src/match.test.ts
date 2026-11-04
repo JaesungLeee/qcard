@@ -31,7 +31,7 @@ const asDoc = (plan: MatchPlan): { cases: TestCase[] } => ({
   ],
 });
 
-describe('matchVersions (F-QD-08)', () => {
+describe('matchVersions', () => {
   const v1 = matchVersions(
     readBundle([spec('room-list', [row('TS-001', 'A'), row('TS-002', 'B'), row('TS-003', 'C')])]),
   );

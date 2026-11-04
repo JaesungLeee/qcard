@@ -1,4 +1,4 @@
-// 사이클 목록 (PRD §5.4). 사이클마다 빌드·문서 버전·기간·대상 디바이스·진행·판정·실행 중 Run을 보인다.
+// 사이클 목록 (docs/product/cycles.md). 사이클마다 빌드·문서 버전·기간·대상 디바이스·진행·판정·실행 중 Run을 보인다.
 import { Button, Chip, ContentBadge, Icons, textClass, token } from '@qcard/ui';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
@@ -72,7 +72,7 @@ const GROUP_EMPTY: Record<Exclude<CycleGroupKey, 'local'>, [string, string]> = {
 const isNotStarted = (s: CycleSummary) => isActiveCycle(s.cycle) && s.done === 0 && s.activeRuns.length === 0;
 
 /**
- * 시작 전·진행 중·완료를 칩으로 나눠 하나씩 보인다 (F-CY-09). 완료 기록은 사이클 간 비교·놓친 결함의 기준이라
+ * 시작 전·진행 중·완료를 칩으로 나눠 하나씩 보인다. 완료 기록은 사이클 간 비교·놓친 결함의 기준이라
  * 지우지 않고 칩 뒤에 둔다. 로컬 실행(개발 서버 전용)은 사람이 완료한 사이클이 아니라 따로 둔다
  */
 function CycleSections({ list, projectId, canEdit }: { list: CycleSummary[]; projectId: string; canEdit: boolean }) {
@@ -134,7 +134,7 @@ function CycleList({
   );
 }
 
-/** 카드의 [⋯] (F-CY-10). 카드 전체가 링크라 그 위에 겹쳐 둔다. 확인은 QA 시트에서 지워질 건수를 보며 한다 */
+/** 카드의 [⋯]. 카드 전체가 링크라 그 위에 겹쳐 둔다. 확인은 QA 시트에서 지워질 건수를 보며 한다 */
 function CycleCardMenu({ s, projectId }: { s: CycleSummary; projectId: string }) {
   const navigate = useNavigate();
   const blocker = useDeleteBlocker(s.cycle, s.activeRuns);

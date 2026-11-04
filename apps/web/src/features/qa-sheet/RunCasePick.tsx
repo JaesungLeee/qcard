@@ -1,4 +1,4 @@
-// 페이지 머리의 [케이스 고르기] (F-CY-07): 내 호스트의 대상 기기 칸 기준으로 고른 케이스만 웹에서 Run 요청한다.
+// 페이지 머리의 [케이스 고르기]: 내 호스트의 대상 기기 칸 기준으로 고른 케이스만 웹에서 Run 요청한다.
 import { Button } from '@qcard/ui';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';

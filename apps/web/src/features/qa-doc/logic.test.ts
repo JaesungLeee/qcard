@@ -210,7 +210,7 @@ describe('스펙 확인 질문 카테고리', () => {
   });
 });
 
-describe('케이스 수정안 상태 (F-QD-17)', () => {
+describe('케이스 수정안 상태', () => {
   it('답변된 질문이 있으면 요청할 수 있고, 처리 안 된 최근 수정안이 상태를 정한다', async () => {
     const d = await doc130();
     const [rev] = await api().listCaseRevisions(DOC130);
@@ -305,7 +305,7 @@ describe('편집 검증', () => {
   });
 });
 
-describe('낙관적 잠금 + 다시 적용 (F-QD-09)', () => {
+describe('낙관적 잠금 + 다시 적용', () => {
   it('같은 rev로 두 번 저장하면 두 번째는 ConflictError, 내 편집을 최신 위에 다시 적용해 저장한다', async () => {
     const shared = api();
     const d = await shared.getQaDoc(DOC130);

@@ -15,7 +15,7 @@ import { PREP_KIND_LABEL } from './params';
 import './qa-doc.css';
 
 /**
- * 준비 플로우 (PRD §5.3, F-PF-01): QA 문서 버전마다 사본을 두는 공통 사전조건. Admin·QA가 추가·편집·삭제하고 Viewer는 읽기만 한다.
+ * 준비 플로우 (docs/product/prep-flows.md): QA 문서 버전마다 사본을 두는 공통 사전조건. Admin·QA가 추가·편집·삭제하고 Viewer는 읽기만 한다.
  * 주소: `?doc=<id>`는 볼 QA 문서 버전(없으면 최신), `?new=1`은 추가 폼, `?edit=<id>`는 그 플로우의 편집 폼,
  * `?uses=<id>`는 그 플로우를 쓰는 케이스 목록을 연다
  */

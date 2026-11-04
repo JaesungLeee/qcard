@@ -3,7 +3,7 @@ import type { Member, Project } from './domain';
 import { MembershipError, requireAdmin, type Actor } from './membership';
 
 /*
- * 실행 안전장치 (F-EX-08·F-EX-12). 프로젝트 설정으로 Admin이 바꾸고, 호스트가 Run을 시작할 때 읽는다
+ * 실행 안전장치. 프로젝트 설정으로 Admin이 바꾸고, 호스트가 Run을 시작할 때 읽는다
  * (사이클에 고정하지 않아 진행 중 사이클도 다음 Run부터 적용). 저장하지 않은 프로젝트는 기본값.
  * 메모리 구현·Cloud Functions가 같은 검사를 쓰고, 화면은 저장 전에 같은 이유를 보인다.
  */
@@ -29,7 +29,7 @@ export const RunLimits = z.object({
   extraTurns: int('extraTurns'),
   /** 같은 화면 + 같은 액션을 이만큼 반복하면 Blocked */
   repeatLimit: int('repeatLimit'),
-  /** 자가 복구(액션 실패 후 다시 시도)가 이보다 많으면 Pass를 자동 확정하지 않는다 (F-RP-03 ④) */
+  /** 자가 복구(액션 실패 후 다시 시도)가 이보다 많으면 Pass를 자동 확정하지 않는다 */
   retryLimit: int('retryLimit'),
   /** 케이스당 LLM 호출·토큰 (준비·검증·원복 포함). 넘으면 그 케이스 Blocked("실행 한도 초과") */
   callsPerCase: int('callsPerCase'),
@@ -84,7 +84,7 @@ export const RUN_LIMIT_LABEL: Record<keyof RunLimits, string> = {
   waitTimeoutMin: '실행자 대기 시간(분)',
 };
 
-/** 실행 안전장치 변경 (F-EX-12): Admin만. 값이 범위를 벗어나면 `rule` */
+/** 실행 안전장치 변경: Admin만. 값이 범위를 벗어나면 `rule` */
 export function runLimitsChange(members: Member[], actor: Actor, limits: RunLimits): RunLimits {
   requireAdmin(members, actor.uid);
   const problem = runLimitsProblem(limits);

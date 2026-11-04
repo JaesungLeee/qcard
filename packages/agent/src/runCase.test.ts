@@ -8,7 +8,7 @@ import { ACCOUNT_SECRET, osBuildOf, runCase, type AccountIssue, type RunCaseInpu
 import { scriptedLlm, toolUse } from './testing';
 
 /*
- * 테스트 계정 (F-PF-04·08·09, F-EX-09): 로그인 준비 플로우가 플레이스홀더로 입력하고 실제 값은 디바이스에만 가는지,
+ * 테스트 계정: 로그인 준비 플로우가 플레이스홀더로 입력하고 실제 값은 디바이스에만 가는지,
  * 로그인 실패·원복 실패를 호스트에 알리는지. 로그인 화면은 가상 앱(모아북)의 합성 화면이다.
  */
 
@@ -124,7 +124,7 @@ function setup(replies: Parameters<typeof scriptedLlm>[0], password = 'pw-1') {
   return { device, llm, issues, run, runWith };
 }
 
-describe('테스트 계정으로 실행 (F-PF-04·08, F-EX-09)', () => {
+describe('테스트 계정으로 실행', () => {
   it('Agent는 플레이스홀더로 입력하고, 실제 비밀번호는 디바이스에만 간다', async () => {
     const { device, llm, issues, run } = setup([...loginReplies, ...caseReplies]);
     const r = await run(testCase());
@@ -152,7 +152,7 @@ describe('테스트 계정으로 실행 (F-PF-04·08, F-EX-09)', () => {
     expect(JSON.stringify(llm.requests)).toContain('give_up(kind=prep_failed)');
   });
 
-  it('계정 탓이 아닌 이유로 로그인 플로우가 멈추면 계정에 표시하지 않는다 (F-PF-08)', async () => {
+  it('계정 탓이 아닌 이유로 로그인 플로우가 멈추면 계정에 표시하지 않는다', async () => {
     const { issues, run } = setup([[toolUse('give_up', { kind: 'stuck', reason: 'ID 입력란을 찾지 못함' })]]);
     const r = await run(testCase());
     expect(r.verdict).toBe('blocked');
@@ -160,7 +160,7 @@ describe('테스트 계정으로 실행 (F-PF-04·08, F-EX-09)', () => {
     expect(issues.map(([i]) => i)).toEqual(['login_flow_failed']);
   });
 
-  it('다른 계정이 남아 있을 수 있으면 클린 상태가 아니어도 앱 데이터를 초기화한다 (F-PF-04)', async () => {
+  it('다른 계정이 남아 있을 수 있으면 클린 상태가 아니어도 앱 데이터를 초기화한다', async () => {
     const kept = setup([...loginReplies, ...caseReplies]);
     await kept.run(testCase({ cleanState: false }));
     expect(kept.device.log).toContain(`stop ${APP}`);
@@ -171,7 +171,7 @@ describe('테스트 계정으로 실행 (F-PF-04·08, F-EX-09)', () => {
     expect(reset.device.log).toContain(`clear ${APP}`);
   });
 
-  it('원복 플로우는 케이스 뒤에 돌고, 실패하면 판정은 그대로 두고 원복 실패를 알린다 (F-PF-09)', async () => {
+  it('원복 플로우는 케이스 뒤에 돌고, 실패하면 판정은 그대로 두고 원복 실패를 알린다', async () => {
     // scriptedLlm은 받은 응답 목록을 비우므로 실행마다 새로 만든다
     const replies = () => [...loginReplies, ...caseReplies];
     const plain = await setup(replies()).run(testCase());
@@ -186,7 +186,7 @@ describe('테스트 계정으로 실행 (F-PF-04·08, F-EX-09)', () => {
   });
 });
 
-describe('osBuildOf (F-CY-01)', () => {
+describe('osBuildOf', () => {
   it('OS 메이저·빌드 번호·보안 패치를 한 줄로, 읽지 못한 값은 뺀다', () => {
     expect(osBuildOf({ osMajor: 15, build: 'AP3A.240905.015.A2', securityPatch: '2024-10-01' })).toBe(
       'Android 15 · AP3A.240905.015.A2 · 보안 패치 2024-10-01',

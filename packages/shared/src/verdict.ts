@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** 케이스 판정 (PRD §5.6 F-EX-04, §5.10). `check` = 확인필요. */
+/** 케이스 판정 (docs/product/execution.md, docs/product/results.md). `check` = 확인필요. */
 export const Verdict = z.enum(['pass', 'fail', 'blocked', 'check', 'nt', 'na']);
 export type Verdict = z.infer<typeof Verdict>;
 

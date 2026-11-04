@@ -29,7 +29,7 @@ export function RoleBadge({ role }: { role: Role }) {
   );
 }
 
-/** 데이터 처리 안내 확인 (F-TM-13). 프로젝트 생성·초대 수락 때 받는다 */
+/** 데이터 처리 안내 확인. 프로젝트 생성·초대 수락 때 받는다 */
 export function DataNotice({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <div className="qp-notice">

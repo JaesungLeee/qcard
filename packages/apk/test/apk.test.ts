@@ -10,7 +10,7 @@ const KEY = {
   sha256: 'ED:48:07:DC:78:F3:C6:5B:9B:C4:C5:5C:19:66:A9:4F:AB:89:A9:44:24:E4:A6:1D:DE:D6:F0:20:7F:44:97:97',
 };
 
-describe('inspectApk (F-DV-05)', () => {
+describe('inspectApk', () => {
   it('매니페스트에서 패키지·버전·빌드 번호·minSdk를 읽고, 서명 지문은 keytool과 같다', async () => {
     const info = await inspectApk(fixture('signed-v1v2v3.apk'));
     expect(info).toMatchObject({

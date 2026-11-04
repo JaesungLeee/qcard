@@ -1,4 +1,4 @@
-// 로컬 콘솔 (PRD §5.7). 실제 제품에서는 실행자 Mac의 호스트 에이전트가 localhost로 띄우는 화면이다.
+// 로컬 콘솔 (docs/product/console.md). 실제 제품에서는 실행자 Mac의 호스트 에이전트가 localhost로 띄우는 화면이다.
 // 지금은 웹 앱의 `/console`에서 fixture 세션을 재생한다. `?at=<스텝>|end|done`이면 그 상태에서 멈춘다.
 import type { ConsoleQueueItem, ConsoleSession } from '@qcard/fixtures';
 import { POINT_METHOD_LABEL, type ConsoleControl } from '@qcard/shared';

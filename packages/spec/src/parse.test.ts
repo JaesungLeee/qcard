@@ -97,7 +97,7 @@ describe('parseSpec', () => {
   });
 });
 
-describe('rowHash (F-QD-08)', () => {
+describe('rowHash', () => {
   const base = parseSpec('sample', SPEC).spec;
   const hashOf = (md: string, id: string) => {
     const s = parseSpec('sample', md).spec;
@@ -121,7 +121,7 @@ describe('rowHash (F-QD-08)', () => {
   });
 });
 
-describe('readBundle (F-IN-08)', () => {
+describe('readBundle', () => {
   it('<스펙 이름>/spec.md만 읽고 나머지는 무시한다 (ZIP 앞 경로 상관없이)', () => {
     const b = readBundle([
       { path: 'docs/specs/sample/spec.md', content: SPEC },

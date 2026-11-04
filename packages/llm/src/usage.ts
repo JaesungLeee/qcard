@@ -28,7 +28,7 @@ export type UsageTotals = { calls: number; tokens: number; costUsd: number; cach
 const empty = (): UsageTotals => ({ calls: 0, tokens: 0, costUsd: 0, cacheReadTokens: 0 });
 
 /**
- * 실행 안전장치 중 케이스 단위 (F-EX-12). 값은 프로젝트 설정(`RunLimits`)에서 온다.
+ * 실행 안전장치 중 케이스 단위. 값은 프로젝트 설정(`RunLimits`)에서 온다.
  * Run당 토큰은 케이스 도중에 끊지 않고 케이스 사이에서 Run을 일시정지하므로 호스트가 따로 본다
  */
 export type UsageLimits = { maxCallsPerCase?: number; maxTokensPerCase?: number };

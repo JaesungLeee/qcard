@@ -9,7 +9,7 @@ import { SERVE_COMMAND } from './Jobs';
 import { diffCase, hostSupport, revisionView, toBody } from './logic';
 
 /*
- * 답변 기반 케이스 수정안 (PRD F-QD-17): 질문 탭의 케이스 묶음 아래에 붙는다.
+ * 답변 기반 케이스 수정안: 질문 탭의 케이스 묶음 아래에 붙는다.
  * 요청은 내 호스트가 처리하고, 수정안은 요청한 사람이 보고 적용하거나 버린다. 케이스는 적용할 때만 바뀐다
  */
 export function CaseRevision({

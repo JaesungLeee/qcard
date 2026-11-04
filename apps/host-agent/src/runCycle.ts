@@ -16,15 +16,15 @@ import { isTransient } from './queue';
 import type { RunSink } from './sink';
 
 /*
- * 사이클의 자동 케이스를 한 디바이스에서 차례로 실행하고 결과를 올린다 (PRD §4 ⑤⑥).
- * 플랜 한도·Claude Code 로그인 문제면 Run을 일시정지하고 멈춘다 (F-EX-17). 다시 부르면 남은 칸부터 이어 간다.
+ * 사이클의 자동 케이스를 한 디바이스에서 차례로 실행하고 결과를 올린다.
+ * 플랜 한도·Claude Code 로그인 문제면 Run을 일시정지하고 멈춘다. 다시 부르면 남은 칸부터 이어 간다.
  * 디바이스 화면이 꺼졌거나 잠겨 있거나 연결이 끊겨도 일시정지한다: 케이스마다 시작 전에 확인하고, Blocked로 끝난 케이스는
  * 도중에 잠긴 것인지 다시 확인해 그 결과는 버린다 (잠금 화면에서 헤매며 사용량만 쓰고 Blocked가 쌓이지 않게).
- * 케이스마다 칸을 먼저 잡는다 (F-CY-06): 같은 대상 디바이스의 다른 Run이 잡았거나 끝낸 칸은 건너뛴다.
+ * 케이스마다 칸을 먼저 잡는다: 같은 대상 디바이스의 다른 Run이 잡았거나 끝낸 칸은 건너뛴다.
  * 칸을 잡으려면 온라인이어야 해서, 큐를 비우지 못하거나 잡기 호출이 네트워크 오류면 "네트워크 끊김"으로 일시정지한다.
  * 케이스 도중 연결 신호를 LEASE_LOST_MS 넘게 남기지 못했으면(네트워크 끊김·PC 절전) 다른 Run이 칸을 가져갔을 수 있어,
  * 다음 턴에서 멈추고 진행 중 케이스 결과를 버린 뒤 "호스트 연결 끊김"으로 일시정지한다 — 남이 가져간 칸에 플랜 사용량을 쓰지 않게.
- * Run당 토큰 한도(F-EX-12)는 케이스를 끊지 않고 다음 케이스를 시작하기 전에 본다. 이어서 실행한 Run은 앞서 올린 결과의
+ * Run당 토큰 한도는 케이스를 끊지 않고 다음 케이스를 시작하기 전에 본다. 이어서 실행한 Run은 앞서 올린 결과의
  * 토큰까지 더하므로, 한도에 닿아 멈춘 Run은 프로젝트 설정에서 한도를 올려야 이어 갈 수 있다.
  */
 
@@ -52,7 +52,7 @@ export type RunCycleInput = {
    * 다시 실행하려고 고른 칸(이전 결과 있음)이 이어서 실행할 때 빠지지 않게
    */
   skipDone?: boolean;
-  /** 사용량·실행 한도 (F-EX-12). 케이스별로 집계되고, env.llm도 같은 미터로 감싸야 한도가 걸린다 */
+  /** 사용량·실행 한도. 케이스별로 집계되고, env.llm도 같은 미터로 감싸야 한도가 걸린다 */
   meter?: UsageMeter;
   /** Run당 토큰 한도. 이 Run이 쓴 토큰(meter + 이어서 실행 전 결과)이 넘으면 다음 케이스 전에 일시정지. 없으면 보지 않는다 */
   tokensPerRun?: number;
@@ -63,9 +63,9 @@ export type RunCycleInput = {
   onPhase?: (phase: 'prep' | 'steps' | 'verify') => void;
   /** 끝날 때 남은 업로드를 기다릴 시간 (기본 무한). 지나면 큐에 남겨 두고 돌아온다 */
   drainTimeoutMs?: number;
-  /** 테스트 계정 배정·반납 (F-PF-04). 없으면 계정이 필요한 케이스는 Blocked. 비밀값은 env.vault에 둔다 */
+  /** 테스트 계정 배정·반납. 없으면 계정이 필요한 케이스는 Blocked. 비밀값은 env.vault에 둔다 */
   accounts?: AccountLeaser;
-  /** 칸 자동 선점 (F-CY-06). 없으면 잡지 않고 돈다(테스트) */
+  /** 칸 자동 선점. 없으면 잡지 않고 돈다(테스트) */
   cells?: CellClaimer;
   /** 다른 Run이 잡았거나 끝낸 칸을 건너뜀 */
   onSkip?: (tc: TestCase, skip: CellSkip) => void;
@@ -74,7 +74,7 @@ export type RunCycleInput = {
   now?: () => number;
 };
 
-/** Claude Code를 쓸 수 없는 이유 → Run 일시정지·작업 오류 사유 (F-EX-17) */
+/** Claude Code를 쓸 수 없는 이유 → Run 일시정지·작업 오류 사유 */
 export const CLAUDE_SETUP_REASON = {
   not_installed: 'claude_not_installed',
   not_logged_in: 'not_logged_in',
@@ -90,7 +90,7 @@ export type RunCycleOutcome = (
   /** 아직 보내지 못한 업로드 (로컬 큐에 남아 다음 실행이 보낸다) */ pendingUploads: number;
 };
 
-/** 계정 종류·준비 상태가 같은 케이스끼리 묶고, 묶음 안에서는 문서 순서 (F-EX-11). 같은 계정을 이어 쓰게 한다 */
+/** 계정 종류·준비 상태가 같은 케이스끼리 묶고, 묶음 안에서는 문서 순서. 같은 계정을 이어 쓰게 한다 */
 export function runOrder(cases: TestCase[]): TestCase[] {
   const key = (c: TestCase) => `${c.accountKind ?? ''}|${c.prepFlowIds.join('+')}`;
   const groups = [...new Set(cases.map(key))];
@@ -100,7 +100,7 @@ export function runOrder(cases: TestCase[]): TestCase[] {
 export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
   const { api, sink, projectId, cycleId, deviceId } = input;
   const detail = await api.getCycle({ projectId, cycleId });
-  // 준비 플로우는 사이클의 QA 문서 버전 것 (F-PF-01). 사이클에 고정하지 않아 Run을 시작할 때 읽는다
+  // 준비 플로우는 사이클의 QA 문서 버전 것. 사이클에 고정하지 않아 Run을 시작할 때 읽는다
   const prepFlows = await api.listPrepFlows({ projectId, docId: detail.cycle.docId });
   if (!detail.cycle.targets.some((t) => t.id === deviceId)) {
     throw new Error(`이 사이클의 대상 디바이스가 아닙니다: ${deviceId}`);
@@ -138,7 +138,7 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
       throw e;
     }
   };
-  // 칸 리스 (F-CY-06)
+  // 칸 리스
   const now = input.now ?? Date.now;
   const lease = input.cells ? new CellLease(now) : undefined;
   const leaseLost = () => !!lease?.lost();
@@ -172,13 +172,13 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
     runId: input.runId,
     log: input.log,
   });
-  // 이어서 실행하면 처음 시작한 시각을 그대로 둔다 — 그 뒤 다른 Run이 끝낸 칸을 다시 돌리지 않게 (F-CY-06)
+  // 이어서 실행하면 처음 시작한 시각을 그대로 둔다 — 그 뒤 다른 Run이 끝낸 칸을 다시 돌리지 않게
   const resumed = detail.runs.find((r) => r.id === input.runId);
   await sink.start(
     cases.map((c) => c.tcId),
     resumed?.startedAt,
   );
-  // 호스트가 살아 있다는 신호 (F-DV-04): 끊기면 웹은 "호스트 연결 끊김"으로 보이고, 다시 켠 호스트가 일시정지로 정리한다
+  // 호스트가 살아 있다는 신호: 끊기면 웹은 "호스트 연결 끊김"으로 보이고, 다시 켠 호스트가 일시정지로 정리한다
   const timer = setInterval(() => void beat().catch(() => {}), RUN_HEARTBEAT_MS);
   timer.unref?.();
   // 칸을 잃었으면 Agent가 다음 턴에서 멈춘다 (실행자 중단과 같은 경로, 아래에서 일시정지로 바꾼다)
@@ -208,7 +208,7 @@ export async function runCycle(input: RunCycleInput): Promise<RunCycleOutcome> {
       }
       input.onCaseStart?.(testCase);
       const env = { ...input.env, control, saveScreenshot: sink.saveScreenshot };
-      // 테스트 계정 (F-PF-04): 받지 못하면 실행하지 않고 Blocked("계정 없음")
+      // 테스트 계정: 받지 못하면 실행하지 않고 Blocked("계정 없음")
       const acc = await accounts.forCase(testCase);
       if ('blocked' in acc) {
         const result = await blockedCase(env, { testCase, deviceId, runId: input.runId }, acc.blocked);

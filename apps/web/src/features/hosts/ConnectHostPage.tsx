@@ -10,7 +10,7 @@ import { CONNECT_COMMAND, INSTALL_NOTE, pairEndpoint, parseConnectRequest } from
 import './hosts.css';
 
 /**
- * 이 PC 연결 `/connect?port&nonce&name` (F-TM-14). 호스트 에이전트의 `connect`가 브라우저로 연다.
+ * 이 PC 연결 `/connect?port&nonce&name`. 호스트 에이전트의 `connect`가 브라우저로 연다.
  * [이 PC 연결]을 누르면 호스트 자격을 만들고, 그 PC의 127.0.0.1 임시 서버로 폼을 보내 넘긴다
  * (페이지 이동이라 비밀값이 스크립트 응답·주소창에 남지 않고, 다른 PC의 호스트에는 닿지 않는다)
  */

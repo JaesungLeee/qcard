@@ -53,7 +53,7 @@ import {
 } from './risk';
 
 /*
- * Executor: 관찰 → LLM 판단(도구 호출) → 디바이스 액션을 반복해 케이스 단계를 수행한다 (F-EX-01·06·08·11·12).
+ * Executor: 관찰 → LLM 판단(도구 호출) → 디바이스 액션을 반복해 케이스 단계를 수행한다.
  * 대화는 덧붙이기만 한다 — 도구·시스템 프롬프트·앞선 턴이 그대로여야 프롬프트 캐시와 thinking이 이어진다.
  */
 
@@ -77,7 +77,7 @@ type GiveUpKind = ExecutorToolInput<'give_up'>['kind'];
 
 export type ExecOutcome = {
   status: 'done' | 'blocked' | 'fail';
-  /** blocked·fail 사유 (F-EX-05) */
+  /** blocked·fail 사유 */
   reason?: string;
   /** Agent가 give_up으로 멈췄으면 그 종류 */
   gaveUp?: GiveUpKind;
@@ -86,7 +86,7 @@ export type ExecOutcome = {
   stepsDone: number;
   /** 디바이스 액션 실패 후 다시 시도한 횟수 (자가 복구) */
   recoveries: number;
-  /** 실행자가 Take over·스텝 건너뛰기로 개입했는가 (F-RP-03 ③) */
+  /** 실행자가 Take over·스텝 건너뛰기로 개입했는가 */
   intervened: boolean;
   /** 마지막 액션 뒤의 화면 = 검증 시점 화면 */
   last: Observation;
@@ -154,7 +154,7 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
   };
   let last = await observe(env, caseId, obsIndex++);
   thought(env, start, 'observe', `화면 관찰 · 요소 ${last.tree.length}개 · ${last.foreground ?? '?'}`);
-  /** 인증 단계가 있는 케이스 — 인앱 웹뷰를 인증 화면으로 본다 (F-EX-10) */
+  /** 인증 단계가 있는 케이스 — 인앱 웹뷰를 인증 화면으로 본다 */
   const withAuth = caseHasAuth(steps);
 
   const outcome = (status: ExecOutcome['status'], reason?: string, gaveUp?: GiveUpKind): ExecOutcome => {
@@ -224,7 +224,7 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
   }
 
   /**
-   * 실행자 제어 (F-DB-05). 턴 사이에 부른다: 일시정지·Take over면 풀릴 때까지 기다리고, Take over 뒤에는 화면을
+   * 실행자 제어. 턴 사이에 부른다: 일시정지·Take over면 풀릴 때까지 기다리고, Take over 뒤에는 화면을
    * 다시 관찰한다. 건너뛰기는 지금 단계를 끝난 것으로 넘긴다. 끝내야 하면 결과를 돌려준다
    */
   let intervened = false;
@@ -436,13 +436,13 @@ export async function runSteps(env: AgentEnv, input: RunStepsInput): Promise<Exe
       }
       acted = true;
 
-      // 같은 화면에서 같은 액션 반복 감지 (F-EX-12)
+      // 같은 화면에서 같은 액션 반복 감지
       const sig = `${last.treeText}\n${JSON.stringify({ n: call.name, i: { ...call.input, intent: undefined } })}`;
       const seen = (repeats.get(sig) ?? 0) + 1;
       repeats.set(sig, seen);
       if (seen >= repeatLimit) return outcome('blocked', `실행 한도 초과: 같은 화면에서 같은 액션 ${seen}회 반복`);
 
-      // 위험 액션 (F-EX-10): Agent 표시 + 코드 안전장치. 사전 승인이 아니면 실행자에게 묻는다
+      // 위험 액션: Agent 표시 + 코드 안전장치. 사전 승인이 아니면 실행자에게 묻는다
       let risk: StepRisk | undefined;
       if (call.name === 'tap' || call.name === 'tap_point' || call.name === 'input_text') {
         const marked = call.input.risk ? { ...call.input.risk, source: 'agent' as const } : undefined;
@@ -564,7 +564,7 @@ async function act(
       const value = env.vault ? env.vault.resolve(call.input.text) : call.input.text;
       await tapAt(...center(el.bounds));
       await d.inputText(value);
-      // 타임라인에는 플레이스홀더 그대로 남긴다 (F-EX-09)
+      // 타임라인에는 플레이스홀더 그대로 남긴다
       return { action: 'input', target: target(el), input: call.input.text, intent: call.input.intent };
     }
     case 'swipe': {
@@ -590,7 +590,7 @@ async function act(
     case 'set_network': {
       if (!env.allowNetworkToggle) throw new ActionInputError('이 실행에서는 네트워크 조작이 허용되지 않습니다');
       const { wifi, data } = call.input;
-      // 네트워크를 끄는 케이스는 USB 연결에서만 (F-EX-16). 기기를 건드리기 전에 막는다 — 켜기만 하는 것은 그대로
+      // 네트워크를 끄는 케이스는 USB 연결에서만. 기기를 건드리기 전에 막는다 — 켜기만 하는 것은 그대로
       if (connection === 'wifi' && (!wifi || !data)) {
         throw new EnvActionUnavailableError(
           'Wi-Fi ADB로 연결된 디바이스에서는 네트워크를 끌 수 없습니다 (USB 연결 필요)',

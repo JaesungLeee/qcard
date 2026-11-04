@@ -52,7 +52,7 @@ const SPEC = 'projects/haru/specBundles/bundle-1.3.0-abc/onboarding/spec.md';
 const BUILD = 'projects/haru/builds/b1/app.apk';
 const SHOT = 'projects/haru/cycles/c1/runs/r1/TC-001/obs-01.png';
 
-describe('스펙 스냅샷 (F-IN-03)', () => {
+describe('스펙 스냅샷', () => {
   it('Admin·QA가 올리고, 올린 뒤에는 아무도 덮어쓰지 못한다', async () => {
     await assertSucceeds(put('u-qa', SPEC));
     await assertFails(put('u-qa', SPEC));
@@ -71,7 +71,7 @@ describe('스펙 스냅샷 (F-IN-03)', () => {
   });
 });
 
-describe('빌드 (F-DV-05)', () => {
+describe('빌드', () => {
   it('한 번 올린 APK는 덮어쓰지 못한다', async () => {
     await assertSucceeds(put('u-admin', BUILD));
     await assertFails(put('u-admin', BUILD));
@@ -88,7 +88,7 @@ describe('Run 스크린샷', () => {
   });
 });
 
-describe('수동 결과 첨부 스크린샷 (F-RP-05)', () => {
+describe('수동 결과 첨부 스크린샷', () => {
   const MANUAL = 'projects/haru/cycles/c1/manual/TC-001__d';
   const image = (uid: string | null, path: string, type = 'image/png', claims?: Record<string, unknown>) =>
     uploadString(ref(storage(uid, claims), path), 'x', 'raw', { contentType: type });
