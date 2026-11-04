@@ -1,0 +1,44 @@
+# 릴리스·핫픽스를 시작한다: 직전 태그로 다음 버전을 정해 브랜치만 만든다(release → develop에서 minor, hotfix → main에서 patch).
+# 버전 올리기·CHANGELOG 초안·main PR은 그 브랜치 푸시로 도는 prepare-release.yml이 한다 — docs/dev/branching.md
+name: start-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: release(develop에서 minor) · hotfix(main에서 patch)
+        type: choice
+        options: [release, hotfix]
+        default: release
+      version:
+        description: 버전을 직접 정할 때만 (예 1.0.0)
+        type: string
+        required: false
+
+jobs:
+  start:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          ref: ${{ inputs.kind == 'hotfix' && 'main' || 'develop' }}
+          fetch-depth: 0
+          # GITHUB_TOKEN으로 푸시하면 다른 워크플로(prepare-release)가 돌지 않는다
+          token: ${{ secrets.RELEASE_TOKEN }}
+      - name: 브랜치 만들기
+        env:
+          KIND: ${{ inputs.kind }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          last=$(git tag -l 'v*' 'host-v*' | sed 's/^host-//; s/^v//' | sort -V | tail -1)
+          if [ -z "$VERSION" ]; then
+            IFS=. read -r major minor patch <<<"${last:-0.0.0}"
+            if [ "$KIND" = hotfix ]; then VERSION="$major.$minor.$((patch + 1))"; else VERSION="$major.$((minor + 1)).0"; fi
+          fi
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::버전 형식이 아닙니다: $VERSION"; exit 1; }
+          branch="$KIND/$VERSION"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "::error::$branch가 이미 있습니다"; exit 1
+          fi
+          git push origin "HEAD:refs/heads/$branch"
+          echo "직전 $last → $branch" >> "$GITHUB_STEP_SUMMARY"

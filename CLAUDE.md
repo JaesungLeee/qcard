@@ -41,7 +41,7 @@ pnpm이 전역에 없으면 `npx -y pnpm@10.34.6 <명령>`으로 실행한다.
 - [emulators.md](docs/dev/emulators.md) — 에뮬레이터 구성·시드·임시 폴더 분리
 - [worktree.md](docs/dev/worktree.md) — 워크트리에서 병렬 작업할 때 복사되는 파일·포트·`qcard-specs` 경로
 - [deploy.md](docs/dev/deploy.md) — 실제 Firebase 프로젝트(`qcard-d2ade`) 설정, 웹·규칙·Functions 배포, 호스트 환경변수
-- [ci.md](docs/dev/ci.md) — GitHub Actions: `main` 푸시 → 검증·자동 배포, `develop`·PR → 검증, 태그 `host-v*` → npm publish
+- [ci.md](docs/dev/ci.md) — GitHub Actions: start-release 버튼 → 릴리스 브랜치·버전·CHANGELOG 초안·PR, `main` 푸시 → 바뀐 쪽만 배포(npm·Firebase)·태그, `develop`·PR → 검증
 - [branching.md](docs/dev/branching.md) — git flow: `feature/*` → `develop`, `release/*`·`hotfix/*` → `main`(PR), 태그 `v*`·`host-v*`
 
 ## 하네스

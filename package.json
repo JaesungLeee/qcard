@@ -7,7 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "verify": "turbo run typecheck test && node scripts/check-colors.mjs && node scripts/check-private-names.mjs",
+    "verify": "turbo run typecheck test && node scripts/check-colors.mjs && node scripts/check-private-names.mjs && node scripts/check-release-plan.mjs",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "tokens": "pnpm --filter @qcard/ui tokens",
