@@ -3,6 +3,17 @@
 qcard의 버전별 변경 사항입니다. 버전 하나는 웹 서비스와, 바뀐 경우 PC에 설치하는 호스트(`@qcard/host`)를 함께 가리킵니다.
 버전은 [Semantic Versioning](https://semver.org/)을 따릅니다.
 
+## [1.0.0](https://github.com/JaesungLeee/qcard/compare/v0.5.0...v1.0.0) - 2026-11-04
+
+<!-- 초안: 사용자 관점의 "~합니다"체로 다듬고 이 줄을 지우세요 (docs/dev/branching.md#changelog) -->
+
+> 호스트 1.0.0. PC에서 `npm i -g @qcard/host`로 1.0.0으로 업데이트한 뒤 `qcard serve`를 다시 켜 주세요.
+> (이전 호스트로 실행할 수 없게 바꿨다면 `MIN_HOST_VERSION`을 올리고 맨 앞에 "⚠ **호스트 업데이트가 필요합니다.**"를 쓰세요)
+
+### Changed
+
+- (변경 내용)
+
 ## [0.5.0](https://github.com/JaesungLeee/qcard/compare/v0.4.0...v0.5.0) - 2026-11-03
 
 > ⚠ **호스트 업데이트가 필요합니다.** 호스트 0.4.0 이하로는 이 버전에서 테스트를 실행할 수 없습니다.
