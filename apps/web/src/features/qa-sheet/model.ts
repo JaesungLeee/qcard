@@ -48,7 +48,7 @@ export type DeviceStat = {
   passRate: number;
 };
 
-/** 디바이스별·전체 판정 건수와 통과율 (F-RP-01) */
+/** 디바이스별·전체 판정 건수와 통과율 */
 export function deviceStats(
   targets: TargetDevice[],
   results: CaseResult[],
@@ -115,15 +115,15 @@ export type MatrixCell = {
   executor?: string;
   paused?: boolean;
   pauseReason?: PauseReason;
-  /** 실행자를 기다리는 중 (F-EX-10) */
+  /** 실행자를 기다리는 중 */
   waiting?: NonNullable<Run['waiting']>['level'];
-  /** 실행 중인데 호스트 신호가 끊김 (F-DV-04) */
+  /** 실행 중인데 호스트 신호가 끊김 */
   stale?: boolean;
 };
 export type MatrixRow = { device: TargetDevice; cells: MatrixCell[]; done: number; running: number; remaining: number };
 
 /**
- * 그 칸의 실행 중·일시정지 Run. 일시정지된 Run도 멈춘 칸을 `currentTcId`로 남기는데, 그 칸은 다른 Run이 가져갈 수 있다(F-CY-06) —
+ * 그 칸의 실행 중·일시정지 Run. 일시정지된 Run도 멈춘 칸을 `currentTcId`로 남기는데, 그 칸은 다른 Run이 가져갈 수 있다 —
  * 둘이 겹치면 지금 칸을 잡고 있는 Run을 보인다
  */
 export function cellRun(runs: Run[], deviceId: string, tcId: string, now = Date.now()): Run | undefined {
@@ -134,7 +134,7 @@ export function cellRun(runs: Run[], deviceId: string, tcId: string, now = Date.
   return here.find((r) => holdsCell(r, at)) ?? here[0];
 }
 
-/** 진행 매트릭스 (F-CY-05): 케이스 × 대상 디바이스 칸을 완료 / 실행 중(실행자) / 남은 칸으로 나눈다. */
+/** 진행 매트릭스: 케이스 × 대상 디바이스 칸을 완료 / 실행 중(실행자) / 남은 칸으로 나눈다. */
 export function progressMatrix(
   cases: TestCase[],
   targets: TargetDevice[],
@@ -246,7 +246,7 @@ export function primaryDevice(
   return pick((r) => r.verdict !== 'nt') ?? targets[0]?.id;
 }
 
-/** 자동 Pass를 사람이 뒤집은 결과 (F-RP-07) */
+/** 자동 Pass를 사람이 뒤집은 결과 */
 export const isAutoPassReversal = (r: CaseResult) =>
   r.agentVerdict === 'pass' && r.verdict !== 'pass' && r.decidedBy?.kind === 'human';
 

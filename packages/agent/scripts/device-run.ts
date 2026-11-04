@@ -54,7 +54,7 @@ const MANUAL_TIMEOUT_MS = 10 * 60_000;
 const MAX_ENV_ERRORS = 3;
 const budget = Number(values.budget);
 
-// 실행할 케이스: 지정한 것 또는 자동 케이스 전체. 준비 상태가 같은 것끼리 묶고 묶음 안에서는 문서 순서 (F-EX-11)
+// 실행할 케이스: 지정한 것 또는 자동 케이스 전체. 준비 상태가 같은 것끼리 묶고 묶음 안에서는 문서 순서
 // 삭제된 케이스(change: removed)는 현재 버전에서 실행하지 않는다
 const auto = qaDocV130.cases.filter((c) => c.mode === 'auto' && c.change !== 'removed');
 const picked: TestCase[] = values.all
@@ -73,7 +73,7 @@ const cases = [...picked].sort(
   (a, b) => groupOrder.indexOf(a.prepFlowIds.join('+')) - groupOrder.indexOf(b.prepFlowIds.join('+')),
 );
 
-// LLM: 본인 Claude Code가 준비됐는지 먼저 본다 (F-EX-17)
+// LLM: 본인 Claude Code가 준비됐는지 먼저 본다
 if (llmProviderFromEnv() === 'claude-cli') {
   const s = await assertClaudeCodeReady(MODELS_FOR.run).catch((e: Error) => {
     console.error(e.message);

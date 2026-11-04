@@ -37,7 +37,7 @@ import {
 import { ErrorMessage, Field, RoleBadge } from './parts';
 import './projects.css';
 
-/** 프로젝트 설정 (F-TM-03·10·11·12, F-EX-12): 멤버 · 초대(Admin) · 실행 안전장치 · 탈퇴·삭제. Admin이 아니면 보기와 탈퇴만 */
+/** 프로젝트 설정: 멤버 · 초대(Admin) · 실행 안전장치 · 탈퇴·삭제. Admin이 아니면 보기와 탈퇴만 */
 export function ProjectSettingsPage() {
   const { projectId = '' } = useParams();
   const project = useProject(projectId);
@@ -286,7 +286,7 @@ const limitsOf = (d: LimitDraft) =>
     Object.entries(d).map(([k, v]) => [k, v.trim() === '' ? NaN : Number(v.replace(/[,\s]/g, ''))]),
   ) as RunLimits;
 
-/** 실행 안전장치 (F-EX-08·12). Admin만 바꾸고, 다른 멤버는 값만 본다. 진행 중 사이클도 다음 Run부터 적용 */
+/** 실행 안전장치. Admin만 바꾸고, 다른 멤버는 값만 본다. 진행 중 사이클도 다음 Run부터 적용 */
 function RunLimitsSection({ project, admin }: { project: Project; admin: boolean }) {
   const saved = runLimitsOf(project);
   const save = useSetRunLimits(project.id);

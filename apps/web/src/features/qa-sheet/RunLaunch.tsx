@@ -27,7 +27,7 @@ export function useRunLaunch(d: CycleDetail, projectId: string) {
   const pending = request.isPending || latest?.status === 'queued' || latest?.status === 'running';
   const recent = latest?.finishedAt && now - Date.parse(latest.finishedAt) < RECENT_MS ? latest : undefined;
   const launch = runLaunch(d, hosts.data ?? [], api.currentUser, now);
-  /** 고른 케이스만 돌릴 때 `tcIds` (F-CY-07). 결과가 있는 칸도 다시 실행한다 */
+  /** 고른 케이스만 돌릴 때 `tcIds`. 결과가 있는 칸도 다시 실행한다 */
   const start = (opts: { resumeRunId?: string; tcIds?: string[] } = {}) => {
     if (launch.state !== 'ready') return;
     request.mutate({ cycleId: d.cycle.id, deviceId: launch.target.id, ...opts });

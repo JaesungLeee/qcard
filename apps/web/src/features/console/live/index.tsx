@@ -1,4 +1,4 @@
-// 실시간 로컬 콘솔 (PRD §5.7): 호스트 에이전트(serve·run-cycle)가 띄운 127.0.0.1 서버에서 연다.
+// 실시간 로컬 콘솔 (docs/product/console.md): 호스트 에이전트(serve·run-cycle)가 띄운 127.0.0.1 서버에서 연다.
 // 개발 중에는 Vite 개발 서버가 /console-api를 호스트로 넘긴다. Run이 없으면 홈(사이클 골라 Run 시작),
 // Run 중이면 실행 화면. 상태는 호스트가 밀어 주고 화면은 제어·Run 시작만 보낸다.
 import { DEVICE_SIZE, SCREENS, qaDocV130, type ConsoleSession } from '@qcard/fixtures';
@@ -64,10 +64,10 @@ function Connected() {
 /**
  * `?demo=running|manual|takeover`: 호스트 없이 fixture 세션으로 채운 화면 (UI 스냅샷용).
  * `?demo=start`: 케이스가 막 시작해 스텝이 아직 없는 상태 · `?demo=home`: Run이 없을 때 (사이클 고르기)
- * `&pick=<사이클 ID>`: 홈에서 그 사이클의 케이스 고르기를 연 채로 (F-CY-07)
- * `?demo=home-outdated`: Claude Code 버전 미달로 시작을 막은 홈 · `?demo=home-limited`: 플랜 한도로 멈춘 뒤 (F-DB-09)
+ * `&pick=<사이클 ID>`: 홈에서 그 사이클의 케이스 고르기를 연 채로
+ * `?demo=home-outdated`: Claude Code 버전 미달로 시작을 막은 홈 · `?demo=home-limited`: 플랜 한도로 멈춘 뒤
  * `?demo=waiting`: Agent가 모델 응답을 오래 기다리는 중
- * `?demo=approval`: 위험 액션 승인 대기 · `?demo=identity`: 사람 전용(본인인증) 대기 (F-EX-10)
+ * `?demo=approval`: 위험 액션 승인 대기 · `?demo=identity`: 사람 전용(본인인증) 대기
  */
 function Demo({ demo, pick }: { demo: string; pick?: string }) {
   const query = useConsoleSession();
@@ -146,7 +146,7 @@ function Demo({ demo, pick }: { demo: string; pick?: string }) {
 }
 
 export function demoHome(session: ConsoleSession): ConsoleHome {
-  // 케이스 고르기(F-CY-07)용 기능·세부 기능·우선순위는 QA 문서에서, 판정은 이 Run이 낸 결과
+  // 케이스 고르기용 기능·세부 기능·우선순위는 QA 문서에서, 판정은 이 Run이 낸 결과
   const doc = new Map(qaDocV130.cases.map((c) => [c.tcId, c]));
   const cases: ConsoleCycleOption['cases'] = session.queue
     .filter((q) => q.mode === 'auto')
@@ -190,7 +190,7 @@ export function demoHome(session: ConsoleSession): ConsoleHome {
         deviceId: 'pixel-8-16',
         cases: fresh,
       },
-      // 로그인이 있는 가상 앱: 구독자 계정이 모두 격리돼 배정할 수 없다 (F-PF-08)
+      // 로그인이 있는 가상 앱: 구독자 계정이 모두 격리돼 배정할 수 없다
       {
         projectId: 'moabook',
         projectName: '모아북',

@@ -1,4 +1,4 @@
-// Run에서 돌릴 케이스 고르기 (F-CY-07): 내 기기 칸의 판정·우선순위로 거르고, 기능·세부 기능 묶음째 또는 개별로 고른다.
+// Run에서 돌릴 케이스 고르기: 내 기기 칸의 판정·우선순위로 거르고, 기능·세부 기능 묶음째 또는 개별로 고른다.
 // 웹 QA 시트(CycleDetail)와 로컬 콘솔(ConsoleCycleOption)이 같은 규칙을 쓰도록 데이터 소스와 분리했다.
 import type { Priority, TestCase, Verdict } from '@qcard/shared';
 
@@ -18,7 +18,7 @@ export const PICK_VERDICT_LABEL: Record<PickVerdict, string> = {
 
 export const PRIORITIES: Priority[] = ['high', 'medium', 'low'];
 
-/** 고르기 대상 한 줄: 자동 케이스와 내 기기 칸의 판정. 결과가 있는 칸을 고르면 다시 실행한다 (F-CY-04) */
+/** 고르기 대상 한 줄: 자동 케이스와 내 기기 칸의 판정. 결과가 있는 칸을 고르면 다시 실행한다 */
 export type PickRow = { tc: PickCase; verdict: Verdict; rerun: boolean };
 
 /** 빈 목록이면 거르지 않는다 */

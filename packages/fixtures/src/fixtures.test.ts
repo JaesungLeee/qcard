@@ -53,7 +53,7 @@ describe('fixture 일관성', () => {
   });
 });
 
-describe('버전 매칭 (F-QD-08) — 스펙 생성기와 fixture가 같은 판정을 내린다', () => {
+describe('버전 매칭 — 스펙 생성기와 fixture가 같은 판정을 내린다', () => {
   it('1.2.0 문서 → 1.3.0 스펙 행: 동일·변경·신규와 TC ID가 fixture 1.3.0과 같다', () => {
     // fixture를 만든 스펙 행(onboarding-flow.json)을 1.3.0 스펙 묶음으로 쓴다
     const spec = {

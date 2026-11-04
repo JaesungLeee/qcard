@@ -5,11 +5,11 @@
  * 시계로 재생한다. 시계는 컴포넌트가 `tick(dt)`으로 넣어 주므로 여기에는 실제 시간이 없다.
  *
  * 흐름: running → (pauseAt 스텝 도달) manual → [완료] verifying → done(Pass)
- *                                      └ 10분 무응답 → done(Blocked, 수동 스텝 타임아웃) (F-EX-11)
+ *                                      └ 10분 무응답 → done(Blocked, 수동 스텝 타임아웃)
  */
 import type { ConsolePhase, ConsoleControl, ThoughtEntry, Verdict } from '@qcard/shared';
 
-/** 수동 스텝·위험 액션 대기 타임아웃 (F-EX-12 임시 기본값) */
+/** 수동 스텝·위험 액션 대기 타임아웃 (임시 기본값) */
 export const MANUAL_TIMEOUT_MS = 10 * 60 * 1000;
 /** [완료] 후 검증 포인트를 확인하는 데 걸리는 시간 (연출) */
 export const VERIFY_MS = 2400;

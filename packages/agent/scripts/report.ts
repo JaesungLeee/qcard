@@ -1,6 +1,6 @@
 /**
  * 실기기 실행 리포트: runs/<실행>/report.md를 만든다.
- * 판정 분포, 시간·비용, 단계별 비용, 실행 한도 보정 제안(F-EX-12), Blocked 사유, 불일치·판단불가 포인트,
+ * 판정 분포, 시간·비용, 단계별 비용, 실행 한도 보정 제안, Blocked 사유, 불일치·판단불가 포인트,
  * 스펙과 앱이 다를 가능성이 있는 Agent 판단을 모은다.
  *
  *   pnpm --filter @qcard/agent report <실행 id>   (생략하면 가장 최근 실행)
@@ -115,7 +115,7 @@ for (const p of ['prep', 'steps', 'verify'] as const) {
 }
 
 const avgTokens = sum(tokens) / tokens.length;
-out.push('', '## 실행 한도 보정 제안 (F-EX-12)', '');
+out.push('', '## 실행 한도 보정 제안', '');
 out.push(
   `- 케이스당 토큰: 평균 ${int(avgTokens)}, 최대 ${int(Math.max(...tokens))} → **PoC 평균의 3배 = ${int(avgTokens * 3)}**`,
 );

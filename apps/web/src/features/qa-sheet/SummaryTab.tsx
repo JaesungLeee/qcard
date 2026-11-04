@@ -1,4 +1,4 @@
-// ① 요약 (PRD §5.10, F-RP-01) + 진행 매트릭스 (F-CY-05)
+// ① 요약 (docs/product/results.md) + 진행 매트릭스
 import { PAUSE_REASON_LABEL, SEVERITY_LABEL, VERDICT_LABEL, type Defect, type Severity } from '@qcard/shared';
 import {
   ContentBadge,
@@ -202,7 +202,7 @@ export function SummaryTab({ d, index, projectId, projectName }: SheetProps) {
   );
 }
 
-/** 결함이 연결되지 않은 Fail 칸 (F-RP-19) — 등록을 잊지 않게 표시한다 */
+/** 결함이 연결되지 않은 Fail 칸 — 등록을 잊지 않게 표시한다 */
 export function NoDefect() {
   return (
     <span

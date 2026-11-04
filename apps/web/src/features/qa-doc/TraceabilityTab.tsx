@@ -17,7 +17,7 @@ import { coverage, shortReq } from './logic';
 import { RichText } from './RichText';
 import { useDocHref } from './params';
 
-/** 요구사항 ↔ 케이스 추적성 매트릭스 (F-QD-11) */
+/** 요구사항 ↔ 케이스 추적성 매트릭스 */
 export function TraceabilityTab({ doc }: { doc: QADocument }) {
   const href = useDocHref();
   const cov = useMemo(() => coverage(doc), [doc]);

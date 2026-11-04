@@ -37,7 +37,7 @@ const step = (text: string, risk?: 'approval' | 'human') => ({
 const tapCopy = toolUse('tap', { element_ref: 'share_copy', intent: '공유 시트에서 복사', risk: null });
 const done = (i: number) => toolUse('step_done', { case_step_index: i, summary: '' });
 
-describe('위험 액션 (F-EX-10)', () => {
+describe('위험 액션', () => {
   it('Agent가 표시하지 않아도 앱 밖(공유 시트) 탭은 코드가 멈추고, 승인하면 그 액션을 실행한다', async () => {
     const { device, env, asked } = setup('share-sheet', [[tapCopy], [done(0)]], () => ({
       decision: 'approved',

@@ -11,7 +11,7 @@ import { fmtNumber, fmtTs } from '../../components/format';
 import { MockScreen } from '../../mock/MockScreen';
 import type { Phase } from './playback';
 
-/** 현재 케이스: TC ID · 제목 · 단계(현재 단계 강조) · 검증 포인트 (F-DB-02) */
+/** 현재 케이스: TC ID · 제목 · 단계(현재 단계 강조) · 검증 포인트 */
 export function CasePanel({
   tc,
   step,
@@ -125,7 +125,7 @@ export function CasePanel({
   );
 }
 
-/** 스텝 타임라인: 썸네일 · 액션 · 의도 (F-EX-06) */
+/** 스텝 타임라인: 썸네일 · 액션 · 의도 */
 export function StepTimeline({ steps, current, ended }: { steps: ExecStep[]; current: number; ended: boolean }) {
   // 실시간에서는 케이스가 막 시작해 스텝이 아직 없을 수 있다
   const step = steps.find((s) => s.index === current) ?? steps.at(-1);
@@ -216,7 +216,7 @@ export function StepTimeline({ steps, current, ended }: { steps: ExecStep[]; cur
   );
 }
 
-/** 실행 한도와 사용량 (F-EX-12, F-TM-04) */
+/** 실행 한도와 사용량 */
 export function UsageCard({
   caseTokens,
   limit,

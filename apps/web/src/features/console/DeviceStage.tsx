@@ -24,7 +24,7 @@ export function useScreenWidth() {
   return width;
 }
 
-/** 가운데: 디바이스 화면 + 상태 줄 + 제어 (F-DB-01·02·03·05). 화면은 재생(목업)·실시간(영상)이 채운다 */
+/** 가운데: 디바이스 화면 + 상태 줄 + 제어. 화면은 재생(목업)·실시간(영상)이 채운다 */
 export function DeviceStage({
   phase,
   elapsedMs,

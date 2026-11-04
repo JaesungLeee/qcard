@@ -16,13 +16,13 @@ import { fmtDuration, jobTiming, PHASE_LABEL, phaseSteps, type PhaseState } from
 import './job-progress.css';
 
 /*
- * QA 문서 생성 작업 (PRD §5.2, §6.2): 요청자 본인의 호스트 에이전트가 처리한다.
- * 호스트 연결 상태(F-DB-09)와 작업 진행·결과를 보여 준다.
+ * QA 문서 생성 작업 (docs/product/qa-doc.md, docs/architecture.md): 요청자 본인의 호스트 에이전트가 처리한다.
+ * 호스트 연결 상태와 작업 진행·결과를 보여 준다.
  */
 
 export const isOnline = (h: Host, now = Date.now()) => now - Date.parse(h.lastSeen) < HOST_ONLINE_MS;
 
-/** 호스트 에이전트를 켜는 명령. 처음 쓰는 PC는 먼저 connect로 계정에 연결한다 (F-TM-14, /hosts 안내) */
+/** 호스트 에이전트를 켜는 명령. 처음 쓰는 PC는 먼저 connect로 계정에 연결한다 (/hosts 안내) */
 export const SERVE_COMMAND = 'qcard serve';
 
 /** 내 호스트 연결 상태. 꺼져 있으면 켜는 방법을 안내한다 */

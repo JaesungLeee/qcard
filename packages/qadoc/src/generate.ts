@@ -19,8 +19,8 @@ import { bodyOf, flowText, rowText, specSources, type Start } from './parts';
 import { CASE_SYSTEM, CaseBatchOutput, PLAN_SYSTEM, SpecPlanOutput, type GenCase } from './prompts';
 
 /*
- * QA Doc Generator (PRD §5.2, §6.3): 앱 버전 스펙 묶음 + 이전 QA 문서 → 새 QA 문서.
- *   - 매칭·동일 케이스 복사·TC ID·출처 근거·해시·승인 상태는 코드가 정한다 (F-QD-08·10)
+ * QA Doc Generator (docs/product/qa-doc.md, docs/architecture.md): 앱 버전 스펙 묶음 + 이전 QA 문서 → 새 QA 문서.
+ *   - 매칭·동일 케이스 복사·TC ID·출처 근거·해시·승인 상태는 코드가 정한다
  *   - LLM(요청자의 Claude Code, Opus)은 신규·변경 행만 케이스로 바꾸고, 스펙마다 준비 플로우·보강 제안을 만든다
  * 실행은 요청자의 호스트 에이전트에서 한다. 이 모듈은 Firestore를 모른다 — 결과를 돌려주면 호출한 쪽이 쓴다.
  */
@@ -35,7 +35,7 @@ export type GenerateInput = {
   prev?: QADocument;
   /** 이전 버전 스펙 묶음. 있으면 변경 행에 이전 행 본문을 함께 넘긴다 */
   prevBundle?: SpecBundle;
-  /** 이전 버전 QA 문서의 준비 플로우 (F-PF-01). 새 문서는 이 중 케이스가 참조하는 것을 같은 ID·내용으로 이어받는다 */
+  /** 이전 버전 QA 문서의 준비 플로우. 새 문서는 이 중 케이스가 참조하는 것을 같은 ID·내용으로 이어받는다 */
   prepFlows: PrepFlow[];
   llm: LlmClient;
   meta: GenerateMeta;
@@ -70,11 +70,11 @@ export type GenerateProgress =
 
 export type GenerateResult = {
   doc: QADocument;
-  /** 새 문서의 준비 플로우 (F-QD-08): 이어받은 것과 새로 만든 것 중 활성 케이스가 참조하는 것, 목록 순서대로 */
+  /** 새 문서의 준비 플로우: 이어받은 것과 새로 만든 것 중 활성 케이스가 참조하는 것, 목록 순서대로 */
   prepFlows: PrepFlow[];
   /** 그중 이번 생성에서 새로 만든 것 */
   newPrepFlows: PrepFlow[];
-  /** 케이스로 만들지 않은 행 (MVP는 공통·Android만, F-QD-06) */
+  /** 케이스로 만들지 않은 행 (MVP는 공통·Android만) */
   skipped: { sourceId: string; reason: string }[];
   warnings: string[];
 };
@@ -82,7 +82,7 @@ export type GenerateResult = {
 const GENERATOR = 'QA Doc Generator';
 
 /**
- * 코드가 수행하는 유일한 환경 준비 (F-PF-03): 대상 앱 데이터 초기화 후 실행. 모델은 env 플로우를 만들 수 없다 —
+ * 코드가 수행하는 유일한 환경 준비: 대상 앱 데이터 초기화 후 실행. 모델은 env 플로우를 만들 수 없다 —
  * 기기 설정·다른 앱을 바꾸는 준비가 개인 기기에서 실행되지 않게 (CLAUDE.md "하지 말 것").
  */
 export const CLEAN_FLOW: PrepFlow = {
@@ -161,7 +161,7 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
       const ids = r.prep_flow_ids.filter((id) => !unknown.includes(id));
       // 초기화는 다른 준비보다 먼저 한다
       const clean = ids.includes(CLEAN_FLOW.id);
-      // 원복은 restore 플로우만 (준비 순서에는 넣지 않는다, F-PF-09)
+      // 원복은 restore 플로우만 (준비 순서에는 넣지 않는다)
       const restore = r.restore_flow_id ? flows.find((f) => f.id === r.restore_flow_id) : undefined;
       if (r.restore_flow_id && restore?.kind !== 'restore') {
         warnings.push(`${spec.name}/${r.row_id}: 원복 플로우가 아닌 ${r.restore_flow_id}를 뺐다`);

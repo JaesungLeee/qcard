@@ -17,7 +17,7 @@ const kind = (f: () => void) => {
   return undefined;
 };
 
-describe('실행 안전장치 (F-EX-12)', () => {
+describe('실행 안전장치', () => {
   it('저장하지 않은 프로젝트는 기본값, 최대 턴은 단계 수 × 단계당 턴 + 추가 턴', () => {
     expect(runLimitsOf({})).toEqual(DEFAULT_RUN_LIMITS);
     expect(maxTurnsFor(DEFAULT_RUN_LIMITS, 4)).toBe(4 * 3 + 10);

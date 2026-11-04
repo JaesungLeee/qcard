@@ -2,7 +2,7 @@ import { canonicalJson, redactImages } from './canonical';
 import type { LlmClient } from './types';
 
 /*
- * 테스트 계정 비밀값 (F-EX-09). Run 시작 때 배정된 계정분만 넣고 끝나면 비운다.
+ * 테스트 계정 비밀값. Run 시작 때 배정된 계정분만 넣고 끝나면 비운다.
  * LLM에는 `{{secret.이름}}` 플레이스홀더만 가고, 디바이스에 입력할 때 실제 값으로 바꾼다.
  */
 

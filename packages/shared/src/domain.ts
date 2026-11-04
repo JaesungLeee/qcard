@@ -2,9 +2,9 @@ import { z } from 'zod';
 import { RunLimits } from './runLimits';
 import { Verdict } from './verdict';
 
-/** 도메인 스키마 (PRD §6.4). Firestore 문서·fixture·LLM 구조화 출력이 같은 정의를 쓴다. */
+/** 도메인 스키마 (docs/concepts.md). Firestore 문서·fixture·LLM 구조화 출력이 같은 정의를 쓴다. */
 
-/** 프로젝트 = QA 대시보드 1개(앱 하나). 멤버·권한·데이터의 단위 (F-TM-02) */
+/** 프로젝트 = QA 대시보드 1개(앱 하나). 멤버·권한·데이터의 단위 */
 export const Project = z.object({
   id: z.string(),
   name: z.string(),
@@ -12,16 +12,16 @@ export const Project = z.object({
   packageName: z.string(),
   createdBy: z.string().optional(),
   createdAt: z.string().optional(),
-  /** 삭제 요청 시각. 유예 기간 동안은 복구할 수 있다 (F-TM-12) */
+  /** 삭제 요청 시각. 유예 기간 동안은 복구할 수 있다 */
   deletedAt: z.string().optional(),
   /** 이 시각이 지나면 데이터·비밀값을 영구 삭제한다 */
   purgeAt: z.string().optional(),
-  /** 실행 안전장치 (F-EX-12). 없으면 기본값 (`runLimitsOf`) */
+  /** 실행 안전장치. 없으면 기본값 (`runLimitsOf`) */
   runLimits: RunLimits.optional(),
 });
 export type Project = z.infer<typeof Project>;
 
-/** 역할 (F-TM-03). 프로젝트에는 Admin이 항상 1명 이상 */
+/** 역할. 프로젝트에는 Admin이 항상 1명 이상 */
 export const Role = z.enum(['admin', 'qa', 'viewer']);
 export type Role = z.infer<typeof Role>;
 export const ROLE_LABEL: Record<Role, string> = { admin: 'Admin', qa: 'QA', viewer: 'Viewer' };
@@ -40,12 +40,12 @@ export const Member = z.object({
   github: z.string(),
   role: Role,
   joinedAt: z.string(),
-  /** 데이터 처리 안내를 확인한 시각 (F-TM-13) */
+  /** 데이터 처리 안내를 확인한 시각 */
   dataNoticeAckAt: z.string(),
 });
 export type Member = z.infer<typeof Member>;
 
-/** 초대 (F-TM-10). GitHub 사용자명으로 보내거나 링크로 나눈다. 만료는 expiresAt으로 판단한다 */
+/** 초대. GitHub 사용자명으로 보내거나 링크로 나눈다. 만료는 expiresAt으로 판단한다 */
 export const Invitation = z.object({
   id: z.string(),
   projectId: z.string(),
@@ -60,16 +60,16 @@ export const Invitation = z.object({
 });
 export type Invitation = z.infer<typeof Invitation>;
 
-/** 초대 만료 (F-TM-10) */
+/** 초대 만료 */
 export const INVITE_TTL_DAYS = 7;
-/** 프로젝트 삭제 유예 기간 (F-TM-12) */
+/** 프로젝트 삭제 유예 기간 */
 export const DELETE_GRACE_DAYS = 30;
 
-/** 프로젝트 생성·초대 수락 때 확인받는 데이터 처리 안내 (F-TM-13, PRD §8) */
+/** 프로젝트 생성·초대 수락 때 확인받는 데이터 처리 안내 (docs/security.md) */
 export const DATA_NOTICE =
   '스펙 문서와 실행 중 디바이스 화면(스크린샷·화면 구조)은 실행한 사람 본인의 Claude 계정으로 Anthropic에 전송되고, 그 계정의 데이터 정책(개인정보 설정)을 따릅니다. 개인 플랜에는 데이터 미보존(ZDR)이 없으니, Claude 설정에서 학습 사용을 끄는 것을 권합니다.';
 
-/** 원본 스펙 근거: 스펙 파일·헤딩 경로·줄 범위 (F-QD-02) */
+/** 원본 스펙 근거: 스펙 파일·헤딩 경로·줄 범위 */
 export const SpecRef = z.object({
   spec: z.string(),
   file: z.string(),
@@ -116,7 +116,7 @@ export const ExecMode = z.enum(['auto', 'manual']);
 export type ExecMode = z.infer<typeof ExecMode>;
 
 /**
- * 케이스 단계. risk: 위험 표시 (F-QD-07·F-EX-10) — approval = 승인 필요 액션이 계획된 단계(케이스 승인이 사전 승인),
+ * 케이스 단계. risk: 위험 표시 — approval = 승인 필요 액션이 계획된 단계(케이스 승인이 사전 승인),
  * human = 본인인증처럼 사람만 하는 단계(manual도 true)
  */
 export const CaseStep = z.object({
@@ -126,7 +126,7 @@ export const CaseStep = z.object({
 });
 export type CaseStep = z.infer<typeof CaseStep>;
 
-/** 검증 포인트 (F-EX-03): QA 문서 생성 시 정의·승인된다. */
+/** 검증 포인트: QA 문서 생성 시 정의·승인된다. */
 export const PointCompare = z.enum(['text_exists', 'visible', 'not_visible', 'count', 'size_dp', 'screen', 'state']);
 export type PointCompare = z.infer<typeof PointCompare>;
 export const POINT_COMPARE_LABEL: Record<PointCompare, string> = {
@@ -151,10 +151,10 @@ export const VerificationPoint = z.object({
 });
 export type VerificationPoint = z.infer<typeof VerificationPoint>;
 
-/** 준비 플로우 (F-PF-01): 공통 사전조건. env는 코드가 수행(앱 데이터 초기화 + 실행), 나머지는 Agent가 UI로 수행 */
+/** 준비 플로우: 공통 사전조건. env는 코드가 수행(앱 데이터 초기화 + 실행), 나머지는 Agent가 UI로 수행 */
 /**
- * 준비 플로우 (F-PF-01). `login`: 테스트 계정으로 로그인 — 실패하면 계정에 로그인 실패 표시 (F-PF-08).
- * `restore`: 케이스가 바꾼 계정 상태를 되돌리는 원복 플로우 — 케이스가 끝난 뒤 수행하고, 실패하면 계정을 격리 (F-PF-09)
+ * 준비 플로우. `login`: 테스트 계정으로 로그인 — 실패하면 계정에 로그인 실패 표시.
+ * `restore`: 케이스가 바꾼 계정 상태를 되돌리는 원복 플로우 — 케이스가 끝난 뒤 수행하고, 실패하면 계정을 격리
  */
 export const PrepFlow = z.object({
   id: z.string(),
@@ -183,7 +183,7 @@ export const Approval = z.object({
   status: ApprovalStatus,
   by: z.string().optional(),
   at: z.string().optional(),
-  /** 승인 당시 내용 해시 (F-QD-10). 내용이 바뀌면 자동 미승인 */
+  /** 승인 당시 내용 해시. 내용이 바뀌면 자동 미승인 */
   contentHash: z.string().optional(),
 });
 export type Approval = z.infer<typeof Approval>;
@@ -195,11 +195,11 @@ export const CaseBody = z.object({
   prepFlowIds: z.array(z.string()),
   cleanState: z.boolean(),
   /**
-   * 필요 계정 종류 (F-QD-04, F-PF-04). 값이 있으면 실행할 때 이 종류의 테스트 계정을 배정받는다.
+   * 필요 계정 종류. 값이 있으면 실행할 때 이 종류의 테스트 계정을 배정받는다.
    * 로그인이 필요한 케이스의 기본값은 DEFAULT_ACCOUNT_KIND. 로그인 상태로 시작할지는 준비 플로우가 정한다
    */
   accountKind: z.string().optional(),
-  /** 계정 상태를 바꾸는 케이스의 원복 플로우 (F-PF-09, `kind: 'restore'`). 케이스가 끝나면 판정과 상관없이 수행한다 */
+  /** 계정 상태를 바꾸는 케이스의 원복 플로우 (`kind: 'restore'`). 케이스가 끝나면 판정과 상관없이 수행한다 */
   restoreFlowId: z.string().optional(),
   data: z.string().optional(),
   steps: z.array(CaseStep),
@@ -215,7 +215,7 @@ export const TestCase = CaseBody.extend({
   tcId: z.string(),
   /** 출처 ID: `<스펙 이름>/TS-xxx` · `EC-xxx` */
   sourceId: z.string(),
-  /** 출처 행(+관련 요구사항) 내용 해시. 다음 버전에서 같으면 이 케이스를 그대로 복사한다 (F-QD-08) */
+  /** 출처 행(+관련 요구사항) 내용 해시. 다음 버전에서 같으면 이 케이스를 그대로 복사한다 */
   sourceHash: z.string().optional(),
   requirementIds: z.array(z.string()),
   /** 기능(스펙) / 세부 기능(유저 플로우) */
@@ -225,7 +225,7 @@ export const TestCase = CaseBody.extend({
   change: CaseChange,
   previous: CaseBody.optional(),
   contentHash: z.string(),
-  /** 낙관적 잠금용 버전 (F-QD-09) */
+  /** 낙관적 잠금용 버전 */
   rev: z.number(),
   approval: Approval,
   questionIds: z.array(z.string()),
@@ -246,7 +246,7 @@ export const SpecQuestion = z.object({
 });
 export type SpecQuestion = z.infer<typeof SpecQuestion>;
 
-/** 스펙 보강 제안 (F-QD-05) — 케이스가 아니다. */
+/** 스펙 보강 제안 — 케이스가 아니다. */
 export const SpecSuggestion = z.object({
   id: z.string(),
   requirementId: z.string(),
@@ -279,7 +279,7 @@ export const QADocument = z.object({
 export type QADocument = z.infer<typeof QADocument>;
 
 /**
- * 빌드 (F-DV-05): 서명된 APK를 웹에서 올려 Storage에 둔다. 버전·빌드 번호·패키지명·서명 지문은 파일에서 읽는다.
+ * 빌드: 서명된 APK를 웹에서 올려 Storage에 둔다. 버전·빌드 번호·패키지명·서명 지문은 파일에서 읽는다.
  * 올린 뒤에는 바꾸지 않는다 — 모든 실행자가 같은 파일(`fileSha256`)을 설치한다.
  */
 export const Build = z.object({
@@ -303,7 +303,7 @@ export const Build = z.object({
 });
 export type Build = z.infer<typeof Build>;
 
-/** 사이클 대상 디바이스: 모델 + OS 메이저 (F-CY-01) */
+/** 사이클 대상 디바이스: 모델 + OS 메이저 */
 export const TargetDevice = z.object({
   id: z.string(),
   model: z.string(),
@@ -358,7 +358,7 @@ export const STEP_ACTION_LABEL: Record<StepAction, string> = {
   skip: '건너뜀',
 };
 
-/** 스텝 타임라인 한 줄 (F-EX-06) */
+/** 스텝 타임라인 한 줄 */
 export const ExecStep = z.object({
   index: z.number(),
   action: StepAction,
@@ -370,7 +370,7 @@ export const ExecStep = z.object({
   screenshot: Screenshot,
   videoTs: z.number(),
   durationMs: z.number(),
-  /** 위험 액션 (F-EX-10): 판별(Agent·코드 안전장치)과 처리. kind는 RiskKind (예전 기록은 자유 문자열) */
+  /** 위험 액션: 판별(Agent·코드 안전장치)과 처리. kind는 RiskKind (예전 기록은 자유 문자열) */
   risk: z
     .object({
       kind: z.string(),
@@ -416,7 +416,7 @@ export const POINT_RESULT_LABEL: Record<PointResult['result'], string> = {
   unknown: '판단불가',
 };
 
-/** 자동 확정 조건 (F-RP-03) */
+/** 자동 확정 조건 */
 export const AutoConfirmCondition = z.enum(['all_match', 'tree_only', 'no_takeover', 'within_retry']);
 export type AutoConfirmCondition = z.infer<typeof AutoConfirmCondition>;
 export const AUTO_CONFIRM_LABEL: Record<AutoConfirmCondition, string> = {
@@ -438,12 +438,12 @@ export const VerdictChange = z.object({
   from: Verdict,
   to: Verdict,
   note: z.string().optional(),
-  /** 이 판정과 함께 남긴 첨부 스크린샷 수 (F-RP-05) */
+  /** 이 판정과 함께 남긴 첨부 스크린샷 수 */
   attachments: z.number().optional(),
 });
 export type VerdictChange = z.infer<typeof VerdictChange>;
 
-/** 다시 실행해 밀려난 이전 시도 (F-CY-04). 전체 내용은 `cycles/{c}/attempts/{tc}__{device}__{n}`에 보관한다 */
+/** 다시 실행해 밀려난 이전 시도. 전체 내용은 `cycles/{c}/attempts/{tc}__{device}__{n}`에 보관한다 */
 export const AttemptSummary = z.object({
   attempt: z.number(),
   verdict: Verdict,
@@ -477,7 +477,7 @@ export const CaseResult = z.object({
   runId: z.string().optional(),
   steps: z.array(ExecStep),
   points: z.array(PointResult),
-  /** 사람이 결과를 입력하며 첨부한 스크린샷 (F-RP-05, 선택) */
+  /** 사람이 결과를 입력하며 첨부한 스크린샷 (선택) */
   attachments: z.array(Screenshot).optional(),
   history: z.array(VerdictChange),
   /** 이전 시도 (오래된 것부터) */
@@ -497,7 +497,7 @@ export const SEVERITY_LABEL: Record<Severity, string> = {
 };
 
 /**
- * 결함 (F-RP-19). Fail 칸에서 만들고 그 칸의 `defectId`로 연결한다. id(`D-1`)는 사이클 안에서 매긴다 —
+ * 결함. Fail 칸에서 만들고 그 칸의 `defectId`로 연결한다. id(`D-1`)는 사이클 안에서 매긴다 —
  * 사이클 밖에서 가리킬 때는 사이클 이름을 함께 쓴다. 앱 빌드는 사이클의 빌드다
  */
 export const Defect = z.object({
@@ -512,14 +512,14 @@ export const Defect = z.object({
   expected: z.string(),
   actual: z.string(),
   status: z.enum(['open', 'fixed', 'closed']),
-  /** GitHub Issues로 발행한 이슈 주소 (F-RP-13, P1 — 아직 화면에 보이지 않는다) */
+  /** GitHub Issues로 발행한 이슈 주소 (P1 — 아직 화면에 보이지 않는다) */
   trackerUrl: z.string().optional(),
   createdBy: z.string().optional(),
   createdAt: z.string().optional(),
 });
 export type Defect = z.infer<typeof Defect>;
 
-/** Run 일시정지 이유 (F-EX-13·17). 플랜 한도·로그인은 실행자의 Claude Code 상태 */
+/** Run 일시정지 이유. 플랜 한도·로그인은 실행자의 Claude Code 상태 */
 export const PauseReason = z.enum([
   'executor',
   'network',
@@ -551,7 +551,7 @@ export const Run = z.object({
   cycleId: z.string(),
   executor: z.string(),
   /**
-   * 실행한 사용자. 보안 규칙은 이 사용자의 호스트(호스트 토큰)만 이 Run과 그 결과·스크린샷을 쓰게 한다 (PRD §8).
+   * 실행한 사용자. 보안 규칙은 이 사용자의 호스트(호스트 토큰)만 이 Run과 그 결과·스크린샷을 쓰게 한다 (docs/security.md).
    * 없으면 예전 Run — 더는 이어 쓸 수 없다
    */
   executorUid: z.string().optional(),
@@ -561,13 +561,13 @@ export const Run = z.object({
   status: z.enum(['running', 'paused', 'done', 'aborted']),
   /** status가 paused일 때 */
   pauseReason: PauseReason.optional(),
-  /** 위험 액션에서 실행자를 기다리는 중 (F-EX-10). 로컬 콘솔에서만 처리하고 웹은 보여 주기만 한다 */
+  /** 위험 액션에서 실행자를 기다리는 중. 로컬 콘솔에서만 처리하고 웹은 보여 주기만 한다 */
   waiting: z.object({ level: z.enum(['approval', 'human']), since: z.string() }).optional(),
   currentTcId: z.string().optional(),
   /** 이 Run의 실행 큐 — 이어서 실행할 때 같은 케이스를 돌린다 (없으면 예전 Run: 남은 자동 케이스 전체) */
   tcIds: z.array(z.string()).optional(),
   startedAt: z.string(),
-  /** 호스트가 Run 동안 RUN_HEARTBEAT_MS마다 남기는 연결 신호 (F-DV-04). 없으면 예전 Run */
+  /** 호스트가 Run 동안 RUN_HEARTBEAT_MS마다 남기는 연결 신호. 없으면 예전 Run */
   heartbeatAt: z.string().optional(),
 });
 export type Run = z.infer<typeof Run>;
@@ -587,27 +587,27 @@ export const TestCycle = z.object({
   docId: z.string(),
   buildId: z.string(),
   targets: z.array(TargetDevice),
-  /** end가 있으면 완료된 사이클 (F-CY-09): 새 Run을 받지 않는다. 사람 확정은 계속 된다 */
+  /** end가 있으면 완료된 사이클: 새 Run을 받지 않는다. 사람 확정은 계속 된다 */
   period: z.object({ start: z.string(), end: z.string().optional() }),
   /** 사이클을 완료한 사람 (다시 열면 지운다) */
   completedBy: z.string().optional(),
   serverEnv: z.enum(['dev', 'stage', 'prod']),
-  /** 케이스 스냅샷 (F-CY-02) */
+  /** 케이스 스냅샷 */
   snapshot: z.array(z.object({ tcId: z.string(), contentHash: z.string() })),
   createdBy: z.string(),
-  /** 이 사이클에서 마지막으로 매긴 결함 번호 (F-RP-19). 없으면 0 */
+  /** 이 사이클에서 마지막으로 매긴 결함 번호. 없으면 0 */
   defectSeq: z.number().optional(),
   /** local_run: 호스트에서 돌린 실행 결과를 사이클로 묶어 보여 주는 것 (개발용) */
   origin: z.enum(['cycle', 'local_run']).optional(),
   /**
-   * 삭제 중 (F-CY-10): Functions가 하위 문서·증거를 지우기 전에 남긴다. 이 표시가 있으면 새 Run을 받지 않는다.
+   * 삭제 중: Functions가 하위 문서·증거를 지우기 전에 남긴다. 이 표시가 있으면 새 Run을 받지 않는다.
    * 중간에 실패해 남았으면 다시 삭제하면 이어서 지운다
    */
   deletingAt: z.string().optional(),
 });
 export type TestCycle = z.infer<typeof TestCycle>;
 
-/** 로컬 콘솔: Agent 사고 로그 한 줄 (F-DB-04) */
+/** 로컬 콘솔: Agent 사고 로그 한 줄 */
 export const ThoughtEntry = z.object({
   at: z.number(),
   kind: z.enum(['observe', 'decide', 'act', 'verify', 'recover', 'system']),
@@ -616,7 +616,7 @@ export const ThoughtEntry = z.object({
 export type ThoughtEntry = z.infer<typeof ThoughtEntry>;
 
 /**
- * 스펙 묶음 (F-IN-03·08): 앱 버전 하나의 스펙 폴더 스냅샷. 업로드 후 바꾸지 않는다.
+ * 스펙 묶음: 앱 버전 하나의 스펙 폴더 스냅샷. 업로드 후 바꾸지 않는다.
  * 입력으로 쓰는 `<스펙 이름>/spec.md`만 Storage(`projects/{p}/specBundles/{id}/<스펙>/spec.md`)에 올린다.
  */
 export const SpecBundle = z.object({
@@ -640,7 +640,7 @@ export const SpecBundle = z.object({
 });
 export type SpecBundle = z.infer<typeof SpecBundle>;
 
-/** 작업 실패·일시정지 이유. 플랜 한도·Claude Code 문제는 해결 후 다시 시도한다 (F-EX-17) */
+/** 작업 실패·일시정지 이유. 플랜 한도·Claude Code 문제는 해결 후 다시 시도한다 */
 export const JobErrorKind = z.enum([
   'plan_limit',
   'not_logged_in',
@@ -683,7 +683,7 @@ const JobBase = {
   error: z.object({ kind: JobErrorKind, message: z.string() }).optional(),
 };
 
-/** QA 문서 생성 (PRD §5.2): 본인 Claude 플랜으로 */
+/** QA 문서 생성 (docs/product/qa-doc.md): 본인 Claude 플랜으로 */
 export const QaDocJob = z.object({
   ...JobBase,
   kind: z.literal('qa_doc_generate'),
@@ -808,7 +808,7 @@ export const RunCycleJob = z.object({
 export type RunCycleJob = z.infer<typeof RunCycleJob>;
 
 /**
- * 답변 기반 케이스 수정안 (F-QD-17): 답변된 스펙 확인 질문을 케이스에 반영한 수정안을 요청자의 호스트가 만든다.
+ * 답변 기반 케이스 수정안: 답변된 스펙 확인 질문을 케이스에 반영한 수정안을 요청자의 호스트가 만든다.
  * 케이스는 바꾸지 않는다 — 요청자가 웹에서 diff를 보고 적용(일반 편집과 같은 낙관적 잠금)하거나 버린다
  */
 export const CaseReviseJob = z.object({
@@ -841,19 +841,19 @@ export const CaseReviseJob = z.object({
 });
 export type CaseReviseJob = z.infer<typeof CaseReviseJob>;
 
-/** 호스트 에이전트가 처리할 작업 (PRD §6.2·6.4) */
+/** 호스트 에이전트가 처리할 작업 (docs/architecture.md, docs/concepts.md) */
 export const Job = z.discriminatedUnion('kind', [QaDocJob, RunCycleJob, CaseReviseJob]);
 export type Job = QaDocJob | RunCycleJob | CaseReviseJob;
 
 /**
- * 호스트 에이전트 연결 상태 (PRD §6.4 Host, F-DB-09). 실행 중인 호스트가 주기적으로 `lastSeen`을 갱신한다.
+ * 호스트 에이전트 연결 상태 (docs/concepts.md). 실행 중인 호스트가 주기적으로 `lastSeen`을 갱신한다.
  * `users/{uid}/hosts/{hostId}` — 본인만 읽고 쓴다.
  */
 export const Host = z.object({
   id: z.string(),
   name: z.string(),
   lastSeen: z.string(),
-  /** 지금 연결된 Android 디바이스 (사이클 대상 고르기에 쓴다, F-DV-02·03) */
+  /** 지금 연결된 Android 디바이스 (사이클 대상 고르기에 쓴다) */
   devices: z
     .array(
       z.object({
@@ -869,7 +869,7 @@ export const Host = z.object({
       version: z.string().optional(),
       loggedIn: z.boolean(),
       subscriptionType: z.string().optional(),
-      /** QA 문서 생성에 쓰는 모델에 필요한 최소 버전보다 낮으면 그 버전 (F-EX-17) */
+      /** QA 문서 생성에 쓰는 모델에 필요한 최소 버전보다 낮으면 그 버전 */
       requiredVersion: z.string().optional(),
     })
     .optional(),
@@ -903,9 +903,9 @@ export function compareVersions(a: string, b: string): number {
 }
 /**
  * Run을 맡길 수 있는 가장 낮은 호스트 버전. 웹·Functions·보안 규칙과 호환되지 않게 바뀐 호스트 릴리스에서 올린다.
- * 0.3.0: Run의 지금 칸(`currentTcId`)을 Functions(claimCell)만 정해서, 그 전 호스트는 첫 케이스에서 보안 규칙에 막힌다 (F-CY-06)
- * 0.4.0: 준비 플로우를 QA 문서 버전마다 둬서(`qaDocs/{d}/prepFlows`), 그 전 호스트는 옛 위치를 읽다 보안 규칙에 막힌다 (F-PF-01)
- * 0.5.0: 실행 안전장치를 프로젝트 설정으로 옮겨(`runLimits`), 그 전 호스트는 설정한 한도와 Run당 토큰 한도를 무시하고 돈다 (F-EX-12)
+ * 0.3.0: Run의 지금 칸(`currentTcId`)을 Functions(claimCell)만 정해서, 그 전 호스트는 첫 케이스에서 보안 규칙에 막힌다
+ * 0.4.0: 준비 플로우를 QA 문서 버전마다 둬서(`qaDocs/{d}/prepFlows`), 그 전 호스트는 옛 위치를 읽다 보안 규칙에 막힌다
+ * 0.5.0: 실행 안전장치를 프로젝트 설정으로 옮겨(`runLimits`), 그 전 호스트는 설정한 한도와 Run당 토큰 한도를 무시하고 돈다
  */
 export const MIN_HOST_VERSION = '0.5.0';
 /** 이 호스트로는 Run을 시작할 수 없다. 버전을 알리지 않는 호스트는 그 필드보다 오래된 것이다 */
@@ -915,7 +915,7 @@ export const hostOutdated = (host: Pick<Host, 'version'>) =>
 export const HOST_ONLINE_MS = 90_000;
 
 /**
- * 호스트 연결 (F-TM-14): 웹에서 [이 PC 연결]로 만든, 호스트 에이전트가 이 계정으로 접속할 자격.
+ * 호스트 연결: 웹에서 [이 PC 연결]로 만든, 호스트 에이전트가 이 계정으로 접속할 자격.
  * `hostConnections/{id}` — Functions만 쓰고 본인만 읽는다. 문서가 없으면(연결 해제) 그 호스트의 요청은 보안 규칙이 막는다.
  * 비밀값은 PC의 키체인에만 있고 여기에는 해시만 둔다.
  */
@@ -933,12 +933,12 @@ export type HostConnection = z.infer<typeof HostConnection>;
 /** 웹이 [이 PC 연결]로 받아 호스트에 넘기는 자격. 비밀값은 이때 한 번만 보인다 */
 export type HostCredential = { uid: string; hostId: string; secret: string };
 
-/** 계정 종류를 따로 정하지 않은 로그인 케이스·계정의 종류 (F-QD-04) */
+/** 계정 종류를 따로 정하지 않은 로그인 케이스·계정의 종류 */
 export const DEFAULT_ACCOUNT_KIND = '기본';
 
 /**
- * 테스트 계정 (F-PF-04·08·09). `projects/{p}/accounts/{id}` — Functions만 쓰고 멤버가 읽는다.
- * 비밀번호·TOTP 시드는 여기 없다: `accountSecrets/{id}`에 암호화해 두고 배정받은 호스트에만 준다 (F-EX-09)
+ * 테스트 계정. `projects/{p}/accounts/{id}` — Functions만 쓰고 멤버가 읽는다.
+ * 비밀번호·TOTP 시드는 여기 없다: `accountSecrets/{id}`에 암호화해 두고 배정받은 호스트에만 준다
  */
 export const TestAccount = z.object({
   id: z.string(),
@@ -956,7 +956,7 @@ export const TestAccount = z.object({
   secretUpdated: z.object({ by: z.string(), at: z.string() }),
   /**
    * 배정(리스). 그 Run이 실행 중이고 연결 신호가 살아 있는 동안만 유효하다 — 끊기면 다음 배정 때 풀린다.
-   * `restoring`: 원복 플로우가 있는 케이스 중이다. 이 상태로 끊기면 계정 상태를 알 수 없어 격리한다 (F-PF-09)
+   * `restoring`: 원복 플로우가 있는 케이스 중이다. 이 상태로 끊기면 계정 상태를 알 수 없어 격리한다
    */
   lease: z
     .object({

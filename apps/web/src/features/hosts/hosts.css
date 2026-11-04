@@ -1,4 +1,4 @@
-/* 연결된 PC·이 PC 연결 화면 (F-TM-14). 색은 --qc-* 토큰만 쓴다. */
+/* 연결된 PC·이 PC 연결 화면. 색은 --qc-* 토큰만 쓴다. */
 .qh-add {
   display: flex;
   align-items: flex-start;

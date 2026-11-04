@@ -15,7 +15,7 @@ import { SuggestionsTab } from './SuggestionsTab';
 import { TraceabilityTab } from './TraceabilityTab';
 import './qa-doc.css';
 
-/** QA 문서 검토·승인 (PRD §5.2) */
+/** QA 문서 검토·승인 (docs/product/qa-doc.md) */
 export function QaDocReviewPage() {
   const { projectId = '', docId = '' } = useParams();
   const doc = useQaDoc(projectId, docId);

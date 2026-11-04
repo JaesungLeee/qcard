@@ -6,7 +6,7 @@ import { OPERATOR } from './policy';
 const SOFT_DELETE_DAYS = 7;
 
 /*
- * 개인정보처리방침 (PRD §8, §10 공개 출시 조건). 내용은 코드가 실제로 하는 일과 맞춘다:
+ * 개인정보처리방침 (docs/security.md, docs/roadmap.md 공개 출시 조건). 내용은 코드가 실제로 하는 일과 맞춘다:
  * 수집 항목은 shared 도메인 스키마·Functions, 보관 위치는 docs/dev/deploy.md, PC에 남는 파일은 apps/host-agent.
  * 데이터 처리 방식을 바꾸면 이 문서도 함께 고친다.
  */

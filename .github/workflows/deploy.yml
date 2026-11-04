@@ -1,4 +1,5 @@
-# main에 푸시하면 검증한 뒤 바뀐 부분만 운영(qcard-d2ade)에 배포한다. develop 푸시와 PR은 검증만 한다.
+# main에 푸시하면 검증한 뒤 바뀐 부분만 운영(qcard-d2ade)에 배포하고 태그를 단다: 호스트가 바뀌었으면 host-v 태그 + npm 배포(먼저),
+# 서비스가 바뀌었으면 Firebase 배포 + v 태그·GitHub Release. 대상 고르기는 scripts/release-plan.sh. develop 푸시와 PR은 검증만 한다.
 # Google Cloud 인증은 Workload Identity Federation(키 파일 없음) — 설정은 docs/dev/ci.md, 브랜치 전략은 docs/dev/branching.md
 name: deploy
 
@@ -48,6 +49,21 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
 
+  # main으로 가는 PR(release·hotfix)이 바뀐 쪽의 버전을 올렸는지 머지 전에 확인한다
+  release-check:
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - run: scripts/release-plan.sh pr "${{ github.event.pull_request.base.sha }}"
+      - name: CHANGELOG 초안 표시가 지워졌는지
+        run: |
+          if grep -n '<!-- 초안:' CHANGELOG.md; then
+            echo "::error::CHANGELOG.md 초안을 다듬고 초안 표시 줄을 지우세요"; exit 1
+          fi
+
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: verify
@@ -55,14 +71,14 @@ jobs:
     # GitHub 저장소 설정 → Environments → production에서 승인자를 걸면 배포 전에 멈춘다
     environment: production
     permissions:
-      contents: read
-      actions: read
+      contents: write # 태그·GitHub Release
+      actions: write # publish-host 띄우기
       id-token: write
     steps:
       - uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 0
-      - name: 배포할 대상 고르기
+      - name: 배포할 대상·태그 고르기
         id: targets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -72,21 +88,33 @@ jobs:
           base=$(gh run list --workflow deploy.yml --branch main --status success --limit 20 \
             --json headSha,event --jq '[.[] | select(.event != "pull_request")][0].headSha // empty')
           if [ "$ALL" = "true" ] || [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            changed='*'
-          else
-            echo "기준: $base"
-            changed=$(git diff --name-only "$base" "$GITHUB_SHA")
+            base='*'
           fi
-          has() { [ "$changed" = '*' ] || echo "$changed" | grep -Eq "$1"; }
-          # 테스트·문서만 바뀌면 배포하지 않는다
-          t=()
-          has '^(apps/web/(src/|public/|index.html|vite.config.ts|package.json)|packages/[^/]+/(src/|package.json)|pnpm-lock.yaml)' && t+=(hosting)
-          has '^(apps/functions/(src/|package.json)|packages/(shared|data|fixtures)/(src/|package.json)|pnpm-lock.yaml)' && t+=(functions)
-          has '^firebase/firestore' && t+=(firestore)
-          has '^firebase/storage' && t+=(storage)
-          only=$(IFS=,; echo "${t[*]}")
-          echo "only=$only" >> "$GITHUB_OUTPUT"
-          echo "배포 대상: ${only:-없음}"
+          # 손으로 실행하면 다시 배포만 한다 (태그·npm 배포는 main 푸시 때만)
+          mode=push
+          [ "${{ github.event_name }}" = workflow_dispatch ] && mode=dispatch
+          scripts/release-plan.sh "$mode" "$base"
+      # 호스트를 먼저 npm에 올린다. 서비스가 먼저 나가면 웹이 아직 npm에 없는 호스트로 업데이트하라고 안내할 수 있다.
+      # GITHUB_TOKEN으로 푸시한 태그는 publish-host.yml을 띄우지 않아서 workflow_dispatch로 띄우고 끝날 때까지 기다린다
+      - if: steps.targets.outputs.host_tag != ''
+        name: 호스트 태그·npm 배포
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.targets.outputs.host_tag }}
+        run: |
+          git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || git tag "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
+          since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run publish-host.yml --ref "$TAG"
+          id=
+          for _ in $(seq 30); do
+            sleep 5
+            id=$(gh run list --workflow publish-host.yml --event workflow_dispatch --branch "$TAG" --limit 5 \
+              --json databaseId,createdAt --jq "[.[] | select(.createdAt >= \"$since\")][0].databaseId // empty")
+            [ -n "$id" ] && break
+          done
+          [ -n "$id" ] || { echo "::error::$TAG의 publish-host 실행을 찾지 못했습니다"; exit 1; }
+          gh run watch "$id" --exit-status --interval 30
       - if: steps.targets.outputs.only != ''
         uses: pnpm/action-setup@v4.1.0
       - if: steps.targets.outputs.only != ''
@@ -108,3 +136,34 @@ jobs:
       - if: steps.targets.outputs.only != ''
         # firebase-tools는 apps/functions의 개발 의존성 (버전 고정). firebase.json이 있는 저장소 루트에서 실행한다
         run: apps/functions/node_modules/.bin/firebase deploy --project qcard-d2ade --only "${{ steps.targets.outputs.only }}" --non-interactive --force
+      - if: steps.targets.outputs.service_tag != ''
+        name: 서비스 태그
+        env:
+          TAG: ${{ steps.targets.outputs.service_tag }}
+        run: |
+          git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || git tag "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
+      # 서비스가 나갔으면 v 태그에, 호스트만 나갔으면 host-v 태그에 GitHub Release를 만든다
+      - if: steps.targets.outputs.service_tag != '' || steps.targets.outputs.host_tag != ''
+        name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.targets.outputs.service_tag || steps.targets.outputs.host_tag }}
+        run: |
+          ver=${TAG##*v}
+          # CHANGELOG.md의 "## [<버전>]" 항목을 본문으로
+          notes=$(awk -v h="## [$ver]" 'index($0, h) == 1 {f=1; next} /^## /{f=0} f' CHANGELOG.md)
+          [ -n "$notes" ] || echo "::warning::CHANGELOG.md에 $ver 항목이 없습니다"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --verify-tag --title "qcard $ver" --notes "$notes"
+      # release·hotfix를 머지한 푸시면 main → develop back-merge PR을 연다 (RELEASE_TOKEN이라야 PR에서 검증이 돈다)
+      - if: github.event_name == 'push'
+        name: develop back-merge PR
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          from=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq '[.[] | select(.base.ref == "main")][0].head.ref // empty')
+          case "$from" in release/* | hotfix/*) ;; *) exit 0 ;; esac
+          [ -n "$(gh pr list --head main --base develop --state open --json number --jq '.[]')" ] && exit 0
+          gh pr create --base develop --head main --title "back-merge ${from/\// }" \
+            --body "\`$from\`를 \`main\`에 머지한 뒤의 back-merge. 머지는 merge commit으로 한다." \
+            || echo "::notice::back-merge할 커밋이 없습니다"

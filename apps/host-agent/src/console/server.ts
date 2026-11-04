@@ -55,7 +55,7 @@ export function parseClientMessage(raw: string): ConsoleClientMessage | undefine
 }
 
 /*
- * 로컬 콘솔 서버 (PRD §8 로컬 콘솔 보호):
+ * 로컬 콘솔 서버 (로컬 콘솔 보호, docs/security.md):
  *   - 127.0.0.1에만 바인딩한다
  *   - 실행할 때 만든 일회용 토큰 URL(/console-api/auth?token=…)을 세션 쿠키(HttpOnly, SameSite=Strict)로 바꾼다
  *   - 모든 HTTP·WebSocket 요청의 Host·Origin을 검사해 다른 웹페이지의 요청과 DNS 리바인딩을 막는다

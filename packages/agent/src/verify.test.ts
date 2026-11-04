@@ -220,7 +220,7 @@ describe('잠깐 뜨는 요소와 화면 안정화', () => {
   });
 });
 
-describe('판정 집계 (F-EX-04, F-RP-03)', () => {
+describe('판정 집계', () => {
   const p = (result: PointResult['result'], method: 'tree' | 'vision' = 'tree') => ({ result, method }) as PointResult;
   const done = { status: 'done' as const, recoveries: 0 };
 
@@ -335,7 +335,7 @@ describe('runCase', () => {
     expect(device.log.slice(-2)).toEqual(['network wifi on', 'network data on']);
   });
 
-  it('Wi-Fi ADB 디바이스에서 네트워크를 끄는 케이스는 Blocked, 네트워크는 건드리지 않는다 (F-EX-16)', async () => {
+  it('Wi-Fi ADB 디바이스에서 네트워크를 끄는 케이스는 Blocked, 네트워크는 건드리지 않는다', async () => {
     const { device, env: e } = env(
       [
         [toolUse('wait', { seconds: 1, intent: '스플래시' })],

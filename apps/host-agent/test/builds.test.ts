@@ -13,7 +13,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { BuildInstallError, ensureBuild } from '../src';
 
 /*
- * 빌드 업로드 → 사이클 만들기 → 호스트가 사이클 빌드를 설치 (F-DV-05·06, F-CY-01·02).
+ * 빌드 업로드 → 사이클 만들기 → 호스트가 사이클 빌드를 설치.
  * APK는 packages/apk의 테스트 APK(코드 없는 앱, 테스트 키), 디바이스는 FakeDevice.
  */
 
@@ -51,7 +51,7 @@ function as(name: string) {
   return { db, storage, api };
 }
 
-describe('빌드 업로드 (F-DV-05)', () => {
+describe('빌드 업로드', () => {
   it('서명된 APK에서 패키지·버전·지문을 읽어 올리고, 같은 파일·서명 없는 파일·Viewer는 거부한다', async () => {
     const { api, db } = as(PEOPLE.lead);
     const build = await api.uploadBuild('haru', { name: 'app-qa release.apk', bytes: apk('signed-v1v2v3.apk') });
@@ -80,7 +80,7 @@ describe('빌드 업로드 (F-DV-05)', () => {
   });
 });
 
-describe('사이클 만들기 (F-CY-01·02)', () => {
+describe('사이클 만들기', () => {
   it('승인된 케이스를 스냅샷으로 고정하고 케이스 × 대상 칸을 N/T로 만든다', async () => {
     const { api } = as(PEOPLE.qa);
     const doc = await api.getQaDoc({ projectId: 'haru', docId: 'doc-130' });
@@ -123,7 +123,7 @@ describe('사이클 만들기 (F-CY-01·02)', () => {
   });
 });
 
-describe('호스트: 사이클 빌드 설치 (F-DV-05·06)', () => {
+describe('호스트: 사이클 빌드 설치', () => {
   it('다른 버전이면 내려받아(해시 확인·캐시) 설치하고, 같은 버전이면 그대로, 높은 버전이면 멈춘다', async () => {
     const lead = as(PEOPLE.lead);
     const build = await lead.api.uploadBuild('haru', { name: 'app.apk', bytes: apk('signed-v1v2v3.apk') });

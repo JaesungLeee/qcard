@@ -83,7 +83,7 @@ Montage `@montage-ui/core` 4.1.3과 `@montage-ui/icon` 4.1.3의 공개 빌드를
 | Feedback | `SectionMessage` | 승인 보류, 자동 확정 불가, Blocked 사유 |
 
 - 판정 배지·셀은 Montage 컴포넌트 색 대신 `qcard-verdict-*` 토큰으로 그립니다(위 판정 색 참고).
-- 수백 행을 편집하는 케이스 그리드와 QA 시트는 PRD대로 AG Grid를 쓰고, 색·글자·간격만 이 시스템 토큰에 맞춥니다. `Table`은 작은 요약 표용입니다.
+- 수백 행을 편집하는 케이스 그리드와 QA 시트는 AG Grid를 쓰고, 색·글자·간격만 이 시스템 토큰에 맞춥니다. `Table`은 작은 요약 표용입니다.
 - 번들에는 위 12종 외에도 Montage의 다른 컴포넌트(Modal, Select, Tooltip, Toast, Pagination 등 60여 종)와 아이콘 359종(`MontageQcard.Icons.IconSearch` 등)이 함께 들어 있습니다. 카드와 가이드는 아직 12종만 작성했습니다.
 
 ## 아이콘

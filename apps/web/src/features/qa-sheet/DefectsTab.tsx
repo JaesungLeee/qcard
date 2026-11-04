@@ -1,4 +1,4 @@
-// ③ 결함 목록 (PRD §5.10). Admin·QA는 심각도·상태를 그 자리에서 바꾼다 (F-RP-19). 결함은 판정 추적 뷰의 Fail 칸에서 등록한다
+// ③ 결함 목록 (docs/product/results.md). Admin·QA는 심각도·상태를 그 자리에서 바꾼다. 결함은 판정 추적 뷰의 Fail 칸에서 등록한다
 import { SEVERITY_LABEL, Severity, type Defect } from '@qcard/shared';
 import {
   ContentBadge,

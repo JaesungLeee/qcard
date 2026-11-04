@@ -65,7 +65,7 @@ export const center = (b: Bounds): Point => [Math.round(b.x + b.w / 2), Math.rou
 
 export const contains = (b: Bounds, [x, y]: Point) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
 
-/** 크기 검증용 px → dp (F-EX-03) */
+/** 크기 검증용 px → dp */
 export const pxToDp = (px: number, density: number) => (px * 160) / density;
 
 const shortCls = (cls: string) => cls.slice(cls.lastIndexOf('.') + 1);

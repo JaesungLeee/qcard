@@ -1,4 +1,4 @@
-// 판정 추적 뷰 (F-RP-02, 근거 띠는 EvidenceBand) + 자동 확정 조건 (F-RP-03) + 사람 확정 (F-RP-04) + 수동 결과 입력 (F-RP-05)
+// 판정 추적 뷰 (근거 띠는 EvidenceBand) + 자동 확정 조건 + 사람 확정 + 수동 결과 입력
 import {
   PLATFORM_LABEL,
   POINT_METHOD_LABEL,
@@ -227,7 +227,7 @@ function Trace({ d }: { d: CycleDetail }) {
                       stale={isRunStale(running, now)}
                       waiting={running.waiting?.level}
                     />
-                    {/* 일시정지된 Run은 칸을 놓는다 — 이어서 실행하기 전에 다른 Run이 가져갈 수 있다 (F-CY-06) */}
+                    {/* 일시정지된 Run은 칸을 놓는다 — 이어서 실행하기 전에 다른 Run이 가져갈 수 있다 */}
                     {running.status === 'paused'
                       ? `${running.executor}의 Run이 이 칸에서 멈췄습니다.`
                       : `${running.executor}의 Run이 이 칸을 잡고 있습니다.`}
@@ -454,7 +454,7 @@ function HistoryCard({ r, manual }: { r: CaseResult; manual: boolean }) {
               </span>
             </li>
           )}
-          {/* 다시 실행해 밀려난 시도 (F-CY-04). 최신 시도가 최종 판정이다 */}
+          {/* 다시 실행해 밀려난 시도. 최신 시도가 최종 판정이다 */}
           {previous.map((a) => (
             <li key={`attempt-${a.attempt}`}>
               <span className="qs-row" style={{ gap: token('space-4') }}>

@@ -20,7 +20,7 @@ export const useAuth = () => useContext(AuthContext);
 
 /**
  * Firebase 모드의 로그인 상태를 내려 준다. 사용자가 바뀌면 조회 캐시를 비운다.
- * 로그인 화면은 라우터의 `/login`(LoginPage)이 그리고, 로그인이 필요한 화면은 RequireAuth가 그리로 보낸다 (F-TM-01).
+ * 로그인 화면은 라우터의 `/login`(LoginPage)이 그리고, 로그인이 필요한 화면은 RequireAuth가 그리로 보낸다.
  */
 export function AuthGate({ client, children }: { client: FirebaseClient; children: ReactNode }) {
   const qc = useQueryClient();

@@ -28,14 +28,14 @@ export type DeviceInfo = {
   serial: string;
   model: string;
   osMajor: number;
-  /** 빌드 번호 (설정 > 휴대전화 정보의 빌드 번호, 예: AP3A.240905.015.A2). 결과에 기록한다 (F-CY-01) */
+  /** 빌드 번호 (설정 > 휴대전화 정보의 빌드 번호, 예: AP3A.240905.015.A2). 결과에 기록한다 */
   build?: string;
   /** 보안 패치 수준 (예: 2025-09-01) */
   securityPatch?: string;
   size: { w: number; h: number };
   /** dpi. dp = px × 160 / dpi */
   density: number;
-  /** Wi-Fi ADB면 디바이스 네트워크를 끌 수 없다 (F-EX-16) */
+  /** Wi-Fi ADB면 디바이스 네트워크를 끌 수 없다 */
   connection: 'usb' | 'wifi';
 };
 
@@ -80,7 +80,7 @@ export interface DeviceDriver {
   stayOnWhilePlugged(): Promise<number>;
   setStayOnWhilePlugged(value: number): Promise<void>;
 
-  /** 환경 조작 (F-EX-16) */
+  /** 환경 조작 */
   setNetwork(kind: NetworkKind, enabled: boolean): Promise<void>;
   setPermission(pkg: string, permission: string, granted: boolean): Promise<void>;
 }
@@ -95,7 +95,7 @@ export class DeviceError extends Error {
 export class DestructiveActionError extends DeviceError {
   override name = 'DestructiveActionError';
 }
-/** 이 연결·디바이스에서 할 수 없는 환경 조작 → 케이스 Blocked (F-EX-05) */
+/** 이 연결·디바이스에서 할 수 없는 환경 조작 → 케이스 Blocked */
 export class EnvActionUnavailableError extends DeviceError {
   override name = 'EnvActionUnavailableError';
 }

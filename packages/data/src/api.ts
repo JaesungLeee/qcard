@@ -47,24 +47,24 @@ export interface QcardApi {
   /** 로그인 사용자 id (멤버 키) */
   readonly currentUid: string;
 
-  /** 내가 멤버인 프로젝트 (F-TM-02). 다른 프로젝트는 보이지 않는다 */
+  /** 내가 멤버인 프로젝트. 다른 프로젝트는 보이지 않는다 */
   listMyProjects(): Promise<ProjectSummary[]>;
   /** 멤버가 아니면 `PermissionError` */
   getProject(projectId: string): Promise<Project>;
-  /** 누구나 만들 수 있고 만든 사람이 Admin (F-TM-09). 데이터 처리 안내 확인 필수 (F-TM-13) */
+  /** 누구나 만들 수 있고 만든 사람이 Admin. 데이터 처리 안내 확인 필수 */
   createProject(input: NewProjectInput): Promise<Project>;
 
   /** 내 역할 (멤버가 아니면 undefined) */
   myRole(projectId: string): Promise<Role | undefined>;
   listMembers(projectId: string): Promise<Member[]>;
-  /** Admin만. Admin이 0명이 되면 `RuleError` (F-TM-03) */
+  /** Admin만. Admin이 0명이 되면 `RuleError` */
   setMemberRole(projectId: string, uid: string, role: Role): Promise<void>;
   /** Admin만 다른 멤버를 내보낸다. 남긴 판정·이력은 보존 */
   removeMember(projectId: string, uid: string): Promise<void>;
 
   /** 대기 중 초대 (만료 포함, Admin만) */
   listInvitations(projectId: string): Promise<Invitation[]>;
-  /** Admin만. github가 없으면 링크 초대 (F-TM-10) */
+  /** Admin만. github가 없으면 링크 초대 */
   createInvitation(projectId: string, input: { role: Role; github?: string }): Promise<Invitation>;
   revokeInvitation(projectId: string, invitationId: string): Promise<void>;
   /** 초대 링크로 들어온 사람에게 보여 줄 정보 */
@@ -72,27 +72,27 @@ export interface QcardApi {
   /** 데이터 처리 안내 확인 후 수락하면 멤버가 된다. 만료·취소·다른 사람 앞 초대는 `RuleError` */
   acceptInvitation(token: string, input: { dataNoticeAck: boolean }): Promise<Project>;
 
-  /** 탈퇴 (F-TM-11). 마지막 Admin은 Admin을 넘긴 뒤에만, 혼자면 탈퇴 대신 삭제 */
+  /** 탈퇴. 마지막 Admin은 Admin을 넘긴 뒤에만, 혼자면 탈퇴 대신 삭제 */
   leaveProject(projectId: string): Promise<void>;
-  /** Admin만, 이름을 입력해 확인. 유예 기간 동안 삭제 예정으로 남는다 (F-TM-12) */
+  /** Admin만, 이름을 입력해 확인. 유예 기간 동안 삭제 예정으로 남는다 */
   deleteProject(projectId: string, confirmName: string): Promise<Project>;
   restoreProject(projectId: string): Promise<Project>;
   /**
-   * 실행 안전장치 저장 (F-EX-12). Admin만, 범위를 벗어나면 `RuleError`. 사이클에 고정하지 않아
+   * 실행 안전장치 저장. Admin만, 범위를 벗어나면 `RuleError`. 사이클에 고정하지 않아
    * 진행 중 사이클도 다음 Run부터 적용된다. 읽기는 `getProject` + `runLimitsOf`
    */
   setRunLimits(projectId: string, limits: RunLimits): Promise<Project>;
 
   listQaDocs(projectId: string): Promise<QaDocSummary[]>;
   getQaDoc(ref: DocRef): Promise<QADocument>;
-  /** 낙관적 잠금 (F-QD-09): `expectedRev`가 최신이 아니면 `ConflictError` */
+  /** 낙관적 잠금: `expectedRev`가 최신이 아니면 `ConflictError` */
   updateCase(ref: DocRef, tcId: string, body: CaseBody, expectedRev: number): Promise<TestCase>;
-  /** 승인·반려 (F-QD-10). 승인은 현재 내용 해시로 기록된다. */
+  /** 승인·반려. 승인은 현재 내용 해시로 기록된다. */
   setApproval(ref: DocRef, tcIds: string[], status: 'approved' | 'rejected' | 'pending'): Promise<void>;
-  /** 스펙 확인 질문 처리 (F-QD-03): 답변하거나 "현 스펙대로 진행"으로 보류 해제 */
+  /** 스펙 확인 질문 처리: 답변하거나 "현 스펙대로 진행"으로 보류 해제 */
   resolveQuestion(ref: DocRef, questionId: string, resolution: QuestionResolution): Promise<void>;
   commentQuestion(ref: DocRef, questionId: string, text: string): Promise<void>;
-  /** QA 문서 한 버전의 준비 플로우 (F-PF-01). 버전마다 사본이라 편집·삭제도 그 버전에만 적용된다 */
+  /** QA 문서 한 버전의 준비 플로우. 버전마다 사본이라 편집·삭제도 그 버전에만 적용된다 */
   listPrepFlows(ref: DocRef): Promise<PrepFlow[]>;
   /**
    * 플로우별 사용처: 그 버전의 활성 케이스 + 그 버전으로 만든 완료되지 않은 사이클의 케이스 사본 (`prepFlowUses`).
@@ -109,19 +109,19 @@ export interface QcardApi {
   /** 준비 플로우 삭제. 케이스가 참조 중이면 `RuleError`(`prepFlowDeleteBlocker`). Admin·QA만 */
   deletePrepFlow(ref: DocRef, flowId: string): Promise<void>;
 
-  /** 테스트 계정 (F-PF-04·08). 상태(사용 중·로그인 실패·격리)와 함께, 로그인 ID 순. 비밀값은 없다 */
+  /** 테스트 계정. 상태(사용 중·로그인 실패·격리)와 함께, 로그인 ID 순. 비밀값은 없다 */
   listAccounts(projectId: string): Promise<AccountView[]>;
-  /** 계정 등록 (F-PF-08). Admin·QA만. 비밀번호·TOTP 시드는 저장한 뒤 다시 볼 수 없다 */
+  /** 계정 등록. Admin·QA만. 비밀번호·TOTP 시드는 저장한 뒤 다시 볼 수 없다 */
   createAccount(projectId: string, input: AccountInput): Promise<TestAccount>;
   /** 없는 필드는 그대로, `totp: null`은 TOTP 시드를 지운다. 비밀값을 바꾸면 로그인 실패 표시가 지워진다 */
   updateAccount(projectId: string, accountId: string, patch: AccountPatch): Promise<TestAccount>;
   /** 실행 중인 Run이 쓰고 있으면 `RuleError` */
   deleteAccount(projectId: string, accountId: string): Promise<void>;
-  /** 로그인 실패 표시 지우기·격리 해제 (F-PF-08·09). Admin·QA만 */
+  /** 로그인 실패 표시 지우기·격리 해제. Admin·QA만 */
   clearAccountFlag(projectId: string, accountId: string, flag: 'loginFailed' | 'quarantine'): Promise<TestAccount>;
 
   /**
-   * QA 문서 생성 요청 (PRD §5.2): 스펙 묶음(`<스펙>/spec.md`만)을 변경 불가 스냅샷으로 올리고 Job을 만든다.
+   * QA 문서 생성 요청 (docs/product/qa-doc.md): 스펙 묶음(`<스펙>/spec.md`만)을 변경 불가 스냅샷으로 올리고 Job을 만든다.
    * 처리는 요청자 본인의 호스트 에이전트가 본인 Claude 플랜으로 한다. Admin·QA만
    */
   requestQaDoc(projectId: string, input: RequestQaDocInput): Promise<QaDocJob>;
@@ -141,7 +141,7 @@ export interface QcardApi {
   /** 실패·일시정지한 내 작업을 다시 대기열에 넣는다 */
   retryJob(projectId: string, jobId: string): Promise<void>;
   /**
-   * 케이스 수정안 요청 (F-QD-17): 이 케이스에 연결된 답변된 질문을 반영한 수정안을 내 호스트가 만든다.
+   * 케이스 수정안 요청: 이 케이스에 연결된 답변된 질문을 반영한 수정안을 내 호스트가 만든다.
    * 케이스는 바꾸지 않는다. 답변된 질문이 없거나 같은 케이스 수정안이 진행 중이면 `RuleError`. Admin·QA만
    */
   requestCaseRevision(ref: DocRef, tcId: string): Promise<CaseReviseJob>;
@@ -151,7 +151,7 @@ export interface QcardApi {
   closeCaseRevision(projectId: string, jobId: string, outcome: 'applied' | 'dismissed'): Promise<void>;
   /** 내 호스트 에이전트 (연결 상태는 `lastSeen`으로 판단, HOST_ONLINE_MS) */
   myHosts(): Promise<Host[]>;
-  /** 내 계정에 연결된 PC (F-TM-14). 연결 신호(myHosts)는 켜져 있을 때만 있다 */
+  /** 내 계정에 연결된 PC. 연결 신호(myHosts)는 켜져 있을 때만 있다 */
   myHostConnections(): Promise<HostConnection[]>;
   /** [이 PC 연결]: 호스트 자격을 만든다. 비밀값은 여기서 한 번만 받아 그 PC의 호스트 에이전트에 넘긴다 */
   connectHost(name: string): Promise<HostCredential>;
@@ -161,12 +161,12 @@ export interface QcardApi {
   /** 올린 빌드 (새것 먼저) */
   listBuilds(projectId: string): Promise<Build[]>;
   /**
-   * 빌드 올리기 (F-DV-05): 서명된 APK만. 패키지·버전·서명 지문은 파일에서 읽고, 파일은 그대로 Storage에 둔다.
+   * 빌드 올리기: 서명된 APK만. 패키지·버전·서명 지문은 파일에서 읽고, 파일은 그대로 Storage에 둔다.
    * 서명이 없거나 APK가 아니면 `RuleError`, 같은 파일을 이미 올렸으면 `RuleError`. Admin·QA만
    */
   uploadBuild(projectId: string, file: { name: string; bytes: Uint8Array }): Promise<Build>;
   /**
-   * 사이클 만들기 (F-CY-01·02): QA 문서의 승인된 케이스를 스냅샷으로 고정하고, 케이스 × 대상 디바이스 칸을 N/T로 만든다.
+   * 사이클 만들기: QA 문서의 승인된 케이스를 스냅샷으로 고정하고, 케이스 × 대상 디바이스 칸을 N/T로 만든다.
    * 승인된 케이스가 없거나 대상이 없으면 `RuleError`. Admin·QA만
    */
   createCycle(projectId: string, input: NewCycleInput): Promise<TestCycle>;
@@ -174,28 +174,28 @@ export interface QcardApi {
   listCycles(projectId: string): Promise<CycleSummary[]>;
   getCycle(ref: CycleRef): Promise<CycleDetail>;
   /**
-   * 사이클 실시간 구독 (F-CY-05·F-DB-07): 처음 한 번과, 사이클·결과·Run·결함이 바뀔 때마다 최신 내용을 준다.
+   * 사이클 실시간 구독: 처음 한 번과, 사이클·결과·Run·결함이 바뀔 때마다 최신 내용을 준다.
    * 다른 실행자의 진행·판정도 들어온다. 돌려준 함수로 구독을 끊는다
    */
   watchCycle(ref: CycleRef, onChange: (detail: CycleDetail) => void, onError?: (e: unknown) => void): () => void;
-  /** 사람 확정·오버라이드 (F-RP-04). 판정 변경 이력이 쌓인다. */
+  /** 사람 확정·오버라이드. 판정 변경 이력이 쌓인다. */
   confirmVerdict(input: ConfirmVerdictInput): Promise<CaseResult>;
   /**
-   * 결함 등록 (F-RP-19): Fail 칸에서 결함을 만들고 그 칸의 `defectId`로 연결한다. 번호(`D-1`)는 사이클 안에서 매긴다.
+   * 결함 등록: Fail 칸에서 결함을 만들고 그 칸의 `defectId`로 연결한다. 번호(`D-1`)는 사이클 안에서 매긴다.
    * Fail이 아니거나 이미 결함이 있는 칸, 제목·재현 절차가 비면 `RuleError`. Admin·QA만
    */
   createDefect(input: NewDefectInput): Promise<Defect>;
-  /** 결함의 심각도·상태 바꾸기 (F-RP-19). Admin·QA만 */
+  /** 결함의 심각도·상태 바꾸기. Admin·QA만 */
   updateDefect(ref: CycleRef, defectId: string, patch: DefectPatch): Promise<Defect>;
   /**
-   * 사이클 완료 (F-CY-09): 새 Run을 받지 않는다. 사람 확정은 계속 된다. 남은 확인필요·N/T 경고는 화면이 먼저 보인다
+   * 사이클 완료: 새 Run을 받지 않는다. 사람 확정은 계속 된다. 남은 확인필요·N/T 경고는 화면이 먼저 보인다
    * (`completionWarnings`). 이미 완료됐거나 로컬 실행 묶음이면 `RuleError`. Admin·QA만
    */
   completeCycle(ref: CycleRef): Promise<TestCycle>;
-  /** 완료 취소 (F-CY-09): 다시 Run을 받는다. 완료되지 않았으면 `RuleError`. Admin·QA만 */
+  /** 완료 취소: 다시 Run을 받는다. 완료되지 않았으면 `RuleError`. Admin·QA만 */
   reopenCycle(ref: CycleRef): Promise<TestCycle>;
   /**
-   * 사이클 삭제 (F-CY-10): 결과·Run·결함·판정 이력과 스크린샷 증거까지 바로 영구 삭제한다. 빌드·QA 문서는 남는다.
+   * 사이클 삭제: 결과·Run·결함·판정 이력과 스크린샷 증거까지 바로 영구 삭제한다. 빌드·QA 문서는 남는다.
    * 이름이 다르거나, 완료된 사이클이거나, 실행 중인 Run이 있으면 `RuleError`(`cycleDeleteBlocker`). Admin·QA만
    */
   deleteCycle(ref: CycleRef, confirmName: string): Promise<void>;
@@ -279,7 +279,7 @@ export type CycleSummary = {
   done: number;
   passRate: number;
   activeRuns: Run[];
-  /** 결함이 연결되지 않은 Fail 칸 (F-RP-19) — 결함 등록을 잊은 칸 */
+  /** 결함이 연결되지 않은 Fail 칸 — 결함 등록을 잊은 칸 */
   unlinkedFails: number;
 };
 
@@ -303,7 +303,7 @@ export type ConfirmVerdictInput = {
   note?: string;
   actualSummary?: string;
   /**
-   * 첨부 스크린샷 (F-RP-05, 선택). 주면 칸의 첨부를 남길 기존 첨부(`keep`) + 새로 올릴 파일(`add`)로 바꾼다.
+   * 첨부 스크린샷 (선택). 주면 칸의 첨부를 남길 기존 첨부(`keep`) + 새로 올릴 파일(`add`)로 바꾼다.
    * 없으면 기존 첨부를 그대로 둔다. 개수·형식·크기는 `attachmentProblem`
    */
   attachments?: { keep: Screenshot[]; add: AttachmentFile[] };

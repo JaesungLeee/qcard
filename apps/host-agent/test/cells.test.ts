@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CellLease, LEASE_LOST_MS } from '../src/cells';
 
-/* 칸 리스 (F-CY-06): 연결 신호로 이 Run이 칸을 잃었는지 본다 */
+/* 칸 리스: 연결 신호로 이 Run이 칸을 잃었는지 본다 */
 
 describe('CellLease', () => {
   const clock = () => {

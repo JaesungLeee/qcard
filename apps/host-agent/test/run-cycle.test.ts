@@ -57,7 +57,7 @@ beforeEach(async () => {
   await env.withSecurityRulesDisabled(async (c) => {
     const db = c.firestore() as unknown as Firestore;
     await writeAll(db, seedDocs());
-    // 사람마다 연결된 PC 하나 (호스트는 호스트 토큰으로 쓴다, F-TM-14)
+    // 사람마다 연결된 PC 하나 (호스트는 호스트 토큰으로 쓴다)
     await writeAll(
       db,
       Object.values(GITHUB).map((uid) => [`hostConnections/${hostOf(uid)}`, { id: hostOf(uid), uid }]),
@@ -132,7 +132,7 @@ describe('runCycle → Firestore·Storage', () => {
       (r) => r.tcId === 'TC-ONBOARDING-004' && r.deviceId === DEVICE,
     )!;
     expect(after).toMatchObject({ verdict: 'pass', runId: 'run-host-1', attempts: before!.attempts + 1 });
-    // 이전 시도는 요약이 결과에, 전체 내용이 attempts에 남는다 (F-CY-04). 판정 이력도 그대로다
+    // 이전 시도는 요약이 결과에, 전체 내용이 attempts에 남는다. 판정 이력도 그대로다
     expect(after.previousAttempts?.at(-1)).toMatchObject({
       attempt: before!.attempts,
       verdict: before!.verdict,
@@ -151,7 +151,7 @@ describe('runCycle → Firestore·Storage', () => {
     expect(await api.screenshotUrl(path)).toMatch(/^blob:/);
     const outsider = env.authenticatedContext('outsider').storage() as unknown as FirebaseStorage;
     await expect(getBytes(ref(outsider, path))).rejects.toThrow();
-    // 스크린샷은 그 Run을 실행한 사용자의 호스트만 올린다 — 같은 사람의 웹 세션도, 다른 사람의 호스트도 못 한다 (PRD §8)
+    // 스크린샷은 그 Run을 실행한 사용자의 호스트만 올린다 — 같은 사람의 웹 세션도, 다른 사람의 호스트도 못 한다 (docs/security.md)
     const png = new Uint8Array([137, 80, 78, 71]);
     const web = env.authenticatedContext(GITHUB[PEOPLE.lead]!).storage() as unknown as FirebaseStorage;
     await expect(uploadBytes(ref(web, path.replace('obs-', 'fake-')), png)).rejects.toThrow();
@@ -199,7 +199,7 @@ describe('runCycle → Firestore·Storage', () => {
     const until = '2026-10-20T05:30:00.000Z';
     const limited: LlmClient = { create: () => Promise.reject(new PlanLimitError('플랜 한도', until)) };
     const out = await runCycle({ api, sink, env: agentEnv(limited), ...REF, deviceId: DEVICE, runId: 'run-host-2' });
-    // 풀리는 시각을 알면 함께 돌려준다 (콘솔 상단에 보인다, F-DB-09)
+    // 풀리는 시각을 알면 함께 돌려준다 (콘솔 상단에 보인다)
     expect(out).toMatchObject({ status: 'paused', reason: 'plan_limit', limitedUntil: until, results: [] });
     const run = (await getDoc(doc(db, 'projects/haru/cycles/cycle-130-1/runs/run-host-2'))).data();
     expect(run).toMatchObject({ status: 'paused', pauseReason: 'plan_limit' });
@@ -208,7 +208,7 @@ describe('runCycle → Firestore·Storage', () => {
     expect(runs.find((r) => r.id === 'run-host-2')).toMatchObject({ status: 'paused', pauseReason: 'plan_limit' });
   });
 
-  it('Run 토큰 한도에 닿으면 다음 케이스 전에 일시정지하고, 이어서 실행해도 앞서 쓴 토큰을 센다 (F-EX-12)', async () => {
+  it('Run 토큰 한도에 닿으면 다음 케이스 전에 일시정지하고, 이어서 실행해도 앞서 쓴 토큰을 센다', async () => {
     const { db, api, sink } = await host(PEOPLE.lead, 'run-host-limit');
     const tcIds = ['TC-ONBOARDING-004', 'TC-ONBOARDING-003'];
     const start = (meter: UsageMeter) =>
@@ -259,7 +259,7 @@ describe('runCycle → Firestore·Storage', () => {
     expect(run).toMatchObject({ status: 'paused', pauseReason: 'claude_not_installed' });
   });
 
-  it('배정할 테스트 계정이 없으면 LLM을 부르지 않고 Blocked("계정 없음")로 올리고, 다음 케이스로 간다 (F-PF-04)', async () => {
+  it('배정할 테스트 계정이 없으면 LLM을 부르지 않고 Blocked("계정 없음")로 올리고, 다음 케이스로 간다', async () => {
     const { api, sink } = await host(PEOPLE.lead, 'run-host-acct');
     await env.withSecurityRulesDisabled(async (c) => {
       const db = c.firestore() as unknown as Firestore;
@@ -289,7 +289,7 @@ describe('runCycle → Firestore·Storage', () => {
     expect(r).toMatchObject({ verdict: 'blocked', blockedReason: '계정 없음: 구독자 종류의 빈 계정이 없습니다' });
   });
 
-  describe('칸 자동 선점 (F-CY-06)', () => {
+  describe('칸 자동 선점', () => {
     const TWO = ['TC-ONBOARDING-004', 'TC-ONBOARDING-005'];
     const noLlm: LlmClient = { create: () => Promise.reject(new Error('LLM을 부르면 안 된다')) };
     /** 계정이 없어 Blocked로 끝나는 케이스 — LLM 없이 결과가 생긴다 */
@@ -545,7 +545,7 @@ describe('runCycle → Firestore·Storage', () => {
   });
 });
 
-// ---------------------------------------------------------------- 상주 호스트의 로컬 콘솔 (PRD §4 ⑤)
+// ---------------------------------------------------------------- 상주 호스트의 로컬 콘솔
 
 describe('로컬 콘솔 서비스 (serve)', () => {
   /** 시드 사이클 cycle-130-1의 대상(Galaxy S24 · Android 15)과 같은 가짜 디바이스 */
@@ -589,7 +589,7 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     const option = home().cycles.find((c) => c.cycleId === 'cycle-130-1');
     expect(option).toMatchObject({ projectId: 'haru', deviceId: DEVICE });
     expect(option!.cases.some((c) => c.tcId === 'TC-ONBOARDING-004')).toBe(true);
-    // 케이스 고르기(F-CY-07)용: 기능·세부 기능·우선순위와 이 기기 칸의 판정
+    // 케이스 고르기용: 기능·세부 기능·우선순위와 이 기기 칸의 판정
     expect(option!.cases.find((c) => c.tcId === 'TC-ONBOARDING-004')).toMatchObject({
       feature: expect.any(String),
       subFeature: expect.any(String),
@@ -615,7 +615,7 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     expect(service.running).toBe(false);
   });
 
-  it('남은 케이스에 필요한데 배정할 계정이 없는 종류를 홈에 알린다 (F-PF-08)', async () => {
+  it('남은 케이스에 필요한데 배정할 계정이 없는 종류를 홈에 알린다', async () => {
     const C = 'projects/haru/cycles/cycle-130-1';
     const tc = 'TC-ONBOARDING-004';
     const write = (fn: (db: Firestore) => Promise<void>) =>
@@ -652,7 +652,7 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     ]);
   });
 
-  it('Claude Code를 쓸 수 없으면 Run을 시작하지 않고 해결 방법을 알린다 — 디바이스는 건드리지 않는다 (F-EX-17)', async () => {
+  it('Claude Code를 쓸 수 없으면 Run을 시작하지 않고 해결 방법을 알린다 — 디바이스는 건드리지 않는다', async () => {
     const device = galaxy();
     const problem = new ClaudeCodeSetupError(
       'outdated',
@@ -667,7 +667,7 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     expect(device.log.filter((l) => l.startsWith('stay-on'))).toEqual([]);
   });
 
-  it('플랜 한도에 닿으면 상단에 알리고, 시각이 지나거나 다시 시작하면 푼다 (F-DB-09)', async () => {
+  it('플랜 한도에 닿으면 상단에 알리고, 시각이 지나거나 다시 시작하면 푼다', async () => {
     const { service, home } = await serviceFor(galaxy());
     service.planLimited();
     expect(home().claudeCode).toMatchObject({ limited: true });
@@ -762,7 +762,7 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     expect(first?.type === 'state' && first.state.queue.map((q) => q.tcId)).toEqual(['TC-ONBOARDING-004']);
   });
 
-  it('호스트가 죽어 "실행 중"으로 남은 내 Run은 다시 켤 때 일시정지로 정리해 이어서 실행할 수 있다 (F-DV-04)', async () => {
+  it('호스트가 죽어 "실행 중"으로 남은 내 Run은 다시 켤 때 일시정지로 정리해 이어서 실행할 수 있다', async () => {
     const { queue } = await host(PEOPLE.lead, 'unused');
     const dead = runSink(queue, {
       ...REF,
@@ -849,7 +849,7 @@ describe('로컬 콘솔 서비스 (serve)', () => {
     expect(service.running).toBe(false);
   });
 
-  it('완료된 사이클은 홈에서 빠지고, 시작·이어서 실행 요청도 받지 않는다 (F-CY-09)', async () => {
+  it('완료된 사이클은 홈에서 빠지고, 시작·이어서 실행 요청도 받지 않는다', async () => {
     const { service, msgs, home } = await serviceFor(galaxy());
     await env.withSecurityRulesDisabled((c) =>
       updateDoc(doc(c.firestore() as unknown as Firestore, 'projects/haru/cycles/cycle-130-1'), {

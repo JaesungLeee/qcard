@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { fail, membersIn, nowOf, parse, ProjectId, type Ctx } from './handlers';
 
 /*
- * 칸 자동 선점 (F-CY-06). 규칙은 @qcard/shared cycles(cellSkip).
- * 잠금은 Run 문서의 `currentTcId`다 — 웹 진행 매트릭스(F-DB-07)가 그대로 "실행 중" 칸으로 보인다. 값을 정하는 건 여기뿐이고
+ * 칸 자동 선점. 규칙은 @qcard/shared cycles(cellSkip).
+ * 잠금은 Run 문서의 `currentTcId`다 — 웹 진행 매트릭스가 그대로 "실행 중" 칸으로 보인다. 값을 정하는 건 여기뿐이고
  * 호스트는 지우기만 한다(보안 규칙). 잠금은 따로 풀지 않는다: 케이스가 끝나면 결과가 칸을 "완료"로 만들고 다음 칸을 잡으며 바뀐다.
  * Run이 끝나면 호스트가 지우고, 일시정지·연결 끊김(신호 만료)이면 holdsCell이 놓은 것으로 본다.
  */
@@ -13,7 +13,7 @@ const ClaimCellInput = ProjectId.extend({
   cycleId: z.string().min(1),
   runId: z.string().min(1),
   tcId: z.string().min(1),
-  /** 완료된 칸을 일부러 고름 (F-CY-04·07) */
+  /** 완료된 칸을 일부러 고름 */
   rerun: z.boolean(),
 });
 

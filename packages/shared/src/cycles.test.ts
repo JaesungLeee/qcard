@@ -42,7 +42,7 @@ const kind = (f: () => void) => {
   return 'ok';
 };
 
-describe('사이클 삭제 (F-CY-10)', () => {
+describe('사이클 삭제', () => {
   it('완료된 사이클과 신호가 살아 있는 Run이 있는 사이클은 막는다', () => {
     expect(cycleDeleteBlocker(cycle, [run('done'), run('aborted')], T0)).toBeUndefined();
     expect(cycleDeleteBlocker({ ...cycle, period: { start: T0, end: T0 } }, [], T0)).toContain('다시 연 뒤');
@@ -60,7 +60,7 @@ describe('사이클 삭제 (F-CY-10)', () => {
   });
 });
 
-describe('칸 자동 선점 (F-CY-06)', () => {
+describe('칸 자동 선점', () => {
   const me: Run = { ...run('running', 0), id: 'r-me' };
   const other = (status: Run['status'], heartbeat: number, currentTcId = 'TC-1', deviceId = 'd1'): Run => ({
     ...run(status, heartbeat),

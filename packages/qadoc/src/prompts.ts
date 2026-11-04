@@ -2,9 +2,9 @@ import { ExecMode, PointCompare, PointMethod, Priority, SpecSuggestion, TestType
 import { z } from 'zod';
 
 /*
- * QA Doc Generator 프롬프트와 출력 스키마 (PRD §5.2, §6.3). 호출은 두 종류다.
- *   1. 스펙 계획 (스펙 하나당 1번): 준비·원복 플로우 추출(F-PF-01·09)·행별 시작 상태 지정·스펙 보강 제안(F-QD-05)
- *   2. 케이스 변환 (행 묶음마다): TS·EC 행 → 실행 가능한 케이스(F-QD-01·04·07) + 스펙 확인 질문(F-QD-03)
+ * QA Doc Generator 프롬프트와 출력 스키마 (docs/product/qa-doc.md, docs/architecture.md). 호출은 두 종류다.
+ *   1. 스펙 계획 (스펙 하나당 1번): 준비·원복 플로우 추출·행별 시작 상태 지정·스펙 보강 제안
+ *   2. 케이스 변환 (행 묶음마다): TS·EC 행 → 실행 가능한 케이스 + 스펙 확인 질문
  * 출력 스키마는 strict structured output으로 받으므로 선택 필드 대신 nullable을 쓴다.
  */
 
@@ -170,7 +170,7 @@ export const CASE_SYSTEM = `너는 Android 앱 QA 문서 작성자다. 스펙의
 ## 변경된 행
 "이전 케이스"가 함께 오면 이전 버전 스펙으로 만들었고 사람이 고쳤을 수 있는 케이스다. 바뀐 스펙에 맞게 다시 만들되, 아직 유효한 사람의 수정(단계 순서·표현·수동 표시·포인트 구분)은 유지한다. 이미 답이 달린 질문은 다시 묻지 않는다.`;
 
-// ---------------------------------------------------------------- 3. 케이스 수정안 (F-QD-17)
+// ---------------------------------------------------------------- 3. 케이스 수정안
 
 export const ReviseOutput = z.object({
   decision: z

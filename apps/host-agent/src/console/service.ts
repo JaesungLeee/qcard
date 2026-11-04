@@ -28,7 +28,7 @@ export type ConsoleServiceDeps = {
   executor: string;
   account: RunAccount;
   claudeCode: () => ClaudeCodeState;
-  /** Run 시작 직전 Claude Code 점검 (F-EX-17). 쓸 수 없으면 해결 방법을 담아 던진다. 없으면 점검하지 않는다 */
+  /** Run 시작 직전 Claude Code 점검. 쓸 수 없으면 해결 방법을 담아 던진다. 없으면 점검하지 않는다 */
   checkClaudeCode?: () => Promise<void>;
   log: (line: string) => void;
   /** 빌드 파일이 없는 사이클(시드)에서 실행할 앱 */
@@ -40,9 +40,9 @@ export type ConsoleServiceDeps = {
   llm?: CycleRunDeps['llm'];
   env?: CycleRunDeps['env'];
   awakeDir?: string;
-  /** 테스트 계정 배정·반납 (F-PF-04) */
+  /** 테스트 계정 배정·반납 */
   accounts?: CycleRunDeps['accounts'];
-  /** 칸 자동 선점 (F-CY-06) */
+  /** 칸 자동 선점 */
   cells?: CycleRunDeps['cells'];
 };
 
@@ -118,7 +118,7 @@ export class ConsoleService implements ConsoleBackend {
     if (JSON.stringify(claudeCode) !== JSON.stringify(this.home.claudeCode)) this.setHome({ claudeCode });
   }
 
-  /** 플랜 사용 한도에 닿아 Run·작업이 일시정지했다 (until: 풀리는 시각, 알면) — 콘솔 상단에 알린다 (F-DB-09) */
+  /** 플랜 사용 한도에 닿아 Run·작업이 일시정지했다 (until: 풀리는 시각, 알면) — 콘솔 상단에 알린다 */
   planLimited(until?: string) {
     this.limit = until ? { until } : {};
     this.claudeCodeChanged();
@@ -171,7 +171,7 @@ export class ConsoleService implements ConsoleBackend {
     if (problem !== this.home.deviceProblem) this.setHome({ deviceProblem: problem });
   }
 
-  /** 남은 케이스에 필요한 계정 종류 중 지금 배정할 수 있는 계정이 없는 것 (F-PF-08). 계정을 읽지 못하면 알리지 않는다 */
+  /** 남은 케이스에 필요한 계정 종류 중 지금 배정할 수 있는 계정이 없는 것. 계정을 읽지 못하면 알리지 않는다 */
   private async accountShortage(projectId: string, cases: { accountKind?: string }[]) {
     const need = new Map<string, number>();
     for (const c of cases) if (c.accountKind) need.set(c.accountKind, (need.get(c.accountKind) ?? 0) + 1);
@@ -190,13 +190,13 @@ export class ConsoleService implements ConsoleBackend {
     const out: ConsoleCycleOption[] = [];
     for (const { project } of await api.listMyProjects()) {
       for (const s of await api.listCycles(project.id)) {
-        if (s.cycle.origin === 'local_run' || s.cycle.period.end) continue; // 완료된 사이클은 실행하지 않는다 (F-CY-09)
+        if (s.cycle.origin === 'local_run' || s.cycle.period.end) continue; // 완료된 사이클은 실행하지 않는다
         const target = s.cycle.targets.find((t) => t.model === info.model && t.osMajor === info.osMajor);
         if (!target) continue;
         const d = await api.getCycle({ projectId: project.id, cycleId: s.cycle.id });
         const verdicts = new Map(d.results.filter((r) => r.deviceId === target.id).map((r) => [r.tcId, r.verdict]));
         const done = new Set([...verdicts].filter(([, v]) => v !== 'nt').map(([tcId]) => tcId));
-        // 이 디바이스로 돌리던 내 Run이 호스트 신호 없이 "실행 중"으로 남아 있으면(호스트가 죽음) 일시정지로 정리한다 (F-DV-04)
+        // 이 디바이스로 돌리던 내 Run이 호스트 신호 없이 "실행 중"으로 남아 있으면(호스트가 죽음) 일시정지로 정리한다
         const runs = d.runs.map((r) => {
           if (!mine(r) || r.deviceId !== target.id || r.id === this.run?.runId) return r;
           if (!isRunStale(r, Date.now())) return r;

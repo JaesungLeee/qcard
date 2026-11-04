@@ -1,4 +1,4 @@
-// ② 테스트 케이스 (PRD §5.10 컬럼). TC ID를 누르면 판정 추적 뷰, 결과 셀은 그 디바이스의 판정 추적 뷰로 간다.
+// ② 테스트 케이스 (docs/product/results.md 컬럼). TC ID를 누르면 판정 추적 뷰, 결과 셀은 그 디바이스의 판정 추적 뷰로 간다.
 import {
   CHANGE_LABEL,
   PLATFORM_LABEL,
@@ -241,7 +241,7 @@ export function CasesTab({ d, index, projectId }: SheetProps) {
           {
             headerName: '결함 ID',
             colId: 'defect',
-            // 결함이 연결되지 않은 Fail 칸이 있으면 "결함 없음"을 함께 보인다 (F-RP-19)
+            // 결함이 연결되지 않은 Fail 칸이 있으면 "결함 없음"을 함께 보인다
             valueGetter: (p) => {
               if (!p.data) return undefined;
               const results = Object.values(p.data.results);

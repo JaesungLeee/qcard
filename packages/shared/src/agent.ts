@@ -11,7 +11,7 @@ const elementRef = z.string().describe('접근성 트리의 요소 번호(예: e
 const intent = z.string().describe('이 액션을 하는 이유 (스텝 타임라인의 "의도"로 기록된다)');
 
 /**
- * 위험 액션의 종류 (F-EX-10). 버튼이 아니라 결과로 나눈다. identity만 사람 전용이고 나머지는 승인 필요 —
+ * 위험 액션의 종류. 버튼이 아니라 결과로 나눈다. identity만 사람 전용이고 나머지는 승인 필요 —
  * 등급과 사전 승인 예외는 코드(`@qcard/agent` risk)가 정한다
  */
 export const RiskKind = z.enum([
@@ -66,7 +66,7 @@ export const SwipeInput = z.object({ direction: z.enum(['up', 'down', 'left', 'r
 export const PressKeyInput = z.object({ key: z.enum(['back', 'home', 'enter']), intent });
 export const RestartAppInput = z.object({ intent });
 export const ReopenAppInput = z.object({ intent });
-/** 환경 조작 (F-EX-16). 케이스가 끝나면 자동으로 원래대로 켠다 */
+/** 환경 조작. 케이스가 끝나면 자동으로 원래대로 켠다 */
 export const SetNetworkInput = z.object({
   wifi: z.boolean().describe('Wi-Fi를 켤지'),
   data: z.boolean().describe('모바일 데이터를 켤지'),
@@ -77,9 +77,9 @@ export const StepDoneInput = z.object({
   case_step_index: z.number().int().describe('끝낸 케이스 단계 번호 (0부터)'),
   summary: z.string(),
 });
-/** 스크린샷 요청 (F-EX-02: 트리 우선, 비전 보조) */
+/** 스크린샷 요청 (트리 우선, 비전 보조) */
 export const ViewScreenInput = z.object({ reason: z.string().describe('트리만으로 알 수 없는 것') });
-/** Agent가 진행할 수 없을 때. 종류는 F-EX-05의 Blocked 조건과 앱 크래시(Fail) */
+/** Agent가 진행할 수 없을 때. 종류는 Blocked 조건과 앱 크래시(Fail) */
 export const GiveUpInput = z.object({
   kind: z.enum(['crash', 'prep_failed', 'env_unavailable', 'stuck', 'environment_error']),
   reason: z.string(),
@@ -120,7 +120,7 @@ export const EXECUTOR_TOOL_DESCRIPTIONS: Record<ExecutorToolName, string> = {
   give_up: '더 진행할 수 없을 때 이유와 함께 멈춘다.',
 };
 
-/** 비전 검증 포인트 판정 (F-EX-03). 트리 포인트는 요소만 찾고 값 비교는 코드가 한다. */
+/** 비전 검증 포인트 판정. 트리 포인트는 요소만 찾고 값 비교는 코드가 한다. */
 export const VerifierOutput = z.object({
   result: z.enum(['match', 'mismatch', 'unknown']),
   observed: z.string().describe('화면에서 실제로 본 것'),

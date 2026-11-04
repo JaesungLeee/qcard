@@ -43,7 +43,7 @@ export type AgentEnv = {
   vision?: boolean;
   /**
    * 매 턴 스크린샷을 함께 보낼지 (기본 false). 기본은 트리만 보내고 Agent가 `view_screen`으로 요청한다
-   * (F-EX-02 트리 우선·비전 보조). 이미지가 대화에 쌓여 비용 대부분을 차지하기 때문이다.
+   * (트리 우선·비전 보조). 이미지가 대화에 쌓여 비용 대부분을 차지하기 때문이다.
    */
   screenshotEveryTurn?: boolean;
   /** 액션 뒤 화면이 안정되기를 기다리는 시간 (기본 500ms) */
@@ -51,18 +51,18 @@ export type AgentEnv = {
   onThought?: (t: ThoughtEntry) => void;
   /** 네트워크 끄기·켜기(set_network)를 허용할지 (기본 false). 개인 기기에서는 사용자 확인 후에만 켠다 */
   allowNetworkToggle?: boolean;
-  /** 수동 스텝: 실행자에게 알리고 "완료"를 기다린다. 없으면 타임아웃으로 본다 (F-EX-11) */
+  /** 수동 스텝: 실행자에게 알리고 "완료"를 기다린다. 없으면 타임아웃으로 본다 */
   onManual?: (instruction: string) => Promise<'done' | 'timeout'>;
   /**
-   * 위험 액션 (F-EX-10): 실행자에게 묻고 답을 기다린다. approved = Agent가 그 액션을 실행 · took_over = 실행자가
+   * 위험 액션: 실행자에게 묻고 답을 기다린다. approved = Agent가 그 액션을 실행 · took_over = 실행자가
    * 직접 하고 Agent에 돌려줌 · timeout = 응답 없음(케이스 Blocked). 없으면 타임아웃으로 본다 (실행자가 없는 실행)
    */
   onRisk?: (req: RiskRequest) => Promise<RiskAnswer>;
   /** 스텝 타임라인에 한 줄이 생길 때 (로컬 콘솔) */
   onStep?: (step: ExecStep) => void;
-  /** 실행자 제어: 일시정지·건너뛰기·Take over·중단 (F-DB-05). 없으면 Agent가 혼자 끝까지 간다 */
+  /** 실행자 제어: 일시정지·건너뛰기·Take over·중단. 없으면 Agent가 혼자 끝까지 간다 */
   control?: RunControl;
-  /** 실행 안전장치 (F-EX-08·12): 턴·반복·자가 복구 한도. 없으면 기본값 (`DEFAULT_RUN_LIMITS`) */
+  /** 실행 안전장치: 턴·반복·자가 복구 한도. 없으면 기본값 (`DEFAULT_RUN_LIMITS`) */
   limits?: Pick<RunLimits, 'turnsPerStep' | 'extraTurns' | 'repeatLimit' | 'retryLimit'>;
 };
 
@@ -149,7 +149,7 @@ export async function observe(env: AgentEnv, caseId: string, index: number): Pro
     env.device.keyboard(),
   ]);
   const visibleTree = outsideAppTree(env.appPackage, foreground, tree) ?? tree;
-  // 입력한 비밀값이 화면에 보일 수 있으므로 LLM에 갈 트리 텍스트는 가린다 (F-EX-09)
+  // 입력한 비밀값이 화면에 보일 수 있으므로 LLM에 갈 트리 텍스트는 가린다
   const treeText = env.vault ? env.vault.mask(formatTree(visibleTree)) : formatTree(visibleTree);
   const screenshot = env.saveScreenshot
     ? await env.saveScreenshot(png, { caseId, index, treeText, foreground })

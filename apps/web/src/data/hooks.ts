@@ -126,7 +126,7 @@ export function useQaDoc(projectId: string, docId: string, enabled = true) {
   });
 }
 
-/** QA 문서 한 버전의 준비 플로우 (F-PF-01, 버전마다 사본). docId가 없으면 읽지 않는다 */
+/** QA 문서 한 버전의 준비 플로우 (버전마다 사본). docId가 없으면 읽지 않는다 */
 export function usePrepFlows(projectId: string, docId: string | undefined) {
   const api = useApi();
   return useQuery({
@@ -179,7 +179,7 @@ export function useCycles(projectId: string) {
   });
 }
 
-/** 사이클 상세: 화면에 떠 있는 동안 구독해 다른 실행자의 진행·판정을 바로 반영한다 (F-CY-05·F-DB-07) */
+/** 사이클 상세: 화면에 떠 있는 동안 구독해 다른 실행자의 진행·판정을 바로 반영한다 */
 export function useCycle(projectId: string, cycleId: string) {
   const api = useApi();
   const qc = useQueryClient();
@@ -243,7 +243,7 @@ export function useCommentQuestion(doc: DocLike) {
   );
 }
 
-/** 이 QA 문서의 케이스 수정안 (F-QD-17). 대기·생성 중인 것이 있으면 3초마다 다시 읽는다 */
+/** 이 QA 문서의 케이스 수정안. 대기·생성 중인 것이 있으면 3초마다 다시 읽는다 */
 export function useCaseRevisions(doc: DocLike) {
   const api = useApi();
   return useQuery({
@@ -293,7 +293,7 @@ export function useConfirmVerdict() {
   });
 }
 
-/** 결함 등록·심각도·상태 변경 (F-RP-19) */
+/** 결함 등록·심각도·상태 변경 */
 export function useCreateDefect() {
   const api = useApi();
   const qc = useQueryClient();
@@ -306,7 +306,7 @@ export function useCreateDefect() {
   });
 }
 
-/** 사이클 완료·다시 열기 (F-CY-09) */
+/** 사이클 완료·다시 열기 */
 export function useCycleCompletion(ref: CycleRef) {
   const api = useApi();
   const qc = useQueryClient();
@@ -320,7 +320,7 @@ export function useCycleCompletion(ref: CycleRef) {
   });
 }
 
-/** 사이클 삭제 (F-CY-10). 성공하면 화면이 사이클 목록으로 옮겨 간다 */
+/** 사이클 삭제. 성공하면 화면이 사이클 목록으로 옮겨 간다 */
 export function useCycleDeletion(ref: CycleRef) {
   const api = useApi();
   const qc = useQueryClient();
@@ -342,7 +342,7 @@ export function useUpdateDefect(ref: CycleRef) {
   });
 }
 
-// ---------------------------------------------------------------- QA 문서 생성 작업 (PRD §5.2)
+// ---------------------------------------------------------------- QA 문서 생성 작업 (docs/product/qa-doc.md)
 
 /** 대기·생성 중인 작업이 있으면 3초마다 다시 읽는다 (호스트가 진행률을 갱신한다) */
 export function useJobs(projectId: string) {
@@ -408,7 +408,7 @@ export function useMyHosts() {
   return useQuery({ queryKey: keys.hosts, queryFn: () => api.myHosts(), refetchInterval: 15_000 });
 }
 
-/** 내 계정에 연결된 PC (F-TM-14) */
+/** 내 계정에 연결된 PC */
 export function useHostConnections() {
   const api = useApi();
   return useQuery({ queryKey: keys.hostConnections, queryFn: () => api.myHostConnections() });
@@ -456,7 +456,7 @@ export function useRequestRun(projectId: string) {
   });
 }
 
-// ---------------------------------------------------------------- 빌드·사이클 만들기 (F-DV-05, F-CY-01)
+// ---------------------------------------------------------------- 빌드·사이클 만들기
 
 export function useBuilds(projectId: string) {
   const api = useApi();
@@ -481,7 +481,7 @@ export function useCreateCycle(projectId: string) {
   });
 }
 
-/** 테스트 계정 (F-PF-04·08). 배정 상태가 실행 중에 바뀌므로 30초마다 다시 읽는다 */
+/** 테스트 계정. 배정 상태가 실행 중에 바뀌므로 30초마다 다시 읽는다 */
 export function useAccounts(projectId: string) {
   const api = useApi();
   return useQuery({

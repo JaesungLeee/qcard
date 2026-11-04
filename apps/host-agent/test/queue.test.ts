@@ -8,7 +8,7 @@ const dir = () => mkdtempSync(join(tmpdir(), 'qcard-queue-test-'));
 const offline = Object.assign(new Error('fetch failed'), { code: 'unavailable' });
 const set = (n: number): QueueOp => ({ type: 'set', path: `docs/${n}`, data: { n } });
 
-describe('UploadQueue (F-EX-13)', () => {
+describe('UploadQueue', () => {
   it('일시적 오류는 다시 시도하고 순서대로 보낸다', async () => {
     const sent: string[] = [];
     let fails = 3;
@@ -25,7 +25,7 @@ describe('UploadQueue (F-EX-13)', () => {
     expect(sent).toEqual(['docs/1', 'docs/2', 'docs/3']);
   });
 
-  it('sendNow는 밀린 업로드를 기다리지 않고 바로 보낸다 (Run 연결 신호, F-CY-06)', async () => {
+  it('sendNow는 밀린 업로드를 기다리지 않고 바로 보낸다 (Run 연결 신호)', async () => {
     const sent: string[] = [];
     const q = await new UploadQueue(
       dir(),

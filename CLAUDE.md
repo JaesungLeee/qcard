@@ -1,7 +1,15 @@
 # qcard
 
 스펙 문서로 앱 버전별 QA 문서를 만들고, Agent가 Android 디바이스에서 직접 수행하는 QA 자동화 플랫폼. 1인 사이드 프로젝트.
-제품 요구사항은 [docs/PRD.md](docs/PRD.md)가 기준이다. 62KB라 통째로 읽지 말고 필요한 절(§)만 찾아 읽는다.
+제품 개요는 [README.md](README.md), 동작 규칙은 `docs/`가 기준이다. 필요한 문서만 찾아 읽는다.
+
+- [concepts.md](docs/concepts.md) — 용어·판정·데이터 모델
+- [architecture.md](docs/architecture.md) — 구성 요소·Agent 구조·기술 스택
+- [product/](docs/product/) — 기능별 동작 규칙: `qa-doc`·`prep-flows`(준비 플로우·테스트 계정)·`cycles`·`execution`(판정·위험 액션·안전장치·일시정지)·`console`·`results`(QA 시트·확정·결함)·`projects`
+- [security.md](docs/security.md) — LLM 전송 경로·권한·비밀값·삭제
+- [spec-format.md](docs/spec-format.md) · [decisions.md](docs/decisions.md) · [roadmap.md](docs/roadmap.md)
+
+동작을 바꾸면 해당 문서도 함께 고친다. 코드 주석에 요구사항 ID를 달지 않고, 필요하면 문서 경로를 적는다.
 
 ## 구조
 
@@ -13,7 +21,7 @@ pnpm workspace + Turborepo, TypeScript 단일 언어.
 | `apps/functions`    | Cloud Functions(callable): 프로젝트·멤버·초대, 호스트 연결, 테스트 계정(KMS 봉인·배정), 사이클·준비 플로우 삭제. 예약: 삭제 유예 지난 프로젝트 영구 삭제. 보안 규칙은 `firebase/` |
 | `apps/host-agent`   | 실기기에서 사이클 실행 → Firestore·Storage 업로드, QA 문서 생성 작업 처리, 로컬 콘솔(`console/`). npm `@qcard/host`(명령 `qcard`)                                                 |
 | `packages/ui`       | 디자인 시스템 "Montage for qcard" — Montage 재수출, `--qc-*` 토큰, `VerdictBadge`                                                                                                 |
-| `packages/shared`   | 도메인 스키마(Zod, PRD §6.4)·표시용 라벨·규칙(membership·테스트 계정·사이클 삭제·준비 플로우). Agent 도구·Verifier 출력 스키마는 `src/agent.ts`                                   |
+| `packages/shared`   | 도메인 스키마(Zod, docs/concepts.md)·표시용 라벨·규칙(membership·테스트 계정·사이클 삭제·준비 플로우). Agent 도구·Verifier 출력 스키마는 `src/agent.ts`                           |
 | `packages/data`     | 데이터 접근 인터페이스 `QcardApi`, 공용 계산 `logic.ts`, Firestore 구현, 에뮬레이터 시드                                                                                          |
 | `packages/fixtures` | 가상 앱 하루콩의 온보딩 스펙(`spec/`)에서 만든 결정적 데이터와 목업 디바이스 화면(`screens.ts`)·합성 시나리오(`device.ts`)                                                        |
 | `packages/device`   | `DeviceDriver`, 접근성 트리 파서, `AdbDriver`·녹화(`@qcard/device/node`), `FakeDevice`                                                                                            |
@@ -41,7 +49,7 @@ pnpm이 전역에 없으면 `npx -y pnpm@10.34.6 <명령>`으로 실행한다.
 - [emulators.md](docs/dev/emulators.md) — 에뮬레이터 구성·시드·임시 폴더 분리
 - [worktree.md](docs/dev/worktree.md) — 워크트리에서 병렬 작업할 때 복사되는 파일·포트·`qcard-specs` 경로
 - [deploy.md](docs/dev/deploy.md) — 실제 Firebase 프로젝트(`qcard-d2ade`) 설정, 웹·규칙·Functions 배포, 호스트 환경변수
-- [ci.md](docs/dev/ci.md) — GitHub Actions: `main` 푸시 → 검증·자동 배포, `develop`·PR → 검증, 태그 `host-v*` → npm publish
+- [ci.md](docs/dev/ci.md) — GitHub Actions: start-release 버튼 → 릴리스 브랜치·버전·CHANGELOG 초안·PR, `main` 푸시 → 바뀐 쪽만 배포(npm·Firebase)·태그, `develop`·PR → 검증
 - [branching.md](docs/dev/branching.md) — git flow: `feature/*` → `develop`, `release/*`·`hotfix/*` → `main`(PR), 태그 `v*`·`host-v*`
 
 ## 하네스

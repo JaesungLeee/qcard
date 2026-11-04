@@ -83,7 +83,7 @@ function EnumSelect<T extends string>({
 
 const MODE_LABEL = { auto: 'Auto', manual: 'Manual' } as const;
 
-/** 케이스 편집 폼 (F-QD-04). 저장은 낙관적 잠금 (F-QD-09). */
+/** 케이스 편집 폼. 저장은 낙관적 잠금. */
 export function CaseEditForm({
   doc,
   c,

@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 
 /**
- * 테스트 계정 비밀값 암호화 (F-EX-09). 운영은 Cloud KMS, 에뮬레이터·테스트는 로컬 키(AES-256-GCM).
+ * 테스트 계정 비밀값 암호화. 운영은 Cloud KMS, 에뮬레이터·테스트는 로컬 키(AES-256-GCM).
  * 봉인한 값에 방식이 붙어 있어 다른 방식의 값을 열려고 하면 실패한다.
  */
 export interface SecretBox {

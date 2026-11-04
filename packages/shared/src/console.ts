@@ -3,7 +3,7 @@ import type { Bounds, ExecStep, Priority, Run, TestCase, ThoughtEntry } from './
 import type { Verdict } from './verdict';
 
 /*
- * 로컬 콘솔 (PRD §5.7): 호스트 에이전트가 127.0.0.1로 띄우는 실행 화면.
+ * 로컬 콘솔 (docs/product/console.md): 호스트 에이전트가 127.0.0.1로 띄우는 실행 화면.
  * 호스트가 실행 상태(LiveConsole)를 통째로 밀어 주고, 화면은 제어 명령(ConsoleControl)만 보낸다.
  * 디바이스 화면은 별도 WebSocket으로 H.264 패킷이 온다 (ConsoleVideoConfig + 바이너리).
  */
@@ -33,7 +33,7 @@ export type ClaudeCodeState = {
   loggedIn: boolean;
   /** pro · max 등 Claude Code가 알려 주는 값 그대로 */
   plan?: string;
-  /** Run에 쓰는 모델에 필요한 최소 버전보다 낮으면 그 버전 (F-EX-17) */
+  /** Run에 쓰는 모델에 필요한 최소 버전보다 낮으면 그 버전 */
   requiredVersion?: string;
   /** 플랜 사용 한도에 닿아 일시정지했다. 실패해야만 알 수 있어, 다시 시작할 때 풀었다가 또 닿으면 다시 켠다 */
   limited?: boolean;
@@ -47,7 +47,7 @@ export const claudeCodeReady = (s: ClaudeCodeState) => s.installed && s.loggedIn
 /** 지금 케이스의 진행 단계 */
 export type ConsolePhase = 'running' | 'paused' | 'takeover' | 'manual' | 'approval' | 'verifying' | 'done' | 'aborted';
 
-/** 실행자 제어 (F-DB-05) */
+/** 실행자 제어 */
 export const CONSOLE_CONTROLS = [
   'pause',
   'resume',
@@ -112,7 +112,7 @@ export type LiveConsole = {
   /** 수동 스텝 대기 (phase manual). deadline = 타임아웃 시각 (epoch ms) */
   manual?: { instruction: string; deadline: number };
   /**
-   * 위험 액션 대기 (phase approval, F-EX-10). 승인 필요면 [승인]·[직접 실행], 사람 전용이면 [직접 실행]만.
+   * 위험 액션 대기 (phase approval). 승인 필요면 [승인]·[직접 실행], 사람 전용이면 [직접 실행]만.
    * 직접 실행 중(phase takeover)에도 남아 있다가 [Agent에 반환]으로 끝난다
    */
   approval?: ConsoleApproval;
@@ -134,7 +134,7 @@ export type ConsoleCycleOption = {
   deviceId: string;
   /**
    * 자동 케이스 (수동 케이스는 웹·콘솔에서 사람이 입력한다). 기능·세부 기능·우선순위와 이 기기 칸의 판정(결과 없으면 nt)은
-   * 케이스 고르기(F-CY-07)의 필터·기능 묶음에 쓴다. done = 판정이 nt가 아님
+   * 케이스 고르기의 필터·기능 묶음에 쓴다. done = 판정이 nt가 아님
    */
   cases: {
     tcId: string;
@@ -148,7 +148,7 @@ export type ConsoleCycleOption = {
   /** 내가 이 디바이스로 돌리다 일시정지된 Run (이어서 실행) */
   /** total: 그 Run의 큐 크기 (예전 Run이면 없음), left: 이어서 실행할 케이스 수 */
   pausedRun?: { id: string; reason?: string; total?: number; left: number };
-  /** 남은 케이스에 필요한데 지금 배정할 수 있는 테스트 계정이 없는 종류 (F-PF-08). 그대로 실행하면 Blocked("계정 없음") */
+  /** 남은 케이스에 필요한데 지금 배정할 수 있는 테스트 계정이 없는 종류. 그대로 실행하면 Blocked("계정 없음") */
   accountShortage?: { kind: string; cases: number }[];
 };
 

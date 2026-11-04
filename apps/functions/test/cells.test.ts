@@ -6,7 +6,7 @@ import * as cells from '../src/cells';
 import * as h from '../src/handlers';
 
 /*
- * 칸 자동 선점 (F-CY-06)을 Firestore 에뮬레이터 위에서 핸들러로 돌린다.
+ * 칸 자동 선점을 Firestore 에뮬레이터 위에서 핸들러로 돌린다.
  * 두 Run이 같은 칸을 동시에 잡으려 하면 하나만 잡는지, 연결 신호가 끊긴 Run의 칸을 가져가는지를 본다.
  */
 
@@ -76,7 +76,7 @@ const claim = (who: Who, runId: string, tcId: string, opts: { now?: string; reru
   });
 const current = async (runId: string) => ((await db.doc(`${C()}/runs/${runId}`).get()).data() as Run).currentTcId;
 
-describe('칸 자동 선점 (F-CY-06)', () => {
+describe('칸 자동 선점', () => {
   it('두 Run이 같은 칸을 동시에 잡으려 하면 하나만 잡고, 다른 쪽은 그 실행자를 보고 건너뛴다', async () => {
     await run('r-qa', 'qa');
     await run('r-lead', 'lead');
@@ -116,7 +116,7 @@ describe('칸 자동 선점 (F-CY-06)', () => {
     await run('r-lead', 'lead', { deviceId: 'galaxy' });
     await db.doc(`${C()}/results/TC-1__pixel8`).set({ tcId: 'TC-1', deviceId: 'pixel8', verdict: 'pass', runId: 'r-old', executedAt: at(-60) });
     expect(await claim('qa', 'r-qa', 'TC-1')).toEqual({ claimed: false, skip: { reason: 'done', runId: 'r-old' } });
-    // 다시 실행으로 고른 칸 (F-CY-04)
+    // 다시 실행으로 고른 칸
     expect(await claim('qa', 'r-qa', 'TC-1', { rerun: true })).toEqual({ claimed: true });
     expect(await claim('lead', 'r-lead', 'TC-1')).toEqual({ claimed: true });
   });

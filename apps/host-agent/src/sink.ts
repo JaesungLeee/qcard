@@ -5,31 +5,31 @@ import { ref, uploadBytes, type FirebaseStorage } from 'firebase/storage';
 import type { ApplyOp, UploadQueue } from './queue';
 
 /*
- * Run 진행 상태·결과·증거를 팀이 보는 곳(Firestore·Storage)에 기록한다 (F-DB-07, F-EX-06).
- * 기록은 업로드 큐를 거친다 — 네트워크가 끊겨도 로컬에 남았다가 연결되면 순서대로 보낸다 (F-EX-13).
+ * Run 진행 상태·결과·증거를 팀이 보는 곳(Firestore·Storage)에 기록한다.
+ * 기록은 업로드 큐를 거친다 — 네트워크가 끊겨도 로컬에 남았다가 연결되면 순서대로 보낸다.
  *
  *   projects/{p}/cycles/{c}/runs/{run}                 Run (현재 케이스·일시정지 이유)
  *   projects/{p}/cycles/{c}/results/{tc}__{device}     CaseResult (최신 시도. 다시 실행하면 시도 횟수를 올린다)
- *   projects/{p}/cycles/{c}/attempts/{tc}__{device}__{n}  밀려난 n번째 시도 전체 (F-CY-04, 바꾸지 않는다)
+ *   projects/{p}/cycles/{c}/attempts/{tc}__{device}__{n}  밀려난 n번째 시도 전체 (바꾸지 않는다)
  *   Storage projects/{p}/cycles/{c}/runs/{run}/{tc}/obs-NN.png   스크린샷 (결과에는 경로만 남긴다)
  */
 
 export interface RunSink {
   /**
    * tcIds: 실행 큐 (이어서 실행할 때 쓴다). startedAt: 이어서 실행하면 처음 시작한 시각.
-   * 지금 케이스(`currentTcId`)는 쓰지 않는다 — 칸 선점의 잠금이라 Functions(claimCell)가 정한다 (F-CY-06)
+   * 지금 케이스(`currentTcId`)는 쓰지 않는다 — 칸 선점의 잠금이라 Functions(claimCell)가 정한다
    */
   start(tcIds: string[], startedAt?: string): Promise<void>;
   /**
-   * 호스트가 살아 있다는 신호 (F-DV-04). Run 동안 RUN_HEARTBEAT_MS마다. 업로드 큐를 거치지 않고 바로 보낸다 —
-   * 스크린샷 업로드가 밀려 신호가 늦으면 다른 Run이 이 Run의 칸을 끊긴 것으로 보고 가져간다 (F-CY-06). 실패하면 던진다
+   * 호스트가 살아 있다는 신호. Run 동안 RUN_HEARTBEAT_MS마다. 업로드 큐를 거치지 않고 바로 보낸다 —
+   * 스크린샷 업로드가 밀려 신호가 늦으면 다른 Run이 이 Run의 칸을 끊긴 것으로 보고 가져간다. 실패하면 던진다
    */
   heartbeat(): Promise<void>;
   saveScreenshot: SaveScreenshot;
   result(r: CaseResult): Promise<void>;
-  /** 실행자를 기다리는 중 (위험 액션·사람 전용·수동 스텝, F-EX-10). 웹에 보인다. undefined면 끝남 */
+  /** 실행자를 기다리는 중 (위험 액션·사람 전용·수동 스텝). 웹에 보인다. undefined면 끝남 */
   waiting(level: 'approval' | 'human' | undefined): Promise<void>;
-  /** 플랜 한도·로그인 등으로 멈춤 (F-EX-17). 진행 중 케이스 결과는 쓰지 않는다 */
+  /** 플랜 한도·로그인 등으로 멈춤. 진행 중 케이스 결과는 쓰지 않는다 */
   pause(reason: PauseReason): Promise<void>;
   /** 끝남. aborted = 실행자가 중단 (진행 중 케이스 결과는 쓰지 않는다) */
   finish(status?: 'done' | 'aborted'): Promise<void>;
@@ -131,7 +131,7 @@ export function firestoreApply(db: Firestore, storage: FirebaseStorage): ApplyOp
       await uploadBytes(ref(storage, op.path), file!, { contentType: op.contentType });
       return;
     }
-    // 결과 (F-CY-04): 이미 수행한 칸을 다시 실행하면 최신 시도가 최종이 되고, 이전 시도는 attempts에 그대로 보관한다
+    // 결과: 이미 수행한 칸을 다시 실행하면 최신 시도가 최종이 되고, 이전 시도는 attempts에 그대로 보관한다
     // (아직 안 한 칸 N/T는 첫 시도). 같은 시도를 다시 보낸 것이면(업로드 재시도) 보관하지 않는다
     const at = doc(db, op.path);
     const prev = (await getDoc(at)).data() as (CaseResult & { _i?: number; _decision?: string }) | undefined;

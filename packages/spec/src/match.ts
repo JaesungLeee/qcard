@@ -3,7 +3,7 @@ import type { SpecBundle } from './bundle';
 import { rowHash, sourceId, type SpecDoc, type SpecRow } from './parse';
 
 /*
- * 버전 간 결정적 매칭 (F-QD-08). LLM을 쓰지 않는다.
+ * 버전 간 결정적 매칭. LLM을 쓰지 않는다.
  *   - 출처 ID(`<스펙>/TS-001`)가 같고 출처 해시가 같으면 **동일**: 이전 케이스 블록을 그대로 복사 (사람의 수정·승인 유지)
  *   - 출처 ID가 같고 해시가 다르면 **변경**: 같은 TC ID로 다시 만든다 (사람이 고친 이전 블록을 LLM에 함께 넘긴다)
  *   - 이전에 없던 출처는 **신규**: 새 TC ID

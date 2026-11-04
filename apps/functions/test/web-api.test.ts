@@ -118,7 +118,7 @@ describe('메모리 구현과 같은 결과', () => {
   });
 });
 
-describe('테스트 계정 (F-PF-08)', () => {
+describe('테스트 계정', () => {
   it('등록·수정·표시 해제·삭제가 메모리 구현과 같고, 목록에 비밀값이 없다', async () => {
     const steps = async (api: ReturnType<typeof memory>) => {
       const a = await api.createAccount('haru', { loginId: 'qa02@haru.test', password: 'pw-2', note: '빈 계정' });
@@ -184,7 +184,7 @@ describe('QA 데이터 쓰기', () => {
     expect((err as ConflictError).latest.title).toBe('먼저');
   });
 
-  it('사이클은 만들 때 케이스 내용을 복사해 두고, QA 문서를 고쳐도 그 내용으로 읽힌다 (F-CY-02)', async () => {
+  it('사이클은 만들 때 케이스 내용을 복사해 두고, QA 문서를 고쳐도 그 내용으로 읽힌다', async () => {
     const fb = apiAs(PEOPLE.lead);
     const cycle = await fb.createCycle('haru', {
       name: '고정 확인',
@@ -201,7 +201,7 @@ describe('QA 데이터 쓰기', () => {
     expect((await fb.getCycle(cref)).cases).toEqual(before.cases);
   });
 
-  it('결함 등록·변경이 메모리 구현과 같고, 번호는 사이클 안에서 이어진다 (F-RP-19)', async () => {
+  it('결함 등록·변경이 메모리 구현과 같고, 번호는 사이클 안에서 이어진다', async () => {
     const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
     const fb = apiAs(PEOPLE.qa);
     const mem = memory();
@@ -250,7 +250,7 @@ describe('QA 데이터 쓰기', () => {
     });
   });
 
-  it('사이클 완료·다시 열기가 메모리 구현과 같고, 완료된 사이클은 Run 요청을 받지 않는다 (F-CY-09)', async () => {
+  it('사이클 완료·다시 열기가 메모리 구현과 같고, 완료된 사이클은 Run 요청을 받지 않는다', async () => {
     const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
     const fb = apiAs(PEOPLE.qa);
     const mem = memory();
@@ -274,7 +274,7 @@ describe('QA 데이터 쓰기', () => {
     await expect(fb.requestRun('haru', run)).resolves.toMatchObject({ kind: 'run_cycle' });
   });
 
-  it('사이클 삭제가 메모리 구현과 같고, 완료된 사이클·Viewer·틀린 이름은 거부한다 (F-CY-10)', async () => {
+  it('사이클 삭제가 메모리 구현과 같고, 완료된 사이클·Viewer·틀린 이름은 거부한다', async () => {
     const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
     const name = '1.3.0 (130) 1차 회귀';
     const fb = apiAs(PEOPLE.qa);
@@ -297,7 +297,7 @@ describe('QA 데이터 쓰기', () => {
     await expect(mem.getCycle(cref)).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it('준비 플로우 추가·편집·삭제가 메모리 구현과 같고, 충돌·참조·Viewer는 거부한다 (F-PF-01)', async () => {
+  it('준비 플로우 추가·편집·삭제가 메모리 구현과 같고, 충돌·참조·Viewer는 거부한다', async () => {
     const ref = { projectId: 'haru', docId: 'doc-130' };
     const input = { name: '로그인 상태', kind: 'login' as const, check: '홈 탭이 보인다', steps: ['[로그인]'] };
     const fb = apiAs(PEOPLE.qa);
@@ -330,7 +330,7 @@ describe('QA 데이터 쓰기', () => {
     await expect(viewer.deletePrepFlow(ref, 'pf-login')).rejects.toBeInstanceOf(PermissionError);
   });
 
-  it('완료되지 않은 사이클만 쓰는 플로우도 지우지 못하고, 사이클을 완료하면 지운다 (F-PF-01)', async () => {
+  it('완료되지 않은 사이클만 쓰는 플로우도 지우지 못하고, 사이클을 완료하면 지운다', async () => {
     const fb = apiAs(PEOPLE.qa);
     const ref = { projectId: 'haru', docId: 'doc-130' };
     // QA 문서에서는 빼고 사이클 사본(cycle-130-1)에만 남긴다
@@ -352,7 +352,7 @@ describe('QA 데이터 쓰기', () => {
     expect((await fb.listPrepFlows(ref)).map((f) => f.id)).not.toContain('pf-only-cycle');
   });
 
-  it('구독하면 다른 사람이 확정한 판정이 바로 들어오고, 끊으면 더 받지 않는다 (F-CY-05·F-DB-07)', async () => {
+  it('구독하면 다른 사람이 확정한 판정이 바로 들어오고, 끊으면 더 받지 않는다', async () => {
     const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
     const watcher = apiAs(PEOPLE.lead);
     const other = apiAs(PEOPLE.qa);
@@ -376,7 +376,7 @@ describe('QA 데이터 쓰기', () => {
     expect(seen.length).toBe(count);
   });
 
-  it('판정을 확정하면 판정자·서버 시각이 변경 불가 로그로 남고, 결과에 이력으로 붙는다 (F-RP-04)', async () => {
+  it('판정을 확정하면 판정자·서버 시각이 변경 불가 로그로 남고, 결과에 이력으로 붙는다', async () => {
     const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
     const qa = apiAs(PEOPLE.qa);
     const r = (await qa.getCycle(cref)).results.find((x) => x.verdict === 'check')!;
@@ -391,7 +391,7 @@ describe('QA 데이터 쓰기', () => {
     expect(Math.abs(new Date(last.at).getTime() - before)).toBeLessThan(10_000);
   });
 
-  it('첨부 스크린샷 경로가 판정과 함께 남고, 이력에 장수가 붙는다 (F-RP-05)', async () => {
+  it('첨부 스크린샷 경로가 판정과 함께 남고, 이력에 장수가 붙는다', async () => {
     const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
     const qa = apiAs(PEOPLE.qa);
     const r = (await qa.getCycle(cref)).results.find((x) => x.verdict === 'check')!;
@@ -408,7 +408,7 @@ describe('QA 데이터 쓰기', () => {
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it('케이스 수정안: 요청·조회·처리가 메모리 구현과 같고, 처리는 요청한 사람만 한다 (F-QD-17)', async () => {
+  it('케이스 수정안: 요청·조회·처리가 메모리 구현과 같고, 처리는 요청한 사람만 한다', async () => {
     const fb = apiAs(PEOPLE.lead);
     const mem = memory();
     expect(await fb.listCaseRevisions(ref)).toEqual(await mem.listCaseRevisions(ref));
@@ -478,7 +478,7 @@ describe('프로젝트·초대 (callable)', () => {
     await expect(lead.leaveProject('widget')).rejects.toBeInstanceOf(RuleError);
   });
 
-  it('실행 안전장치 저장이 메모리 구현과 같고, Admin이 아니거나 범위 밖이면 거부한다 (F-EX-12)', async () => {
+  it('실행 안전장치 저장이 메모리 구현과 같고, Admin이 아니거나 범위 밖이면 거부한다', async () => {
     const limits = { ...DEFAULT_RUN_LIMITS, tokensPerRun: 8_000_000, waitTimeoutMin: 5 };
     const fb = apiAs(PEOPLE.lead);
     const mem = memory();
@@ -499,7 +499,7 @@ describe('프로젝트·초대 (callable)', () => {
   });
 });
 
-describe('호스트 연결 (F-TM-14)', () => {
+describe('호스트 연결', () => {
   it('연결하면 내 목록에만 보이고, 해제하면 빠진다 — 메모리 구현과 같다', async () => {
     for (const api of [apiAs(PEOPLE.qa), createMemoryApi({ currentUser: PEOPLE.qa })]) {
       const cred = await api.connectHost(' MacBook Air ');

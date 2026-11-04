@@ -1,7 +1,7 @@
 import { DELETE_GRACE_DAYS, INVITE_TTL_DAYS, type Invitation, type Member, type Project, type Role } from './domain';
 
 /*
- * 프로젝트·멤버·초대 규칙 (F-TM-09~13). 메모리 구현과 Cloud Functions가 같은 함수를 쓴다.
+ * 프로젝트·멤버·초대 규칙. 메모리 구현과 Cloud Functions가 같은 함수를 쓴다.
  * 함수는 상태를 바꾸지 않고, 규칙을 검사한 뒤 저장할 값을 돌려준다. 저장은 호출하는 쪽(트랜잭션)이 한다.
  */
 
@@ -39,7 +39,7 @@ export function requireAdmin(members: Member[], uid: string): Member {
   return m;
 }
 
-/** QA 데이터 쓰기 (F-TM-03): Admin·QA만. Viewer는 조회만 */
+/** QA 데이터 쓰기: Admin·QA만. Viewer는 조회만 */
 export function requireEditor(members: Member[], uid: string): Member {
   const m = requireMember(members, uid);
   if (m.role === 'viewer') throw permission('Viewer는 조회만 할 수 있습니다. Admin·QA에게 요청하세요.');
@@ -66,7 +66,7 @@ export function projectIdFor(name: string, taken: (id: string) => boolean): stri
   return id;
 }
 
-/** 프로젝트 생성 (F-TM-09): 누구나, 만든 사람이 Admin. 데이터 처리 안내 확인 필수 (F-TM-13) */
+/** 프로젝트 생성: 누구나, 만든 사람이 Admin. 데이터 처리 안내 확인 필수 */
 export function newProject(input: NewProjectInput, actor: Actor, id: string, now: string) {
   if (!input.dataNoticeAck) throw rule('데이터 처리 안내를 확인해야 프로젝트를 만들 수 있습니다.');
   const name = input.name.trim();
@@ -90,7 +90,7 @@ function memberFor(projectId: string, actor: Actor, role: Role, now: string): Me
   };
 }
 
-/** 역할 변경: Admin만, Admin이 0명이 되면 안 된다 (F-TM-03) */
+/** 역할 변경: Admin만, Admin이 0명이 되면 안 된다 */
 export function changeRole(members: Member[], actor: Actor, uid: string, role: Role): Member {
   requireAdmin(members, actor.uid);
   const m = members.find((x) => x.uid === uid);
@@ -111,7 +111,7 @@ export function removal(members: Member[], actor: Actor, uid: string): Member {
   return m;
 }
 
-/** 탈퇴 (F-TM-11): 마지막 Admin은 넘긴 뒤에만, 혼자면 삭제 */
+/** 탈퇴: 마지막 Admin은 넘긴 뒤에만, 혼자면 삭제 */
 export function leaving(members: Member[], actor: Actor): Member {
   const m = requireMember(members, actor.uid);
   if (members.length === 1) throw rule('혼자 남은 멤버는 탈퇴할 수 없습니다. 프로젝트를 삭제하세요.');
@@ -123,7 +123,7 @@ export function leaving(members: Member[], actor: Actor): Member {
 
 export const isExpired = (inv: Invitation, now: string) => inv.expiresAt < now;
 
-/** 초대 만들기 (F-TM-10): Admin만. github가 없으면 링크 초대. 7일 뒤 만료 */
+/** 초대 만들기: Admin만. github가 없으면 링크 초대. 7일 뒤 만료 */
 export function newInvitation(
   members: Member[],
   invitations: Invitation[],
@@ -188,7 +188,7 @@ export function accepting(
   };
 }
 
-/** 삭제 (F-TM-12): Admin만, 이름을 입력해 확인. 30일 유예 동안 복구할 수 있다 */
+/** 삭제: Admin만, 이름을 입력해 확인. 30일 유예 동안 복구할 수 있다 */
 export function deletion(project: Project, members: Member[], actor: Actor, confirmName: string, now: string) {
   requireAdmin(members, actor.uid);
   if (confirmName.trim() !== project.name) throw rule('프로젝트 이름이 일치하지 않습니다.');

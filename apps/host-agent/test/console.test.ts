@@ -129,7 +129,7 @@ describe('OnDemandScreen', () => {
   });
 });
 
-// ---------------------------------------------------------------- 허브: 제어 (F-DB-05)
+// ---------------------------------------------------------------- 허브: 제어
 
 import { RunAbortedError } from '@qcard/agent';
 import { qaDocV130 } from '@qcard/fixtures';
@@ -217,7 +217,7 @@ describe('콘솔 허브', () => {
     await expect(aborted).rejects.toBeInstanceOf(RunAbortedError);
   });
 
-  it('위험 액션: [승인]이면 approved, [직접 실행 → 반환]이면 took_over, 답이 없으면 timeout (F-EX-10)', async () => {
+  it('위험 액션: [승인]이면 approved, [직접 실행 → 반환]이면 took_over, 답이 없으면 timeout', async () => {
     const req = {
       kind: 'people',
       level: 'approval',
@@ -288,7 +288,7 @@ describe('콘솔 허브', () => {
   });
 });
 
-// ---------------------------------------------------------------- 서버: 로컬 콘솔 보호 (PRD §8)
+// ---------------------------------------------------------------- 서버: 로컬 콘솔 보호 (docs/security.md)
 
 describe('로컬 콘솔 서버', () => {
   it('일회용 토큰을 쿠키로 바꾸고, Host·Origin·쿠키가 맞아야 상태를 받고 제어할 수 있다', async () => {

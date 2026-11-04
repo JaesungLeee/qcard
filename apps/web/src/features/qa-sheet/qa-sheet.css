@@ -103,7 +103,7 @@
   border-color: var(--qc-line-neutral-primary);
   background: var(--qc-surface-neutral-secondary);
 }
-/* 카드의 [⋯] (F-CY-10): 카드 전체가 링크라 버튼을 그 위에 겹쳐 두고, 머리 오른쪽에 그만큼 자리를 비운다 */
+/* 카드의 [⋯]: 카드 전체가 링크라 버튼을 그 위에 겹쳐 두고, 머리 오른쪽에 그만큼 자리를 비운다 */
 .qs-cycle-item {
   position: relative;
 }
@@ -306,7 +306,7 @@
   color: var(--qc-qcard-verdict-fail-fg);
   flex: none;
 }
-/* 결함이 연결되지 않은 Fail 칸이 있는 행의 결함 ID 셀 (F-RP-19) */
+/* 결함이 연결되지 않은 Fail 칸이 있는 행의 결함 ID 셀 */
 .qs-no-defect {
   color: var(--qc-qcard-verdict-fail-fg);
 }
@@ -387,7 +387,7 @@
   min-width: 0;
 }
 
-/* 첨부 스크린샷 (F-RP-05) */
+/* 첨부 스크린샷 */
 .qs-thumbs {
   display: flex;
   flex-wrap: wrap;

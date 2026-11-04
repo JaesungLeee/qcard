@@ -98,7 +98,7 @@ export function Mono({ children, className = '' }: { children: ReactNode; classN
 }
 
 /**
- * 결과에 기록된 OS 빌드 (`Android 15 · AP3A.240905.015.A2 · 보안 패치 2024-10-01`, F-CY-01).
+ * 결과에 기록된 OS 빌드 (`Android 15 · AP3A.240905.015.A2 · 보안 패치 2024-10-01`).
  * 빌드 번호·날짜 중간에서 끊기지 않게 ` · ` 사이에서만 줄을 바꾼다. 예전 결과(`Android 15`)도 그대로 보인다
  */
 export function OsBuild({ value }: { value: string }) {
@@ -115,7 +115,7 @@ export function OsBuild({ value }: { value: string }) {
   );
 }
 
-/** 실행 중 / 일시정지 표시 (아이콘 + 글자). 일시정지면 이유를 붙인다 (F-DB-07) */
+/** 실행 중 / 일시정지 표시 (아이콘 + 글자). 일시정지면 이유를 붙인다 */
 /** 지금 시각 (ms). 화면에 떠 있는 동안 주기적으로 갱신한다 — 데이터가 바뀌지 않아도 "호스트 연결 끊김"이 보이게 */
 export function useNow(intervalMs = 15_000) {
   const [now, setNow] = useState(() => Date.now());
@@ -126,12 +126,12 @@ export function useNow(intervalMs = 15_000) {
   return now;
 }
 
-/** 실행자를 기다리는 Run의 표시 (F-EX-10). 응답은 실행자 PC의 로컬 콘솔에서만 한다 */
+/** 실행자를 기다리는 Run의 표시. 응답은 실행자 PC의 로컬 콘솔에서만 한다 */
 export const WAITING_LABEL = { approval: '승인 대기', human: '실행자 직접 수행 대기' } as const;
 
 /**
- * stale: 실행 중인데 호스트 신호가 끊긴 Run (F-DV-04, isRunStale) ·
- * waiting: 위험 액션·사람 전용·수동 스텝에서 실행자를 기다리는 중 (F-EX-10)
+ * stale: 실행 중인데 호스트 신호가 끊긴 Run (isRunStale) ·
+ * waiting: 위험 액션·사람 전용·수동 스텝에서 실행자를 기다리는 중
  */
 export function RunState({
   paused,

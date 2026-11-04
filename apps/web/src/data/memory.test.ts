@@ -23,7 +23,7 @@ describe('QA 문서 편집·승인', () => {
     expect(saved.title).toBe('수정한 제목');
   });
 
-  it('다른 사람이 먼저 저장했으면 ConflictError로 최신 내용을 돌려준다 (F-QD-09)', async () => {
+  it('다른 사람이 먼저 저장했으면 ConflictError로 최신 내용을 돌려준다', async () => {
     const api = createMemoryApi();
     const tc = (await api.getQaDoc(DOC)).cases[0]!;
     await api.updateCase(DOC, tc.tcId, { ...tc, title: '먼저 저장' }, tc.rev);
@@ -32,7 +32,7 @@ describe('QA 문서 편집·승인', () => {
     expect((err as ConflictError).latest.title).toBe('먼저 저장');
   });
 
-  it('승인된 케이스의 내용이 바뀌면 자동으로 미승인 (F-QD-10)', async () => {
+  it('승인된 케이스의 내용이 바뀌면 자동으로 미승인', async () => {
     const api = createMemoryApi();
     const tc = (await api.getQaDoc(DOC)).cases.find((c) => c.approval.status === 'approved')!;
     const same = await api.updateCase(DOC, tc.tcId, { ...tc }, tc.rev);
@@ -49,7 +49,7 @@ describe('QA 문서 편집·승인', () => {
     expect(after.approval).toMatchObject({ status: 'approved', contentHash: tc.contentHash });
   });
 
-  it('"현 스펙대로 진행"하면 그 질문에 묶인 보류 케이스가 미승인으로 풀린다 (F-QD-03)', async () => {
+  it('"현 스펙대로 진행"하면 그 질문에 묶인 보류 케이스가 미승인으로 풀린다', async () => {
     const api = createMemoryApi();
     const doc = await api.getQaDoc(DOC);
     const q = doc.questions.find((x) => x.status === 'open')!;
@@ -62,7 +62,7 @@ describe('QA 문서 편집·승인', () => {
 });
 
 describe('사이클 판정', () => {
-  it('사람이 확정하면 판정 주체·이력이 남는다 (F-RP-04)', async () => {
+  it('사람이 확정하면 판정 주체·이력이 남는다', async () => {
     const api = createMemoryApi();
     const { results } = await api.getCycle(CYCLE);
     const check = results.find((r) => r.verdict === 'check')!;
@@ -77,7 +77,7 @@ describe('사이클 판정', () => {
     expect(r.history.at(-1)).toMatchObject({ from: 'check', to: 'pass', by: api.currentUser });
   });
 
-  it('수동 결과에 스크린샷을 첨부하고, 다시 확정할 때 남길 첨부만 남긴다 (F-RP-05)', async () => {
+  it('수동 결과에 스크린샷을 첨부하고, 다시 확정할 때 남길 첨부만 남긴다', async () => {
     const api = createMemoryApi();
     const r = (await api.getCycle(CYCLE)).results.find((x) => x.verdict === 'check')!;
     const at = { ...CYCLE, tcId: r.tcId, deviceId: r.deviceId };
@@ -100,7 +100,7 @@ describe('사이클 판정', () => {
     expect(second.history.at(-1)!.attachments).toBeUndefined();
   });
 
-  it('첨부는 PNG·JPEG·WebP 이미지 5장, 한 장 10MB까지 (F-RP-05)', async () => {
+  it('첨부는 PNG·JPEG·WebP 이미지 5장, 한 장 10MB까지', async () => {
     const api = createMemoryApi();
     const r = (await api.getCycle(CYCLE)).results.find((x) => x.verdict === 'check')!;
     const at = { ...CYCLE, tcId: r.tcId, deviceId: r.deviceId, verdict: 'pass' as const };
@@ -119,7 +119,7 @@ describe('사이클 판정', () => {
     expect(passRate({ pass: 8, fail: 1, blocked: 1, check: 0, nt: 90, na: 0 })).toBeCloseTo(0.8);
   });
 
-  it('사이클을 만든 뒤 QA 문서 케이스를 고쳐도 사이클은 만들 때 내용으로 보인다 (F-CY-02)', async () => {
+  it('사이클을 만든 뒤 QA 문서 케이스를 고쳐도 사이클은 만들 때 내용으로 보인다', async () => {
     const api = createMemoryApi();
     const cycle = await api.createCycle('haru', {
       name: '고정 확인',
@@ -136,7 +136,7 @@ describe('사이클 판정', () => {
     expect(after.contentHash).toBe(cycle.snapshot[0]!.contentHash);
   });
 
-  it('구독하면 처음 내용과 판정 확정 뒤 내용을 받고, 끊으면 더 받지 않는다 (F-CY-05)', async () => {
+  it('구독하면 처음 내용과 판정 확정 뒤 내용을 받고, 끊으면 더 받지 않는다', async () => {
     const api = createMemoryApi();
     const seen: string[] = [];
     const r = (await api.getCycle(CYCLE)).results.find((x) => x.verdict === 'check')!;
@@ -223,7 +223,7 @@ describe('로컬 실행', () => {
   });
 });
 
-describe('프로젝트·멤버·초대 (F-TM-09~13)', () => {
+describe('프로젝트·멤버·초대', () => {
   const as = (user: string) => {
     const api = createMemoryApi();
     api.switchUser(user);
@@ -329,7 +329,7 @@ describe('웹에서 내 호스트로 Run 시작', () => {
   });
 });
 
-describe('QA 문서 생성 요청 (PRD §5.2)', () => {
+describe('QA 문서 생성 요청', () => {
   const SPEC = `# 스펙 명세서: 샘플
 
 ### 유저 플로우 1 - 연다
@@ -379,7 +379,7 @@ describe('QA 문서 생성 요청 (PRD §5.2)', () => {
   });
 });
 
-describe('준비 플로우 편집 (F-PF-01)', () => {
+describe('준비 플로우 편집', () => {
   const ref = { projectId: 'haru', docId: 'doc-130' };
   const input = { name: '로그인 상태', kind: 'login' as const, check: '홈 탭이 보인다', steps: ['[로그인]'] };
 

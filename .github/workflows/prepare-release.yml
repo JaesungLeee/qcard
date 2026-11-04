@@ -1,0 +1,56 @@
+# release·hotfix 브랜치에 푸시할 때마다 배포 준비를 맞춘다: main 대비 바뀐 쪽(서비스·호스트)의 version을 브랜치 이름의 버전으로 올리고,
+# CHANGELOG.md 초안 항목을 만들고, main으로 가는 PR을 연다. 이미 맞으면 아무것도 하지 않는다 — docs/dev/branching.md
+name: prepare-release
+
+on:
+  push:
+    branches: ['release/*', 'hotfix/*']
+
+concurrency:
+  group: prepare-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+          # 이 토큰으로 푸시·PR을 만들어야 PR에서 verify·release-check가 돈다
+          token: ${{ secrets.RELEASE_TOKEN }}
+      - name: 바뀐 쪽 고르기
+        id: plan
+        run: scripts/release-plan.sh plan origin/main
+      - name: 버전·CHANGELOG 맞추기
+        id: prepare
+        if: steps.plan.outputs.only != '' || steps.plan.outputs.host != ''
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          kind=${GITHUB_REF_NAME%%/*}
+          node scripts/release-prepare.mjs "${GITHUB_REF_NAME#*/}" "$kind" \
+            "${{ steps.plan.outputs.only != '' && '1' || '0' }}" "${{ steps.plan.outputs.host != '' && '1' || '0' }}"
+      - name: 커밋·푸시
+        if: steps.prepare.outputs.changed != ''
+        run: |
+          npx -y prettier@3.9.9 --write CHANGELOG.md package.json apps/host-agent/package.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898283+github-actions[bot]@users.noreply.github.com'
+          git commit -am "chore: release ${GITHUB_REF_NAME#*/}"
+          git push origin "HEAD:$GITHUB_REF"
+      - name: main PR 열기
+        if: steps.plan.outputs.only != '' || steps.plan.outputs.host != ''
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          [ -n "$(gh pr list --head "$GITHUB_REF_NAME" --base main --state open --json number --jq '.[]')" ] && exit 0
+          kind=${GITHUB_REF_NAME%%/*}
+          gh pr create --base main --head "$GITHUB_REF_NAME" --title "$kind ${GITHUB_REF_NAME#*/}" --body "$(cat <<'BODY'
+          머지하면 바뀐 쪽만 배포하고 태그·GitHub Release를 만든다(호스트 npm 배포 → 서비스 배포). develop back-merge PR도 자동으로 열린다.
+
+          머지 전에:
+          - [ ] `CHANGELOG.md` 초안을 사용자 관점으로 다듬고 초안 표시 줄을 지운다(남아 있으면 release-check가 실패한다)
+          - [ ] 이전 호스트로 실행할 수 없게 바뀌었으면 `packages/shared`의 `MIN_HOST_VERSION`을 올린다
+          BODY
+          )"

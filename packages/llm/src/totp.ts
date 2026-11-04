@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 
 /*
- * TOTP (RFC 6238, SHA-1 · 30초 · 6자리) — 인증 앱 2단계 로그인이 있는 테스트 계정 (F-EX-09).
+ * TOTP (RFC 6238, SHA-1 · 30초 · 6자리) — 인증 앱 2단계 로그인이 있는 테스트 계정.
  * 시드는 base32. 코드는 입력 직전에 계산하고, LLM에는 플레이스홀더만 간다.
  */
 

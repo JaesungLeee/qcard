@@ -10,7 +10,7 @@ import { PlainShell } from '../../shell/PlainShell';
 import { ErrorMessage, RoleBadge } from './parts';
 import './projects.css';
 
-/** 내 프로젝트 (F-TM-02): 내가 멤버인 프로젝트만 보인다. 첫 화면 */
+/** 내 프로젝트: 내가 멤버인 프로젝트만 보인다. 첫 화면 */
 export function ProjectListPage() {
   const projects = useMyProjects();
   const navigate = useNavigate();
@@ -98,7 +98,7 @@ function ProjectCard({ summary: s }: { summary: ProjectSummary }) {
   );
 }
 
-/** 삭제 예정: 유예 기간 동안 Admin이 복구할 수 있다 (F-TM-12) */
+/** 삭제 예정: 유예 기간 동안 Admin이 복구할 수 있다 */
 function DeletedCard({ summary: s, children }: { summary: ProjectSummary; children: ReactNode }) {
   const restore = useRestoreProject(s.project.id);
   return (

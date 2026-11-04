@@ -1,4 +1,4 @@
-// Run 케이스 고르기 모달 (F-CY-07): 판정(내 기기 칸)·우선순위 필터 + 기능·세부 기능으로 묶은 체크 목록.
+// Run 케이스 고르기 모달: 판정(내 기기 칸)·우선순위 필터 + 기능·세부 기능으로 묶은 체크 목록.
 // 데이터 소스와 무관하다 — 웹 QA 시트(CycleDetail)와 로컬 콘솔(ConsoleCycleOption)이 각자 줄(pickRows)을 만들어 넘긴다.
 import { PRIORITY_LABEL } from '@qcard/shared';
 import {

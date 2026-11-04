@@ -3,7 +3,7 @@ import { totpCode, type SecretVault } from '@qcard/llm';
 import type { AccountSecret, TestAccount, TestCase } from '@qcard/shared';
 
 /*
- * Run 하나의 테스트 계정 (F-PF-04·08·09, F-EX-09). 케이스마다 필요한 종류의 계정을 배정받고, 비밀값은 vault(메모리)에만 둔다.
+ * Run 하나의 테스트 계정. 케이스마다 필요한 종류의 계정을 배정받고, 비밀값은 vault(메모리)에만 둔다.
  * 종류가 같으면 이어 쓰고, 바뀌거나 Run이 끝나면 반납한다. 로그인 실패·원복 실패는 표시·격리로 반납한다.
  * 한 종류의 로그인이 LOGIN_FAILURE_LIMIT번 실패하면 플로우 탓으로 보고 그 종류의 계정을 더 받지 않는다 — 계정을 차례로 태우지 않게.
  * 배정·반납은 Functions(claimAccount·releaseAccount)가 하고, 호스트는 그 Run을 실행 중일 때만 받을 수 있다.
@@ -142,7 +142,7 @@ export class RunAccounts {
     await this.release(issue, detail);
   }
 
-  /** Run이 끝나거나 멈출 때. 원복 플로우가 있는 케이스 도중이면 격리한다 (F-PF-09) */
+  /** Run이 끝나거나 멈출 때. 원복 플로우가 있는 케이스 도중이면 격리한다 */
   async finish() {
     if (this.restoring) await this.release('restore_failed', '원복하기 전에 실행이 멈췄습니다');
     else await this.release('ok');

@@ -4,7 +4,7 @@ import { LocateBatchOutput, VerifyBatchOutput, type PointResult, type Verificati
 import { clockOf, observationBlocks, observe, type AgentEnv, type Observation } from './env';
 
 /*
- * 검증 포인트 판정 (F-EX-03). 트리 포인트는 LLM이 대상 요소만 찾고 비교는 코드가 한다.
+ * 검증 포인트 판정. 트리 포인트는 LLM이 대상 요소만 찾고 비교는 코드가 한다.
  * 비전 포인트는 Verifier가 판정한다. 포인트 종류별로 한 번씩만 호출한다.
  */
 

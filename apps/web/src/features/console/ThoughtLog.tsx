@@ -6,7 +6,7 @@ import { THOUGHT_META, fmtClock } from './meta';
 
 export type LogEntry = ThoughtEntry & { stepIndex: number };
 
-/** Agent 사고 로그 스트림 (F-DB-04): 무엇을 봤고, 왜 이 액션을 했는지. 스텝별로 묶는다. */
+/** Agent 사고 로그 스트림: 무엇을 봤고, 왜 이 액션을 했는지. 스텝별로 묶는다. */
 export function ThoughtLog({
   entries,
   steps,

@@ -6,7 +6,7 @@ import type { LlmClient, LlmRetry } from './types';
 import { withUsage, type UsageMeter } from './usage';
 
 /**
- * Anthropic API 직접 호출 (개발·테스트용, PRD §8 옵션 A). 자격 증명은 SDK가 환경(ANTHROPIC_API_KEY 또는
+ * Anthropic API 직접 호출 (개발·테스트용, docs/security.md). 자격 증명은 SDK가 환경(ANTHROPIC_API_KEY 또는
  * `ant auth login` 프로필)에서 읽는다. 제품 경로는 사용자 본인의 Claude Code(`createClaudeCliLlm`)다.
  */
 export function createAnthropicLlm(options: { client?: Anthropic; baseURL?: string } = {}): LlmClient {

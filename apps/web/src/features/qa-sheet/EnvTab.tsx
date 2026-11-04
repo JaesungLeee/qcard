@@ -1,4 +1,4 @@
-// ⑤ 환경 (PRD §5.10): 디바이스(모델·OS·해상도, 결과에 기록된 OS 빌드), 빌드, 테스트 계정(마스킹), 서버 환경
+// ⑤ 환경 (docs/product/results.md): 디바이스(모델·OS·해상도, 결과에 기록된 OS 빌드), 빌드, 테스트 계정(마스킹), 서버 환경
 import {
   ContentBadge,
   Table,
