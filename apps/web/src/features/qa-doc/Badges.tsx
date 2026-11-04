@@ -84,7 +84,7 @@ export function ModeBadge({ c }: { c: Pick<TestCase, 'mode' | 'steps'> }) {
   );
 }
 
-/** 단계의 위험 표시 (F-QD-07·F-EX-10) */
+/** 단계의 위험 표시 */
 export function StepRiskTag({ risk }: { risk: CaseStep['risk'] }) {
   if (risk === 'approval')
     return (

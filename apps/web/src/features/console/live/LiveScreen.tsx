@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActionOverlay } from '../../../mock/MockScreen';
 
 /*
- * 실시간 디바이스 화면 (F-DB-01): 호스트가 중계하는 scrcpy H.264를 WebCodecs로 디코딩해 canvas에 그린다.
+ * 실시간 디바이스 화면: 호스트가 중계하는 scrcpy H.264를 WebCodecs로 디코딩해 canvas에 그린다.
  * 패킷 = [플래그 1바이트: 1=키프레임] + Annex B (키프레임 앞에 SPS·PPS). 액션 오버레이는 디바이스 좌표로 겹친다.
  */
 

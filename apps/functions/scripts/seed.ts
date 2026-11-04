@@ -39,7 +39,7 @@ for (let i = 0; i < docs.length; i += 450) {
   for (const [path, data] of docs.slice(i, i + 450)) batch.set(db.doc(path), data);
   await batch.commit();
 }
-// 1.3.0 문서의 스펙 묶음: 호스트가 출처 스펙 행을 읽는 작업(케이스 수정안 F-QD-17)을 에뮬레이터에서 해 볼 수 있게
+// 1.3.0 문서의 스펙 묶음: 호스트가 출처 스펙 행을 읽는 작업(케이스 수정안)을 에뮬레이터에서 해 볼 수 있게
 const bucket = getStorage().bucket(`${PROJECT}.appspot.com`);
 const bundle: SpecBundle = {
   id: qaDocV130.specBundleId,

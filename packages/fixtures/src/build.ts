@@ -234,7 +234,7 @@ export const project: Project = {
   createdAt: T(1, 9),
 };
 
-// ---------------------------------------------------------------- 프로젝트·멤버·초대 (F-TM-09~13)
+// ---------------------------------------------------------------- 프로젝트·멤버·초대
 
 /** GitHub 사용자명 (로그인·초대 기준) */
 export const GITHUB: Record<string, string> = {
@@ -318,7 +318,7 @@ export const members: Member[] = [
 ];
 
 /**
- * 테스트 계정 (F-PF-04·08·09). 하루콩은 로그인이 없어 계정이 없고, 모아북(가상 앱)에 종류 두 가지 계정을 둔다.
+ * 테스트 계정. 하루콩은 로그인이 없어 계정이 없고, 모아북(가상 앱)에 종류 두 가지 계정을 둔다.
  * 비밀값은 fixture에 없다 — 화면은 비밀값을 다시 보여 주지 않는다
  */
 const account = (id: string, kind: string, extra: Partial<TestAccount> = {}): TestAccount => ({
@@ -914,7 +914,7 @@ type Special = {
 const src = (id: string) => `${SPEC}/${id}`;
 
 const SPECIAL_130: Record<string, Partial<Record<string, Special>>> = {
-  // 수동 케이스: 실행자가 결과와 함께 스크린샷을 첨부했다 (F-RP-05)
+  // 수동 케이스: 실행자가 결과와 함께 스크린샷을 첨부했다
   [src('TS-020')]: {
     [S24.id]: {
       verdict: 'pass',
@@ -1288,7 +1288,7 @@ export type ConsoleSession = {
     pauseAt: number;
   };
   usage: { tokens: number; costUsd: number; caseTokenLimit: number };
-  /** 이 PC의 Claude Code 상태 (F-DB-09). 호스트 에이전트가 `claude --version`·`claude auth status`로 채운다 */
+  /** 이 PC의 Claude Code 상태. 호스트 에이전트가 `claude --version`·`claude auth status`로 채운다 */
   claudeCode: ClaudeCodeState;
 };
 
@@ -1421,7 +1421,7 @@ function consoleSession(): ConsoleSession {
 
 // ---------------------------------------------------------------- 내보내기
 
-// ---------------------------------------------------------------- QA 문서 생성 작업 (PRD §5.2, §6.2)
+// ---------------------------------------------------------------- QA 문서 생성 작업 (docs/product/qa-doc.md, docs/architecture.md)
 
 /** 생성 진행 (작업 상세 화면): 생성 계획·케이스 초안·진행 기록 */
 export type JobParts = { specs: QaDocJobSpec[]; drafts: QaDocJobDraft[]; events: QaDocJobEvent[] };
@@ -1532,7 +1532,7 @@ const job131 = jobProgress({
 });
 export const jobParts: Record<string, JobParts> = { 'job-140': job140.parts, 'job-131': job131.parts };
 
-/** 케이스 수정안 (F-QD-17): Q-3 답변("dot 중심을 누르면 된다")을 TS-027 케이스에 반영한 것. 아직 적용·버리기 전 */
+/** 케이스 수정안: Q-3 답변("dot 중심을 누르면 된다")을 TS-027 케이스에 반영한 것. 아직 적용·버리기 전 */
 const revised039 = (() => {
   const c = cases130.find((x) => x.sourceId.endsWith('/TS-027'))!;
   const body = CaseBodySchema.parse({
@@ -1623,12 +1623,12 @@ export type FixtureDb = {
   qaDocs: QADocument[];
   builds: Build[];
   cycles: TestCycle[];
-  /** 사이클을 만들 때 복사한 케이스 내용 (F-CY-02). QA 문서를 나중에 고쳐도 사이클은 이 내용으로 실행·표시한다 */
+  /** 사이클을 만들 때 복사한 케이스 내용. QA 문서를 나중에 고쳐도 사이클은 이 내용으로 실행·표시한다 */
   cycleCases: Record<string, TestCase[]>;
   results: Record<string, CaseResult[]>;
   defects: Record<string, Defect[]>;
   runs: Record<string, Run[]>;
-  /** QA 문서 id → 그 버전의 준비 플로우 (F-PF-01, 버전마다 사본) */
+  /** QA 문서 id → 그 버전의 준비 플로우 (버전마다 사본) */
   prepFlows: Record<string, PrepFlow[]>;
   jobs: Job[];
   /** 작업 id → 생성 진행 */

@@ -39,7 +39,7 @@ const fake = (version: string, loggedIn = true, missing = false) => {
 };
 afterEach(() => fake('2.1.308'));
 
-describe('Claude Code 사전 점검 (F-EX-17)', () => {
+describe('Claude Code 사전 점검', () => {
   it('버전은 숫자로 비교한다', () => {
     expect(compareVersions('2.1.99', '2.1.280')).toBeLessThan(0);
     expect(compareVersions('2.1.280', '2.1.280')).toBe(0);

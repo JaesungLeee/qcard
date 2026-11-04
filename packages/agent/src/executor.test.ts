@@ -114,7 +114,7 @@ describe('Executor 루프', () => {
     expect(device.log.filter((l) => l.startsWith('tap'))).toHaveLength(1);
   });
 
-  it('같은 화면 + 같은 액션 3회면 Blocked (F-EX-12)', async () => {
+  it('같은 화면 + 같은 액션 3회면 Blocked', async () => {
     const tapTitle = () => [toolUse('tap', { element_ref: 'nickname_title', intent: '제목 탭' })];
     const { env } = setup('nickname', [tapTitle(), tapTitle(), tapTitle()]);
     const r = await runSteps(env, { caseId: 'TC-1', steps: steps('x'), context: '' });
@@ -130,7 +130,7 @@ describe('Executor 루프', () => {
     expect(r).toMatchObject({ status: 'blocked', reason: '실행 한도 초과: 최대 2턴' });
   });
 
-  it('턴·반복 한도는 프로젝트 설정(env.limits)을 따른다 (F-EX-12)', async () => {
+  it('턴·반복 한도는 프로젝트 설정(env.limits)을 따른다', async () => {
     const tapTitle = () => [toolUse('tap', { element_ref: 'nickname_title', intent: '제목 탭' })];
     const twice = setup('nickname', [tapTitle(), tapTitle(), tapTitle()]);
     const limits = { turnsPerStep: 1, extraTurns: 1, repeatLimit: 2, retryLimit: 3 };
@@ -178,7 +178,7 @@ describe('Executor 루프', () => {
     expect(r).toMatchObject({ status: 'blocked', reason: 'Agent가 도구를 부르지 않음' });
   });
 
-  it('수동 스텝은 실행자를 기다리고, 응답이 없으면 Blocked (F-EX-11)', async () => {
+  it('수동 스텝은 실행자를 기다리고, 응답이 없으면 Blocked', async () => {
     const manual = [
       { text: '실제 기기에서 공유 대상을 고른다', manual: true },
       { text: '화면 확인', manual: false },
@@ -203,7 +203,7 @@ describe('Executor 루프', () => {
     });
   });
 
-  it('기본은 트리만 보내고, view_screen을 부르면 그때 스크린샷을 보낸다 (F-EX-02)', async () => {
+  it('기본은 트리만 보내고, view_screen을 부르면 그때 스크린샷을 보낸다', async () => {
     const { llm, env } = setup(
       'nickname',
       [
@@ -287,7 +287,7 @@ describe('Executor 루프', () => {
     expect(r.steps.map((s) => s.action)).toEqual(['home', 'reopen']);
   });
 
-  it('set_network는 허용된 실행에서만 동작한다 (F-EX-16)', async () => {
+  it('set_network는 허용된 실행에서만 동작한다', async () => {
     const denied = setup('mate-invite', [
       [toolUse('set_network', { wifi: false, data: false, intent: '네트워크 끊기' })],
       [toolUse('give_up', { kind: 'env_unavailable', reason: '허용 안 됨' })],
@@ -310,7 +310,7 @@ describe('Executor 루프', () => {
     expect(r2.steps[0]).toMatchObject({ action: 'env', input: 'Wi-Fi 끔 · 데이터 끔' });
   });
 
-  it('Wi-Fi ADB 디바이스에서 네트워크를 끄려 하면 기기를 건드리지 않고 Blocked, 켜기는 그대로 (F-EX-16)', async () => {
+  it('Wi-Fi ADB 디바이스에서 네트워크를 끄려 하면 기기를 건드리지 않고 Blocked, 켜기는 그대로', async () => {
     for (const input of [
       { wifi: true, data: false },
       { wifi: false, data: true },
@@ -354,7 +354,7 @@ describe('Executor 루프', () => {
     expect(first).not.toContain('카메라');
   });
 
-  it('비밀값은 디바이스에만 실제 값, LLM·타임라인에는 플레이스홀더 (F-EX-09)', async () => {
+  it('비밀값은 디바이스에만 실제 값, LLM·타임라인에는 플레이스홀더', async () => {
     const vault = new SecretVault();
     vault.set('nick', '비밀닉네임');
     const { device, llm, env } = setup('nickname', [
@@ -385,7 +385,7 @@ function scriptedControl(signals: ControlSignal[], interruptedAt: number[] = [])
   };
 }
 
-describe('실행자 제어 (F-DB-05)', () => {
+describe('실행자 제어', () => {
   it('Take over 뒤에는 화면을 다시 관찰하고, 타임라인·개입 표시를 남긴다', async () => {
     const { llm, env } = setup('nickname', [
       [toolUse('input_text', { element_ref: 'nickname_input', text: '콩콩이', intent: '닉네임 입력' })],

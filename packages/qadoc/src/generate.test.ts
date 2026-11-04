@@ -58,7 +58,7 @@ describe('generateQaDoc — 첫 버전', async () => {
     ]);
   });
 
-  it('iOS 전용 행은 만들지 않는다 (F-QD-06)', () => {
+  it('iOS 전용 행은 만들지 않는다', () => {
     expect(skipped).toEqual([{ sourceId: 'sample/TS-003', reason: expect.stringContaining('iOS') }]);
   });
 
@@ -93,7 +93,7 @@ describe('generateQaDoc — 첫 버전', async () => {
     expect(warnings.join('\n')).toContain('pf-nope');
   });
 
-  it('계정 종류와 원복 플로우를 케이스에 붙이고, 원복이 아닌 플로우는 원복으로 쓰지 않는다 (F-QD-04, F-PF-09)', () => {
+  it('계정 종류와 원복 플로우를 케이스에 붙이고, 원복이 아닌 플로우는 원복으로 쓰지 않는다', () => {
     expect(byId('EC-001')).toMatchObject({ accountKind: '구독자', restoreFlowId: 'pf-undo' });
     expect(byId('EC-001').prepFlowIds).not.toContain('pf-undo');
     expect(byId('TS-001').accountKind).toBeUndefined();
@@ -106,7 +106,7 @@ describe('generateQaDoc — 첫 버전', async () => {
     expect(warnings.join('\n')).toContain('TC-SAMPLE-002 단계 2: 스펙에 없는 버튼 이름 [다음]');
   });
 
-  it('질문이 생긴 케이스는 보류, 질문은 요구사항·케이스에 연결된다 (F-QD-03)', () => {
+  it('질문이 생긴 케이스는 보류, 질문은 요구사항·케이스에 연결된다', () => {
     expect(byId('EC-001').approval.status).toBe('held');
     expect(doc.questions).toEqual([
       expect.objectContaining({
@@ -142,7 +142,7 @@ const BODY = [
   'mode',
 ];
 
-describe('generateQaDoc — 다음 버전 (F-QD-08)', async () => {
+describe('generateQaDoc — 다음 버전', async () => {
   const first = (await run({ llm: fakeGeneratorLlm().llm })).doc;
   // 사람이 TS-001을 고치고 승인, TS-002도 승인, 질문에는 답했다
   const edited: QADocument = {
@@ -253,7 +253,7 @@ describe('generateQaDoc — 응답 확인', () => {
     expect(newPrepFlows).toEqual([]);
   });
 
-  it('이전 버전의 플로우는 케이스가 참조하는 것만 사람이 고친 내용 그대로 이어받는다 (F-QD-08)', async () => {
+  it('이전 버전의 플로우는 케이스가 참조하는 것만 사람이 고친 내용 그대로 이어받는다', async () => {
     const home = { id: 'pf-home', name: '홈 (사람이 고침)', kind: 'data_state' as const, check: '홈', steps: ['a'], rev: 3 };
     const unused = { id: 'pf-old', name: '옛 플로우', kind: 'data_state' as const, check: '-', steps: ['-'] };
     const { prepFlows, newPrepFlows } = await run({
@@ -264,7 +264,7 @@ describe('generateQaDoc — 응답 확인', () => {
     expect(prepFlows.find((f) => f.id === 'pf-home')).toEqual(home);
   });
 
-  it('로그인 준비 플로우를 쓰는데 계정 종류가 없으면 기본 종류로 채운다 (F-QD-04)', async () => {
+  it('로그인 준비 플로우를 쓰는데 계정 종류가 없으면 기본 종류로 채운다', async () => {
     const login = { id: 'pf-home', name: '로그인', kind: 'login' as const, check: '홈', steps: [] };
     const { doc, warnings } = await run({ llm: fakeGeneratorLlm().llm, prepFlows: [CLEAN_FLOW, login] });
     const caseOf = (src: string) => doc.cases.find((c) => c.sourceId === `sample/${src}`)!;

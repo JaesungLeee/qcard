@@ -3,7 +3,7 @@
  * onboarding-flow는 fixture(packages/fixtures/src/data/onboarding-flow.json)와 비교한다.
  *
  *   pnpm --filter @qcard/spec check <docs/specs 폴더> [--prev <이전 버전 docs/specs 폴더>]
- *     --prev를 주면 이전 버전과 출처 ID로 매칭해 스펙별 동일·변경·신규·삭제 개수를 보인다 (F-QD-08)
+ *     --prev를 주면 이전 버전과 출처 ID로 매칭해 스펙별 동일·변경·신규·삭제 개수를 보인다
  */
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';

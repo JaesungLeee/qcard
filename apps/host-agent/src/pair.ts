@@ -1,5 +1,5 @@
 /**
- * 이 PC를 qcard 계정에 연결·해제한다 (F-TM-14).
+ * 이 PC를 qcard 계정에 연결·해제한다.
  *
  *   pnpm --filter @qcard/host connect      브라우저로 웹의 연결 화면을 열고 [이 PC 연결]을 누르면 끝
  *                                          (이미 연결돼 있으면 그대로 둔다. --force: 다시 연결하고 예전 연결 해제)

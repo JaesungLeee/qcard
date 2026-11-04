@@ -320,7 +320,7 @@ export function groupByCase(questions: SpecQuestion[], cases: TestCase[]): Quest
     .sort((a, b) => Number(b.held) - Number(a.held));
 }
 
-/** 케이스 하나의 수정안 상태 (F-QD-17) */
+/** 케이스 하나의 수정안 상태 */
 export type RevisionView =
   /** 답변된 질문이 없다 */
   | { kind: 'none' }
@@ -457,7 +457,7 @@ export function diffCase(before: CaseBody, after: CaseBody, prepName?: (id: stri
   return out;
 }
 
-// ---------------------------------------------------------------- 충돌 후 재적용 (F-QD-09)
+// ---------------------------------------------------------------- 충돌 후 재적용
 
 export type Rebase = {
   body: CaseBody;
@@ -485,7 +485,7 @@ export function rebaseDraft(base: CaseBody, mine: CaseBody, latest: CaseBody): R
   return { body: body as CaseBody, mine: changed, conflicts };
 }
 
-// ---------------------------------------------------------------- 추적성 (F-QD-11)
+// ---------------------------------------------------------------- 추적성
 
 export type CoverageRow = {
   requirement: Requirement;

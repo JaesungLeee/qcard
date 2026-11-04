@@ -1,5 +1,5 @@
 /**
- * 스펙 행(Given·When·Then)에서 검증 포인트를 만든다 (QA 문서 생성기 F-QD-04의 시험판, Opus 5.5).
+ * 스펙 행(Given·When·Then)에서 검증 포인트를 만든다 (QA 문서 생성기의 시험판, Opus 5.5).
  * 결과는 packages/fixtures/src/data/onboarding-points.json에 저장하고 fixture가 그대로 쓴다 (재현 가능하도록 커밋).
  *
  *   ANTHROPIC_API_KEY=… pnpm --filter @qcard/agent gen-points

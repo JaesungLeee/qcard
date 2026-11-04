@@ -11,8 +11,8 @@ export type Judgement = {
 };
 
 /**
- * 케이스 판정 집계 (F-EX-04): 불일치 1개 이상 → Fail, 판단불가 포함 → 확인필요, 모두 일치 → Pass.
- * 실행이 막혔으면 Blocked, 크래시면 Fail. Pass는 자동 확정 조건(F-RP-03)을 모두 충족할 때만 Pass로 확정하고
+ * 케이스 판정 집계: 불일치 1개 이상 → Fail, 판단불가 포함 → 확인필요, 모두 일치 → Pass.
+ * 실행이 막혔으면 Blocked, 크래시면 Fail. Pass는 자동 확정 조건을 모두 충족할 때만 Pass로 확정하고
  * 아니면 확인필요로 둔다.
  */
 export function judge(

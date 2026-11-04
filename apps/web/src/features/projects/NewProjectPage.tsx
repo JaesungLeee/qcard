@@ -7,7 +7,7 @@ import { PlainShell } from '../../shell/PlainShell';
 import { DataNotice, ErrorMessage, Field } from './parts';
 import './projects.css';
 
-/** 새 프로젝트 (F-TM-09): 누구나 만들 수 있고 만든 사람이 Admin. 만들면 멤버를 초대하러 설정으로 간다 */
+/** 새 프로젝트: 누구나 만들 수 있고 만든 사람이 Admin. 만들면 멤버를 초대하러 설정으로 간다 */
 export function NewProjectPage() {
   const navigate = useNavigate();
   const create = useCreateProject();

@@ -18,14 +18,14 @@ export type BannerView = {
   reason?: string;
   /** 수동 스텝 남은 시간 (ms) */
   manualLeftMs?: number;
-  /** 위험 액션 대기 (phase approval, F-EX-10) */
+  /** 위험 액션 대기 (phase approval) */
   approval?: ConsoleApproval;
   /** 위험 액션 남은 시간 (ms) */
   approvalLeftMs?: number;
 };
 
 /**
- * 실행자가 지금 해야 할 일. 수동 스텝 대기(F-EX-11)·Take over(F-DB-05)·검증·완료 상태를 본문 위에 크게 띄운다.
+ * 실행자가 지금 해야 할 일. 수동 스텝 대기·Take over·검증·완료 상태를 본문 위에 크게 띄운다.
  * Agent가 혼자 진행 중일 때는 아무것도 그리지 않는다.
  */
 export function StatusBanner({

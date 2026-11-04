@@ -52,7 +52,7 @@ function toUi(el: MockElement, i: number): UiElement | null {
   };
 }
 
-/** OS 공유 시트는 대상 앱이 아니라 시스템(`android`)이 띄운다 — 그 안의 탭은 앱 밖 액션이다 (F-EX-10) */
+/** OS 공유 시트는 대상 앱이 아니라 시스템(`android`)이 띄운다 — 그 안의 탭은 앱 밖 액션이다 */
 export const SHARE_SHEET_PKG = 'android';
 
 export function syntheticScreen(key: string): FakeScreen {

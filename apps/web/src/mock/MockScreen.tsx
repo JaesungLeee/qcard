@@ -11,7 +11,7 @@ import { useApi } from '../data/hooks';
  * 실제 이미지(`kind: 'url'`)는 그대로, Storage 이미지(`kind: 'storage'`)는 로그인 상태로 받아 보여준다. 실제 이미지는 w·h(디바이스 px)가 있으면 그 비율을 쓴다. 디바이스 화면은 qcard 테마와 무관해야 하므로
  * 테마에 따라 바뀌지 않는 atomic·static 토큰만 쓴다.
  *
- * `action`을 주면 액션 표시(탭 위치·대상 박스·스와이프 화살표·액션 배지)를 겹쳐 그린다 (F-EX-06, F-DB-03).
+ * `action`을 주면 액션 표시(탭 위치·대상 박스·스와이프 화살표·액션 배지)를 겹쳐 그린다.
  */
 /** 실제 이미지 주소. Storage 이미지는 보안 규칙을 거쳐 받은 뒤 같은 경로는 다시 받지 않는다 */
 function useImageSrc(screenshot: Screenshot): string | undefined {

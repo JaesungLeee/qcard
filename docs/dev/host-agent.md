@@ -1,10 +1,10 @@
 # 호스트 에이전트
 
-호스트 에이전트(`apps/host-agent`)는 사이클 케이스를 실기기에서 `runCase`로 실행하고 Run 진행·결과를 Firestore에, 스크린샷을 Storage에 올린다(`runCycle`·`firestoreSink`). 웹에서 요청한 QA 문서 생성·케이스 수정안(F-QD-17) 작업도 받아 처리한다(`jobs.ts`·`serve`). 플랜 한도·로그인 문제·디바이스 잠김이면 일시정지한다.
+호스트 에이전트(`apps/host-agent`)는 사이클 케이스를 실기기에서 `runCase`로 실행하고 Run 진행·결과를 Firestore에, 스크린샷을 Storage에 올린다(`runCycle`·`firestoreSink`). 웹에서 요청한 QA 문서 생성·케이스 수정안 작업도 받아 처리한다(`jobs.ts`·`serve`). 플랜 한도·로그인 문제·디바이스 잠김이면 일시정지한다.
 
 저장소의 pnpm 스크립트는 개발용 에뮬레이터에 붙으므로 `pnpm emu`가 떠 있어야 한다([emulators.md](emulators.md)). 사용자에게 배포하는 `qcard` 명령(npm `@qcard/host`, 진입점 `src/main.ts`)은 같은 코드를 운영 서비스로 실행한다 — 아래 [배포 패키지](#배포-패키지-qcardhost).
 
-## connect — 이 PC를 계정에 연결 (F-TM-14)
+## connect — 이 PC를 계정에 연결
 
 호스트는 GitHub로 따로 로그인하지 않는다. 웹에서 이 PC를 계정에 한 번 연결해 두면, 켤 때마다 그 자격으로 접속한다.
 
@@ -49,7 +49,7 @@ pnpm --filter @qcard/host run-cycle --project haru --cycle cycle-130-device --us
 연결된 실기기에서 사이클 케이스를 실행해 에뮬레이터에 올린다(웹 QA 시트에 바로 보임, 플랜 사용량 차감).
 
 - **대상 디바이스**: 디바이스가 사이클 대상(모델 + OS 메이저)이어야 한다. 개발 시드의 `cycle-130-device`는 SM-S711N 대상.
-- **완료된 사이클 (F-CY-09)**: 새 Run도, 일시정지된 Run 이어서 실행도 시작하지 않는다(`prepareCycleRun`). 콘솔 홈에도 보이지 않는다. 웹에서 다시 열면 실행할 수 있다. 실행 중에 완료된 Run은 끝까지 결과를 올린다(보안 규칙은 새 Run 문서만 막는다).
+- **완료된 사이클**: 새 Run도, 일시정지된 Run 이어서 실행도 시작하지 않는다(`prepareCycleRun`). 콘솔 홈에도 보이지 않는다. 웹에서 다시 열면 실행할 수 있다. 실행 중에 완료된 Run은 끝까지 결과를 올린다(보안 규칙은 새 Run 문서만 막는다).
 - **빌드 설치**: 사이클 빌드(APK)가 디바이스의 앱과 다른 버전이면 내려받아(해시 확인, `~/.qcard/builds`) `install -r`로 설치한다. 낮은 버전·다른 서명은 앱 데이터가 지워져야 해서 자동으로 하지 않고 멈춘다.
 - **업로드 큐**: 결과·증거는 `~/.qcard/upload-queue/<프로젝트>/<사용자 uid>`를 거쳐 끊겨도 다음 실행 때 이어 보낸다. 보안 규칙이 거절한 작업(연결 해제된 PC, 예전 Run, 권한 없는 역할)은 `dropped/`로 빼고 다음 작업을 보낸다 — 이번 Run의 작업이 거절됐으면 그 Run은 멈춘다.
 - **일시정지·재개**: `--resume <run id>`. 케이스마다 폰 화면이 꺼졌거나 잠겼으면 LLM을 부르기 전에 일시정지한다(연결이 끊겨도 일시정지).
@@ -62,9 +62,9 @@ pnpm --filter @qcard/host run-cycle --project haru --cycle cycle-130-device --us
 
 - 127.0.0.1 서버. 일회용 토큰 → 쿠키, Host/Origin 검사.
 - 실행 상태 허브와 제어: 실시간 화면·사고 로그·일시정지·Take over·건너뛰기·중단·수동 스텝 [완료].
-- **위험 액션 (F-EX-10)**: Executor가 멈추면 승인 카드가 뜬다. 승인 필요 = [승인](Agent가 그 액션 한 번만 실행) 또는 [직접 실행] → [Agent에 반환], 사람 전용(본인인증 등) = [직접 실행]만. 10분 안에 답이 없으면 그 케이스 Blocked, 직접 실행 중에는 시간을 재지 않는다. 기다리는 동안 Run 문서에 `waiting`을 남겨 웹에 "승인 대기"가 보인다(승인은 콘솔에서만). 판별은 `packages/agent/src/risk.ts`(코드 안전장치·등급·사전 승인)와 Agent의 `risk` 표시.
-- **테스트 계정 (F-PF-04·08·09)**: 케이스에 계정 종류가 있으면 `RunAccounts`(`src/accounts.ts`)가 Functions `claimAccount`로 계정을 받아 비밀값을 Run의 `SecretVault`(메모리)에 넣는다. Agent에는 로그인 ID와 `{{secret.password}}`·`{{secret.totp}}` 플레이스홀더만 가고, TOTP 코드는 입력할 때 계산한다. 같은 종류면 이어 쓰고 종류가 바뀌거나 Run이 끝나면 `releaseAccount`로 반납한다. 로그인 준비 플로우가 실패하면 로그인 실패 표시, 원복 플로우가 실패하거나 원복 중에 멈추면 격리로 반납한다. 빈 계정이 없으면 LLM을 부르지 않고 Blocked("계정 없음"). 홈의 사이클 카드는 남은 케이스에 필요한데 배정할 계정이 없는 종류를 미리 알린다.
-- **칸 자동 선점 (F-CY-06)**: 케이스마다 업로드 큐를 비운 뒤(앞 케이스 결과가 먼저 올라가게) Functions `claimCell`로 "케이스 × 대상 디바이스" 칸을 잡는다(`src/cells.ts`, `runCycle.ts`). 잠금은 Run 문서의 `currentTcId`이고 값은 Functions만 정한다 — 호스트는 지우기만 한다(보안 규칙). 같은 대상 디바이스의 다른 Run이 잡았거나 끝낸 칸은 결과 없이 건너뛰고 콘솔 큐에서 뺀다. 칸을 잡지 못할 만큼 네트워크가 끊기면 "네트워크 끊김"으로 일시정지. 연결 신호(하트비트)는 업로드 큐를 거치지 않고 바로 보내며(`UploadQueue.sendNow`), 케이스 도중 신호를 60초(`LEASE_LOST_MS`) 넘게 남기지 못했으면 — 네트워크 끊김·PC 절전 — 다른 Run이 칸을 가져갔을 수 있어 다음 턴에서 멈추고 결과를 버린 뒤 "호스트 연결 끊김"으로 일시정지한다.
+- **위험 액션**: Executor가 멈추면 승인 카드가 뜬다. 승인 필요 = [승인](Agent가 그 액션 한 번만 실행) 또는 [직접 실행] → [Agent에 반환], 사람 전용(본인인증 등) = [직접 실행]만. 10분 안에 답이 없으면 그 케이스 Blocked, 직접 실행 중에는 시간을 재지 않는다. 기다리는 동안 Run 문서에 `waiting`을 남겨 웹에 "승인 대기"가 보인다(승인은 콘솔에서만). 판별은 `packages/agent/src/risk.ts`(코드 안전장치·등급·사전 승인)와 Agent의 `risk` 표시.
+- **테스트 계정**: 케이스에 계정 종류가 있으면 `RunAccounts`(`src/accounts.ts`)가 Functions `claimAccount`로 계정을 받아 비밀값을 Run의 `SecretVault`(메모리)에 넣는다. Agent에는 로그인 ID와 `{{secret.password}}`·`{{secret.totp}}` 플레이스홀더만 가고, TOTP 코드는 입력할 때 계산한다. 같은 종류면 이어 쓰고 종류가 바뀌거나 Run이 끝나면 `releaseAccount`로 반납한다. 로그인 준비 플로우가 실패하면 로그인 실패 표시, 원복 플로우가 실패하거나 원복 중에 멈추면 격리로 반납한다. 빈 계정이 없으면 LLM을 부르지 않고 Blocked("계정 없음"). 홈의 사이클 카드는 남은 케이스에 필요한데 배정할 계정이 없는 종류를 미리 알린다.
+- **칸 자동 선점**: 케이스마다 업로드 큐를 비운 뒤(앞 케이스 결과가 먼저 올라가게) Functions `claimCell`로 "케이스 × 대상 디바이스" 칸을 잡는다(`src/cells.ts`, `runCycle.ts`). 잠금은 Run 문서의 `currentTcId`이고 값은 Functions만 정한다 — 호스트는 지우기만 한다(보안 규칙). 같은 대상 디바이스의 다른 Run이 잡았거나 끝낸 칸은 결과 없이 건너뛰고 콘솔 큐에서 뺀다. 칸을 잡지 못할 만큼 네트워크가 끊기면 "네트워크 끊김"으로 일시정지. 연결 신호(하트비트)는 업로드 큐를 거치지 않고 바로 보내며(`UploadQueue.sendNow`), 케이스 도중 신호를 60초(`LEASE_LOST_MS`) 넘게 남기지 못했으면 — 네트워크 끊김·PC 절전 — 다른 Run이 칸을 가져갔을 수 있어 다음 턴에서 멈추고 결과를 버린 뒤 "호스트 연결 끊김"으로 일시정지한다.
 - 실시간 화면은 scrcpy 중계(`brew install scrcpy`). 서버 파일을 폰 `/data/local/tmp`에 올렸다가 지운다. 콘솔에서 화면을 보는 동안만 띄우고, 마지막 화면을 닫고 30초 뒤 끈다(`OnDemandScreen`) — 폰을 꽂아 두기만 해서는 인코딩이 돌지 않는다.
 - `pnpm dev`가 떠 있으면 그 주소(`/console/live`, Vite가 `/console-api`를 넘김)를 쓴다.
 - 웹의 `/console`은 fixture 재생, `/console/live?demo=<상태>`는 서버 없이 상태별 화면을 본다(ui:snap용).

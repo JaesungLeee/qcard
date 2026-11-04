@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promise
 import { join } from 'node:path';
 
 /*
- * 업로드 큐 (F-EX-13). 결과·증거를 먼저 로컬 디스크에 쓰고, 연결되는 대로 순서대로 보낸다.
+ * 업로드 큐. 결과·증거를 먼저 로컬 디스크에 쓰고, 연결되는 대로 순서대로 보낸다.
  * 작업에는 전체 경로가 들어 있어 프로세스가 끝나도 다음 실행이 남은 작업부터 이어서 보낸다.
  *
  *   <dir>/000042.json   작업 (보내면 지운다)

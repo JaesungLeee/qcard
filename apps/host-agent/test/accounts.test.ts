@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { LOGIN_FAILURE_LIMIT, RunAccounts, type AccountLeaser, type ClaimInput, type ReleaseInput } from '../src/accounts';
 
 /*
- * Run 하나의 테스트 계정 (F-PF-04·08·09): 종류가 같으면 이어 쓰고, 바뀌거나 끝나면 반납하며, 비밀값은 vault에만 둔다.
+ * Run 하나의 테스트 계정: 종류가 같으면 이어 쓰고, 바뀌거나 끝나면 반납하며, 비밀값은 vault에만 둔다.
  */
 
 const account = (id: string, kind: string, usesTotp = false) =>
@@ -94,7 +94,7 @@ describe('Run의 테스트 계정', () => {
     expect(await noPool.forCase(tc('T1', '기본'))).toHaveProperty('blocked');
   });
 
-  it('로그인 실패는 표시로 반납하고, 원복 중에 멈추면 격리로 반납한다 (F-PF-08·09)', async () => {
+  it('로그인 실패는 표시로 반납하고, 원복 중에 멈추면 격리로 반납한다', async () => {
     const { accounts, releases, vault } = setup([account('a', '기본'), account('b', '기본')]);
     await accounts.forCase(tc('T1', '기본'));
     await accounts.issue('login_failed', '비밀번호 오류');

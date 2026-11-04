@@ -1,4 +1,4 @@
-// 사이클 만들기 (F-CY-01·02, F-DV-05): QA 문서 버전 + 빌드(APK) + 대상 디바이스(모델 + OS 메이저).
+// 사이클 만들기: QA 문서 버전 + 빌드(APK) + 대상 디바이스(모델 + OS 메이저).
 import { HOST_ONLINE_MS, type Build, type TestCycle } from '@qcard/shared';
 import {
   Button,

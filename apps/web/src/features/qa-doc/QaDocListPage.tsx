@@ -23,7 +23,7 @@ import './qa-doc.css';
 
 const CHANGES: CaseChange[] = ['new', 'changed', 'removed', 'same'];
 
-/** QA 문서 목록 (PRD §5.2): 앱 버전마다 하나씩. */
+/** QA 문서 목록 (docs/product/qa-doc.md): 앱 버전마다 하나씩. */
 export function QaDocListPage() {
   const { projectId = '' } = useParams();
   const navigate = useNavigate();

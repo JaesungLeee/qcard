@@ -1,6 +1,6 @@
 /**
- * 준비 플로우를 프로젝트 공용 위치(`projects/{p}/prepFlows`, PRD v0.16까지)에서 QA 문서 버전별 사본
- * (`projects/{p}/qaDocs/{d}/prepFlows`, v0.17)으로 옮긴다. 버전마다 그 버전 케이스가 참조하는 플로우를 복사하고,
+ * 준비 플로우를 프로젝트 공용 위치(`projects/{p}/prepFlows`)에서 QA 문서 버전별 사본
+ * (`projects/{p}/qaDocs/{d}/prepFlows`)으로 옮긴다. 버전마다 그 버전 케이스가 참조하는 플로우를 복사하고,
  * 어느 케이스도 참조하지 않는 플로우는 최신 버전에 복사한다(`splitPrepFlowsByDoc`).
  *
  *   pnpm --filter @qcard/functions migrate-prep-flows --project qcard-d2ade              # 무엇을 할지만 보인다

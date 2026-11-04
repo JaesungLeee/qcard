@@ -1,7 +1,7 @@
 import { RUN_HEARTBEAT_MS, RUN_STALE_MS, type CellSkip } from '@qcard/shared';
 
 /*
- * 칸 자동 선점 (F-CY-06). 케이스를 시작하기 전에 "케이스 × 대상 디바이스" 칸을 Functions(claimCell) 트랜잭션으로 잡는다.
+ * 칸 자동 선점. 케이스를 시작하기 전에 "케이스 × 대상 디바이스" 칸을 Functions(claimCell) 트랜잭션으로 잡는다.
  * 같은 대상 디바이스의 다른 Run이 잡은 칸·완료된 칸은 건너뛴다. 잡은 칸은 Run 문서의 `currentTcId`로 남아 웹에 "실행 중"으로 보인다.
  * 업로드 큐를 거치지 않는 온라인 호출이다 — 잡기 전에 큐를 비워 앞 케이스 결과가 먼저 올라가게 한다(runCycle).
  */

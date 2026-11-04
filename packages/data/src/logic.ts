@@ -78,7 +78,7 @@ export function qaDocSummary(d: QADocument, all: QADocument[]): QaDocSummary {
   };
 }
 
-/** 케이스 저장 (F-QD-09): 본문만 남겨 해시하고, 내용이 바뀌면 승인된 케이스는 자동 미승인 (F-QD-10) */
+/** 케이스 저장: 본문만 남겨 해시하고, 내용이 바뀌면 승인된 케이스는 자동 미승인 */
 export function nextCase(current: TestCase, input: CaseBody, user: string, now: string): TestCase {
   // 케이스 전체 객체를 넘겨도 본문 필드만 남긴다 (해시·저장 대상)
   const body = CaseBody.parse(input);
@@ -109,7 +109,7 @@ export function approvalFor(
       : { status };
 }
 
-/** 스펙 확인 질문 처리 (F-QD-03). 바뀐 질문 목록과, 열린 질문이 더 없어 미승인으로 돌아갈 보류 케이스 */
+/** 스펙 확인 질문 처리. 바뀐 질문 목록과, 열린 질문이 더 없어 미승인으로 돌아갈 보류 케이스 */
 export function resolveQuestionIn(
   d: Pick<QADocument, 'questions' | 'cases'>,
   questionId: string,
@@ -136,7 +136,7 @@ export function resolveQuestionIn(
   return { questions, released };
 }
 
-// 첨부 스크린샷 (F-RP-05). storage.rules의 manual 경로 규칙과 같은 값이다
+// 첨부 스크린샷. storage.rules의 manual 경로 규칙과 같은 값이다
 export const MAX_ATTACHMENTS = 5;
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const ATTACHMENT_EXT: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
@@ -156,7 +156,7 @@ export function attachmentPath(input: ConfirmVerdictInput, id: string, file: Att
   return `projects/${input.projectId}/cycles/${input.cycleId}/manual/${input.tcId}__${input.deviceId}/${id}.${ATTACHMENT_EXT[file.type] ?? 'png'}`;
 }
 
-/** 사람 확정·오버라이드 (F-RP-04)가 남기는 판정 기록 한 건. 판정이 같아도 사람이 확정했다는 기록으로 남긴다 */
+/** 사람 확정·오버라이드가 남기는 판정 기록 한 건. 판정이 같아도 사람이 확정했다는 기록으로 남긴다 */
 export function verdictChange(
   r: CaseResult,
   input: ConfirmVerdictInput,
@@ -175,8 +175,8 @@ export function verdictChange(
 }
 
 /**
- * 사람 확정·오버라이드 (F-RP-04): 판정 변경 이력을 남긴다.
- * `attachments`는 올린 뒤의 첨부 목록(F-RP-05) — 주면 칸의 첨부를 바꾸고, 없으면 그대로 둔다
+ * 사람 확정·오버라이드: 판정 변경 이력을 남긴다.
+ * `attachments`는 올린 뒤의 첨부 목록 — 주면 칸의 첨부를 바꾸고, 없으면 그대로 둔다
  */
 export function confirmedResult(
   r: CaseResult,
@@ -224,10 +224,10 @@ export function cycleSummary(
   };
 }
 
-/** 결함이 연결되지 않은 Fail 칸 (F-RP-19) */
+/** 결함이 연결되지 않은 Fail 칸 */
 export const unlinkedFails = (results: CaseResult[]) => results.filter((r) => r.verdict === 'fail' && !r.defectId);
 
-/** 결함 등록 폼에 미리 채울 값 (F-RP-19): 케이스의 제목·사전 조건과 스텝·기대 결과, 칸의 실제 결과 */
+/** 결함 등록 폼에 미리 채울 값: 케이스의 제목·사전 조건과 스텝·기대 결과, 칸의 실제 결과 */
 export function defectDraft(tc: TestCase, r: CaseResult): DefectDraft {
   return {
     title: tc.title,
@@ -239,7 +239,7 @@ export function defectDraft(tc: TestCase, r: CaseResult): DefectDraft {
 }
 
 /**
- * 결함 등록 (F-RP-19): 사이클의 다음 번호로 결함을 만들고 칸에 연결한다. 저장은 세 문서 — 결함, 번호를 올린 사이클,
+ * 결함 등록: 사이클의 다음 번호로 결함을 만들고 칸에 연결한다. 저장은 세 문서 — 결함, 번호를 올린 사이클,
  * `defectId`를 채운 결과 칸 — 를 함께 쓴다
  */
 export function newDefect(
@@ -273,7 +273,7 @@ export function newDefect(
   return { defect, cycle: { ...cycle, defectSeq: seq }, result: { ...r, defectId: defect.id } };
 }
 
-/** 결함 심각도·상태 바꾸기 (F-RP-19). 그 밖의 필드는 바꾸지 않는다 */
+/** 결함 심각도·상태 바꾸기. 그 밖의 필드는 바꾸지 않는다 */
 export function changedDefect(d: Defect, patch: DefectPatch): Defect {
   return {
     ...d,
@@ -285,7 +285,7 @@ export function changedDefect(d: Defect, patch: DefectPatch): Defect {
 /** 진행 중 사이클: 끝나지 않았고 로컬 실행 묶음이 아닌 것 */
 export const isActiveCycle = (c: TestCycle) => !c.period.end && c.origin !== 'local_run';
 
-/** 완료하기 전에 알릴 것 (F-CY-09): 남은 확인필요·N/T 칸, 아직 끝나지 않은 Run */
+/** 완료하기 전에 알릴 것: 남은 확인필요·N/T 칸, 아직 끝나지 않은 Run */
 export function completionWarnings(results: CaseResult[], runs: Run[]) {
   const counts = countVerdicts(results);
   return {
@@ -298,29 +298,29 @@ export function completionWarnings(results: CaseResult[], runs: Run[]) {
   };
 }
 
-/** 사이클 완료 (F-CY-09) */
+/** 사이클 완료 */
 export function completedCycle(c: TestCycle, user: { name: string }, now: string): TestCycle {
   if (c.origin === 'local_run') throw new RuleError('로컬 실행 묶음은 완료할 수 없습니다.');
   if (c.period.end) throw new RuleError('이미 완료된 사이클입니다.');
   return { ...c, period: { ...c.period, end: now }, completedBy: user.name };
 }
 
-/** 완료 취소 (F-CY-09) */
+/** 완료 취소 */
 export function reopenedCycle(c: TestCycle): TestCycle {
   if (c.origin === 'local_run' || !c.period.end) throw new RuleError('완료된 사이클이 아닙니다.');
   const { completedBy: _, ...rest } = c;
   return { ...rest, period: { start: c.period.start } };
 }
 
-/** 완료(F-CY-09)·삭제 중(F-CY-10)인 사이클은 새 Run을 받지 않는다 — 웹 요청·호스트가 함께 쓴다 */
+/** 완료·삭제 중인 사이클은 새 Run을 받지 않는다 — 웹 요청·호스트가 함께 쓴다 */
 export function requireOpenCycle(c: TestCycle): void {
   if (c.deletingAt) throw new RuleError(`삭제 중인 사이클입니다 (${c.name}).`);
   if (c.period.end) throw new RuleError(`완료된 사이클입니다 (${c.name}). 다시 열어야 실행할 수 있습니다.`);
 }
 
 /**
- * QA 문서 생성 요청 (PRD §5.2) → 올릴 파일·스펙 묶음·Job. 메모리·Firestore 구현이 같이 쓴다.
- * `<스펙>/spec.md`만 올리고(F-IN-08), 스펙이 하나도 없거나 버전이 비면 `RuleError`.
+ * QA 문서 생성 요청 (docs/product/qa-doc.md) → 올릴 파일·스펙 묶음·Job. 메모리·Firestore 구현이 같이 쓴다.
+ * `<스펙>/spec.md`만 올리고, 스펙이 하나도 없거나 버전이 비면 `RuleError`.
  */
 export function qaDocRequest(
   projectId: string,
@@ -388,7 +388,7 @@ export function retriedJob(job: Job, uid: string): Job {
 }
 
 /**
- * 케이스 수정안 요청 (F-QD-17, 작업 kind `case_revise`). 답변된 질문 중 이 케이스에 연결된 것만 반영한다.
+ * 케이스 수정안 요청 (작업 kind `case_revise`). 답변된 질문 중 이 케이스에 연결된 것만 반영한다.
  * 같은 케이스에 대기·생성 중인 수정안이 있으면 또 만들지 않는다
  */
 export function caseReviseRequest(
@@ -472,7 +472,7 @@ export function runRequest(
 }
 
 /**
- * 빌드 문서 (F-DV-05). `inspectApk` 결과로 만든다. 같은 파일(SHA-256)을 이미 올렸으면 `RuleError`.
+ * 빌드 문서. `inspectApk` 결과로 만든다. 같은 파일(SHA-256)을 이미 올렸으면 `RuleError`.
  */
 export function newBuild(
   projectId: string,
@@ -513,7 +513,7 @@ export const targetId = (model: string, osMajor: number) =>
     .replace(/^-|-$/g, '')}-${osMajor}`;
 
 /**
- * 사이클 만들기 (F-CY-01·02): 승인된 케이스만 스냅샷(TC ID + 내용 해시)으로 고정하고 칸마다 N/T 결과를 만든다.
+ * 사이클 만들기: 승인된 케이스만 스냅샷(TC ID + 내용 해시)으로 고정하고 칸마다 N/T 결과를 만든다.
  * 케이스 내용은 복사해 둔다(cases) — 사이클을 만든 뒤 QA 문서를 고쳐도 이 사이클은 만들 때 내용으로 실행한다.
  * 삭제 판정 케이스는 넣지 않는다.
  */

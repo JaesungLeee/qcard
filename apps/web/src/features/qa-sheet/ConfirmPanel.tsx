@@ -1,5 +1,5 @@
-// 판정 확정 패널 (F-RP-04): Fail·Blocked·확인필요는 사람이 확정, 자동 확정 Pass는 오버라이드.
-// 수동 케이스는 여기서 결과를 입력한다 (F-RP-05, 스크린샷은 선택). 판정자는 로그인 사용자로 기록된다.
+// 판정 확정 패널: Fail·Blocked·확인필요는 사람이 확정, 자동 확정 Pass는 오버라이드.
+// 수동 케이스는 여기서 결과를 입력한다 (스크린샷은 선택). 판정자는 로그인 사용자로 기록된다.
 import { VERDICT_LABEL, type CaseResult, type Screenshot, type Verdict } from '@qcard/shared';
 import { Button, SectionMessage, SegmentedControl, SegmentedControlItem, TextArea, textClass, token } from '@qcard/ui';
 import { useId, useState } from 'react';

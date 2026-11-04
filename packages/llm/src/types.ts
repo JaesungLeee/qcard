@@ -22,18 +22,18 @@ export interface LlmClient {
 }
 
 /**
- * 역할별 기본 모델. Verifier는 PRD상 고정. 요소 찾기(locator)는 M0 실측 정확도를 보고 Haiku로 내릴지 정한다.
+ * 역할별 기본 모델. Verifier는 Sonnet 고정. 요소 찾기(locator)는 M0 실측 정확도를 보고 Haiku로 내릴지 정한다.
  */
 export const MODELS: Record<LlmRole, string> = {
   executor: 'claude-sonnet-5-5',
   verifier: 'claude-sonnet-5-5',
   locator: 'claude-sonnet-5-5',
   helper: 'claude-haiku-5-5',
-  /** QA Doc Generator (PRD §6.3) */
+  /** QA Doc Generator */
   generator: 'claude-opus-5-5',
 };
 
-/** 작업 종류별로 부르는 모델. 시작 전에 Claude Code가 이 모델들을 지원하는 버전인지 본다 (F-EX-17) */
+/** 작업 종류별로 부르는 모델. 시작 전에 Claude Code가 이 모델들을 지원하는 버전인지 본다 */
 export const MODELS_FOR = {
   run: [...new Set([MODELS.executor, MODELS.verifier, MODELS.locator])],
   qadoc: [MODELS.generator],

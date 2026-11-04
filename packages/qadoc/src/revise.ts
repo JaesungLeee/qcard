@@ -6,7 +6,7 @@ import { bodyOf, flowText, rowText, specSources } from './parts';
 import { REVISE_SYSTEM, ReviseOutput } from './prompts';
 
 /*
- * 답변 기반 케이스 수정안 (PRD F-QD-17): 케이스 하나 + 출처 스펙 행 + 답변된 확인 질문 → 수정안 또는 "수정 불필요".
+ * 답변 기반 케이스 수정안: 케이스 하나 + 출처 스펙 행 + 답변된 확인 질문 → 수정안 또는 "수정 불필요".
  * 케이스를 바꾸지 않는다 — 결과를 돌려주면 호출한 쪽(호스트)이 작업 결과로 저장하고, 사람이 웹에서 diff를 보고 적용한다.
  * 준비 플로우·TC ID·검증 포인트 ID 규칙은 코드가 정한다.
  */

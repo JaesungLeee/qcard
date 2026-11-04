@@ -3,9 +3,9 @@ import { RUN_STALE_MS, type CaseResult, type Member, type Run, type TestCycle } 
 import { MembershipError, requireEditor, type Actor } from './membership';
 
 /*
- * 사이클 삭제 규칙 (F-CY-10). 메모리 구현과 Cloud Functions가 같은 함수를 쓰고, 화면은 막는 이유를 미리 보인다.
+ * 사이클 삭제 규칙. 메모리 구현과 Cloud Functions가 같은 함수를 쓰고, 화면은 막는 이유를 미리 보인다.
  * 하위 문서·Storage 증거를 지우는 일은 Functions가 한다(클라이언트는 사이클 문서를 지우지 못한다).
- * 칸 자동 선점 규칙 (F-CY-06). Functions(claimCell)가 트랜잭션에서 쓴다.
+ * 칸 자동 선점 규칙. Functions(claimCell)가 트랜잭션에서 쓴다.
  */
 
 const rule = (m: string) => new MembershipError('rule', m);
@@ -20,7 +20,7 @@ export function cycleDeleteBlocker(cycle: TestCycle, runs: Run[], now: string): 
   return undefined;
 }
 
-/** 사이클 삭제 (F-CY-10): Admin·QA만, 사이클 이름을 입력해 확인한다 */
+/** 사이클 삭제: Admin·QA만, 사이클 이름을 입력해 확인한다 */
 export function cycleDeletion(
   members: Member[],
   actor: Actor,
@@ -36,7 +36,7 @@ export function cycleDeletion(
 }
 
 /**
- * 이 Run이 지금 칸(`currentTcId`)을 잡고 있는가 (F-CY-06): 실행 중이고 연결 신호가 RUN_STALE_MS 안에 있다.
+ * 이 Run이 지금 칸(`currentTcId`)을 잡고 있는가: 실행 중이고 연결 신호가 RUN_STALE_MS 안에 있다.
  * 테스트 계정 배정(leaseLive)과 같은 신호를 쓰되, 일시정지된 Run은 칸을 놓는다 — 진행 중 케이스 결과를 쓰지 않고 멈추므로
  * 그 칸은 남은 칸이다(이어서 실행하면 다시 잡는다)
  */
@@ -49,9 +49,9 @@ export function holdsCell(run: Pick<Run, 'status' | 'heartbeatAt'>, now: string)
 export type CellSkip = { reason: 'running'; executor: string; runId: string } | { reason: 'done'; runId?: string };
 
 /**
- * 칸 자동 선점 (F-CY-06): `run`이 "케이스 × 대상 디바이스" 칸 하나를 잡을 수 있는가. 건너뛸 이유가 없으면 undefined.
+ * 칸 자동 선점: `run`이 "케이스 × 대상 디바이스" 칸 하나를 잡을 수 있는가. 건너뛸 이유가 없으면 undefined.
  * - 같은 대상 디바이스의 다른 Run이 그 칸을 잡고 있으면(holdsCell) 건너뛴다
- * - 결과가 있는 칸은 건너뛴다. `rerun`(완료된 칸을 일부러 고름, F-CY-04·07)이면 다시 돌리되, 이 Run이 시작한 뒤
+ * - 결과가 있는 칸은 건너뛴다. `rerun`(완료된 칸을 일부러 고름)이면 다시 돌리되, 이 Run이 시작한 뒤
  *   다른 Run이 끝낸 칸은 건너뛴다 — 같은 칸을 두 사람이 다시 실행하지 않게
  * `runs`는 그 사이클의 Run들, `result`는 그 칸의 결과 문서
  */

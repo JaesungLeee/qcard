@@ -28,7 +28,7 @@ import { RunState } from '../features/qa-sheet/parts';
 import '../features/qa-sheet/qa-sheet.css';
 import { MockScreen } from '../mock/MockScreen';
 
-/** 로컬 콘솔의 Claude Code 상태 (F-DB-09) */
+/** 로컬 콘솔의 Claude Code 상태 */
 const CLAUDE_CODE_STATES: ClaudeCodeState[] = [
   { installed: true, version: '2.1.185', loggedIn: true, plan: 'max' },
   { installed: true, version: '2.1.185', loggedIn: true, plan: 'pro' },
@@ -220,7 +220,7 @@ export function UiCatalog() {
             <ClaudeCodeChip key={i} state={s} />
           ))}
         </div>
-        {/* 대시보드 QA 문서 작업 화면의 내 호스트 안내 (F-EX-17) */}
+        {/* 대시보드 QA 문서 작업 화면의 내 호스트 안내 */}
         <HostStatusView hosts={[demoHost({ version: '2.1.308', loggedIn: true, subscriptionType: 'max' })]} />
         <HostStatusView hosts={[demoHost({ version: '2.1.308', loggedIn: false })]} />
         <HostStatusView

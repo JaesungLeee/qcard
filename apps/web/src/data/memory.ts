@@ -138,7 +138,7 @@ export function createMemoryApi(
     return clone(c);
   };
 
-  // ------------------------------------------------------------ 프로젝트·멤버·초대 (F-TM-09~13)
+  // ------------------------------------------------------------ 프로젝트·멤버·초대
   // 규칙은 @qcard/shared membership — Cloud Functions도 같은 함수를 쓴다.
   const project = (projectId: string) => {
     const p = db.projects.find((x) => x.id === projectId);
@@ -169,13 +169,13 @@ export function createMemoryApi(
     }
   };
 
-  // 호스트 연결 (F-TM-14). 시연: 이재성의 MacBook Pro가 연결돼 있고 켜져 있다
+  // 호스트 연결. 시연: 이재성의 MacBook Pro가 연결돼 있고 켜져 있다
   const DEMO_HOST = 'macbook-pro';
   let connections: HostConnection[] = [
     { id: DEMO_HOST, uid: GITHUB[PEOPLE.lead]!, name: 'MacBook Pro', connectedAt: '2026-10-20T09:00:00.000Z' },
   ];
 
-  // 테스트 계정 (F-PF-04·08·09). 비밀값은 봉인하지 않고 따로 둔다 (Functions는 Cloud KMS로 봉인)
+  // 테스트 계정. 비밀값은 봉인하지 않고 따로 둔다 (Functions는 Cloud KMS로 봉인)
   let accounts: TestAccount[] = db.accounts;
   const secrets = new Map<string, AccountSecret>();
   const accountsOf = (projectId: string) => accounts.filter((a) => a.projectId === projectId);
@@ -193,7 +193,7 @@ export function createMemoryApi(
     return a;
   };
 
-  // 준비 플로우 (F-PF-01): QA 문서 버전마다 사본
+  // 준비 플로우: QA 문서 버전마다 사본
   const flows: Record<string, PrepFlow[]> = db.prepFlows;
   const flowsOf = (docId: string) => flows[docId] ?? [];
   const flow = (docId: string, id: string) => {
@@ -399,7 +399,7 @@ export function createMemoryApi(
       });
     },
 
-    // ------------------------------------------------------------ 테스트 계정 (F-PF-04·08·09)
+    // ------------------------------------------------------------ 테스트 계정
     // 규칙은 @qcard/shared accounts — Cloud Functions도 같은 함수를 쓴다
     async listAccounts(projectId) {
       project(projectId);

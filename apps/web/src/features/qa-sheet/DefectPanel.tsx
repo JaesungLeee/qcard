@@ -1,4 +1,4 @@
-// 결함 (F-RP-19): 판정 추적 뷰에서 Fail 칸의 결함을 등록하고, 연결된 결함을 보인다.
+// 결함: 판정 추적 뷰에서 Fail 칸의 결함을 등록하고, 연결된 결함을 보인다.
 // 폼은 케이스·칸 내용으로 미리 채운다(defectDraft). 번호(D-1)는 사이클 안에서 매기고, 저장하면 칸의 결함 ID로 연결된다.
 import { defectDraft } from '@qcard/data';
 import { SEVERITY_LABEL, Severity, type CaseResult, type TestCase } from '@qcard/shared';

@@ -7,7 +7,7 @@ import * as h from '../src/handlers';
 import { localBox } from '../src/secretBox';
 
 /*
- * 테스트 계정 풀 (F-PF-04·08·09, F-EX-09)을 Firestore 에뮬레이터 위에서 핸들러로 돌린다.
+ * 테스트 계정 풀을 Firestore 에뮬레이터 위에서 핸들러로 돌린다.
  * 비밀값이 봉인돼 저장되는지, 배정이 Run 상태·연결 신호를 따르는지, 표시·격리가 배정에서 빠지는지를 본다.
  */
 
@@ -90,7 +90,7 @@ const claim = (runId: string, kind: string, extra: Record<string, unknown> = {},
   });
 const stored = async (id: string) => (await db.doc(`projects/${p}/accounts/${id}`).get()).data() as TestAccount;
 
-describe('등록 (F-PF-08)', () => {
+describe('등록', () => {
   it('비밀값은 봉인해 따로 두고, 계정 문서에는 없다', async () => {
     const a = await create('qa01@moa.test', { totp: 'otpauth://totp/moa:qa01?secret=JBSWY3DPEHPK3PXPJBSWY3DP' });
     expect(a).toMatchObject({ kind: '기본', loginId: 'qa01@moa.test', usesTotp: true, secretUpdated: { by: '이재성' } });
@@ -122,7 +122,7 @@ describe('등록 (F-PF-08)', () => {
   });
 });
 
-describe('배정·반납 (F-PF-04, F-EX-09)', () => {
+describe('배정·반납', () => {
   it('실행 중인 내 Run의 호스트만, 같은 종류의 빈 계정을 받고 전달 기록이 남는다', async () => {
     const a = await create('a@moa.test');
     await create('sub@moa.test', { kind: '구독자' });
@@ -150,7 +150,7 @@ describe('배정·반납 (F-PF-04, F-EX-09)', () => {
     expect((await db.collection(`projects/${p}/secretAccessLog`).get()).size).toBe(1);
   });
 
-  it('끝났거나 신호가 끊긴 Run의 배정은 풀리고, 원복 중에 끊겼으면 격리한다 (F-PF-09)', async () => {
+  it('끝났거나 신호가 끊긴 Run의 배정은 풀리고, 원복 중에 끊겼으면 격리한다', async () => {
     const a = await create('a@moa.test');
     const b = await create('b@moa.test');
     await run('r1');

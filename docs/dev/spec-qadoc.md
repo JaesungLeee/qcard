@@ -10,7 +10,7 @@ pnpm --filter @qcard/spec check <docs/specs 폴더> [--prev <이전 버전 폴�
 
 실제 스펙 폴더를 파싱해 개수·경고와 이전 버전 대비 동일·변경·신규·삭제를 보인다. 읽기 전용.
 
-`packages/spec`은 `spec.md` → 요구사항·TS/EC 행·출처 위치·행 해시로 파싱하고, 출처 ID로 버전을 매칭한다(동일·변경·신규·삭제, TC ID 이어받기, F-QD-08).
+`packages/spec`은 `spec.md` → 요구사항·TS/EC 행·출처 위치·행 해시로 파싱하고, 출처 ID로 버전을 매칭한다(동일·변경·신규·삭제, TC ID 이어받기).
 
 ## qadoc generate — QA 문서 생성 (Opus)
 
@@ -25,7 +25,7 @@ pnpm --filter @qcard/qadoc generate <docs/specs 폴더> --out <결과.json> [--o
 
 웹에서 요청한 생성 작업은 호스트 에이전트 `serve`가 처리한다([host-agent.md](host-agent.md)).
 
-## qadoc revise — 케이스 수정안 (Opus, F-QD-17)
+## qadoc revise — 케이스 수정안 (Opus)
 
 ```sh
 pnpm --filter @qcard/qadoc revise <docs/specs 폴더> --doc <generate 결과.json> --tc <TC ID> [--answer Q-1=<답변>]

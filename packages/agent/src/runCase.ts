@@ -7,19 +7,19 @@ import { judge } from './judge';
 import { settle, verifyPoints } from './verify';
 
 /*
- * 케이스 하나 실행: 준비(F-PF-02·03) → 단계 수행 → 검증 포인트 판정 → 집계 → CaseResult → 원복(F-PF-09).
+ * 케이스 하나 실행: 준비 → 단계 수행 → 검증 포인트 판정 → 집계 → CaseResult → 원복.
  */
 
-/** 테스트 계정 비밀값의 플레이스홀더 이름 (호스트가 vault에 이 이름으로 넣는다, F-EX-09) */
+/** 테스트 계정 비밀값의 플레이스홀더 이름 (호스트가 vault에 이 이름으로 넣는다) */
 export const ACCOUNT_SECRET = { password: 'password', totp: 'totp' } as const;
 
-/** 배정받은 테스트 계정 (F-PF-04). 로그인 ID는 화면에 보이는 값이라 그대로 알려 준다 */
+/** 배정받은 테스트 계정. 로그인 ID는 화면에 보이는 값이라 그대로 알려 준다 */
 export type CaseAccount = { kind: string; loginId: string; totp: boolean };
 
 /**
- * `login_failed`: 앱이 계정 정보를 거절했다 — 그 계정을 다시 배정하지 않는다 (F-PF-08).
+ * `login_failed`: 앱이 계정 정보를 거절했다 — 그 계정을 다시 배정하지 않는다.
  * `login_flow_failed`: 계정 탓이 아닌 이유로 로그인 플로우를 끝내지 못했다 (요소를 못 찾음 등).
- * `restore_failed`: 원복 실패 — 계정을 격리한다 (F-PF-09)
+ * `restore_failed`: 원복 실패 — 계정을 격리한다
  */
 export type AccountIssue = 'login_failed' | 'login_flow_failed' | 'restore_failed';
 
@@ -40,9 +40,9 @@ export type RunCaseInput = {
   onPhase?: (phase: 'prep' | 'steps' | 'verify') => void;
   /** 배정받은 테스트 계정. 비밀값은 env.vault에 ACCOUNT_SECRET 이름으로 들어 있어야 한다 */
   account?: CaseAccount;
-  /** 로그인 준비 플로우 실패·원복 실패 (F-PF-08·09). 호스트가 계정에 표시하거나 격리해 반납한다 */
+  /** 로그인 준비 플로우 실패·원복 실패. 호스트가 계정에 표시하거나 격리해 반납한다 */
   onAccountIssue?: (issue: AccountIssue, detail: string) => void;
-  /** 디바이스가 다른 테스트 계정으로 로그인돼 있을 수 있다 — 클린 상태가 아니어도 앱 데이터를 초기화한다 (F-PF-04) */
+  /** 디바이스가 다른 테스트 계정으로 로그인돼 있을 수 있다 — 클린 상태가 아니어도 앱 데이터를 초기화한다 */
   resetApp?: boolean;
 };
 
@@ -103,7 +103,7 @@ export async function prepare(
   return { nextIndex };
 }
 
-/** 로그인 플로우에서 계정 탓(인증 거부)과 그 밖의 실패를 구분하게 한다 (F-PF-08) */
+/** 로그인 플로우에서 계정 탓(인증 거부)과 그 밖의 실패를 구분하게 한다 */
 const LOGIN_RULE =
   '앱이 입력한 계정 정보를 거절하면(비밀번호 오류, 없는 계정, 계정 잠김 같은 메시지) 다시 시도하지 말고 give_up(kind=prep_failed)를 부른다. 다른 이유로 진행할 수 없으면 give_up(kind=stuck).';
 
@@ -113,7 +113,7 @@ const withAccount = (context: string, a?: CaseAccount) => (a ? `${context}\n${ac
 const RESTORE_INDEX_GAP = 100;
 
 /**
- * 원복 플로우 (F-PF-09): 케이스가 바꾼 계정 상태를 되돌린다. 판정과 상관없이 준비가 끝난 케이스면 수행한다.
+ * 원복 플로우: 케이스가 바꾼 계정 상태를 되돌린다. 판정과 상관없이 준비가 끝난 케이스면 수행한다.
  * 실패하면 사유를 돌려준다 (호스트가 계정을 격리한다). 원복 결과는 판정에 영향을 주지 않는다
  */
 async function restore(
@@ -141,7 +141,7 @@ async function restore(
 }
 
 /**
- * 케이스 실행. Agent가 끈 네트워크는 성공·실패와 상관없이 끝날 때 다시 켠다 (F-EX-16 원복).
+ * 케이스 실행. Agent가 끈 네트워크는 성공·실패와 상관없이 끝날 때 다시 켠다.
  * 복구에 실패하면 던진다 — 다음 케이스를 네트워크 없이 돌리지 않게.
  */
 export async function runCase(env: AgentEnv, input: RunCaseInput): Promise<CaseResult> {
@@ -171,7 +171,7 @@ export async function runCase(env: AgentEnv, input: RunCaseInput): Promise<CaseR
 }
 
 /**
- * 결과에 남길 OS 빌드 (F-CY-01): `Android 15 · AP3A.240905.015.A2 · 보안 패치 2024-10-01`.
+ * 결과에 남길 OS 빌드: `Android 15 · AP3A.240905.015.A2 · 보안 패치 2024-10-01`.
  * 대상은 모델 + OS 메이저로 맞추고, 정확한 빌드·보안 패치는 여기에 기록한다. 읽지 못한 값은 뺀다
  */
 export function osBuildOf(info: Pick<DeviceInfo, 'osMajor' | 'build' | 'securityPatch'>): string {
@@ -210,7 +210,7 @@ async function resultOf(env: AgentEnv, input: Pick<RunCaseInput, 'testCase' | 'd
   return result;
 }
 
-/** 실행하지 않고 Blocked로 끝내는 케이스 (예: 배정할 테스트 계정이 없음, F-PF-04) */
+/** 실행하지 않고 Blocked로 끝내는 케이스 (예: 배정할 테스트 계정이 없음) */
 export async function blockedCase(
   env: AgentEnv,
   input: Pick<RunCaseInput, 'testCase' | 'deviceId' | 'runId'>,
@@ -229,7 +229,7 @@ async function runCaseInner(env: AgentEnv, input: RunCaseInput): Promise<CaseRes
     const prep = await prepare(env, tc, input.prepFlows, input.account, input.resetApp);
     if ('failed' in prep) {
       if (input.account && prep.flow?.kind === 'login') {
-        // 앱이 계정 정보를 거절했으면 그 계정을 다시 배정하지 않게 알린다 (F-PF-08). 그 밖의 실패는 플로우 탓일 수 있다
+        // 앱이 계정 정보를 거절했으면 그 계정을 다시 배정하지 않게 알린다. 그 밖의 실패는 플로우 탓일 수 있다
         input.onAccountIssue?.(prep.authRejected ? 'login_failed' : 'login_flow_failed', prep.failed);
         if (prep.authRejected) {
           return result({ verdict: 'blocked', agentVerdict: 'blocked', blockedReason: `로그인 실패: ${prep.failed}` });
@@ -251,7 +251,7 @@ async function runCaseInner(env: AgentEnv, input: RunCaseInput): Promise<CaseRes
     }
     return out.result;
   } catch (e) {
-    // 플랜 한도·Claude Code 로그인은 케이스 결함이 아니다. 판정하지 않고 Run을 일시정지하게 던진다 (F-EX-17)
+    // 플랜 한도·Claude Code 로그인은 케이스 결함이 아니다. 판정하지 않고 Run을 일시정지하게 던진다
     if (
       e instanceof PlanLimitError ||
       e instanceof ClaudeCodeSetupError ||
@@ -259,7 +259,7 @@ async function runCaseInner(env: AgentEnv, input: RunCaseInput): Promise<CaseRes
       e instanceof DeviceDisconnectedError
     )
       throw e;
-    // 서버 무응답·디바이스 연결 끊김 등 환경 오류 (F-EX-05)
+    // 서버 무응답·디바이스 연결 끊김 등 환경 오류
     return result({ verdict: 'blocked', agentVerdict: 'blocked', blockedReason: `환경 오류: ${(e as Error).message}` });
   }
 }

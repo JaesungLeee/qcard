@@ -1,7 +1,7 @@
 import { hash } from '@qcard/shared';
 
 /*
- * 스펙 문서(spec.md) 파서 (F-IN-01·03·08, F-QD-01·02). LLM 없이 결정적으로 뽑는다.
+ * 스펙 문서(spec.md) 파서. LLM 없이 결정적으로 뽑는다.
  *
  * 읽는 것 (팀 스펙 템플릿 기준)
  *   - 머리말:      **버전**: 1.2.1 · **기준 PRD 버전** · **상태** · **최종 수정일**
@@ -9,7 +9,7 @@ import { hash } from '@qcard/shared';
  *   - 시나리오:    `### 유저 플로우 N - 제목` 아래의 표
  *                   TS: | ID | 시나리오 | Given | When | Then | 관련 FR |
  *                   EC: | ID | 상황 | 처리 | 관련 FR |
- * 케이스는 TS·EC 행에서만 만든다 (PRD v0.6). 행마다 출처 위치(헤딩 경로·줄)와 내용 해시를 둔다.
+ * 케이스는 TS·EC 행에서만 만든다. 행마다 출처 위치(헤딩 경로·줄)와 내용 해시를 둔다.
  */
 
 export type SpecRequirement = {
@@ -190,7 +190,7 @@ export function parseSpec(name: string, markdown: string): ParseResult {
 }
 
 /**
- * 행의 내용 해시 (F-QD-08). 행 본문과 관련 요구사항 본문이 같으면 같다 — 이 값이 같으면 이전 버전 케이스를
+ * 행의 내용 해시. 행 본문과 관련 요구사항 본문이 같으면 같다 — 이 값이 같으면 이전 버전 케이스를
  * LLM 없이 그대로 복사하고, 다르면 재생성한다. 줄 번호·플로우 이름처럼 위치만 바뀐 것은 반영하지 않는다.
  */
 export function rowHash(

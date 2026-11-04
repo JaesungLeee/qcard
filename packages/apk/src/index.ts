@@ -1,7 +1,7 @@
 import { unzipSync } from 'fflate';
 
 /*
- * APK 정보 읽기 (F-DV-05): 패키지명·버전·빌드 번호·서명 지문을 파일에서 바로 뽑는다. 브라우저·Node 공용(외부 도구 없음).
+ * APK 정보 읽기: 패키지명·버전·빌드 번호·서명 지문을 파일에서 바로 뽑는다. 브라우저·Node 공용(외부 도구 없음).
  *   - 매니페스트: 바이너리 XML(AXML)의 첫 요소 <manifest>와 <uses-sdk>
  *   - 서명: APK 서명 블록(v2·v3)의 첫 인증서, 없으면 META-INF/*.RSA|DSA|EC(v1, PKCS#7)의 첫 인증서
  *   - 지문: 인증서 DER의 SHA-1·SHA-256 (keytool·apksigner와 같은 값)

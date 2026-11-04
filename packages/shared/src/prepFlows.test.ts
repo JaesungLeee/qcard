@@ -41,7 +41,7 @@ const tc = (tcId: string, prepFlowIds: string[], extra: Partial<TestCase> = {}) 
 const cycle = (id: string, extra: Partial<TestCycle> = {}) =>
   ({ id, name: `사이클 ${id}`, period: { start: T0 }, ...extra }) as TestCycle;
 
-describe('준비 플로우 편집 (F-PF-01)', () => {
+describe('준비 플로우 편집', () => {
   it('이름·확인 조건은 필수, env가 아니면 스텝이 1개 이상', () => {
     expect(prepFlowProblem(login)).toBeUndefined();
     expect(prepFlowProblem({ ...login, name: '  ' })).toContain('이름');
@@ -124,7 +124,7 @@ describe('준비 플로우 사용처·삭제', () => {
   });
 });
 
-describe('QA 문서 버전별 사본 (F-PF-01, F-QD-08)', () => {
+describe('QA 문서 버전별 사본', () => {
   const f = (id: string): PrepFlow => ({ id, name: id, kind: 'data_state', check: '-', steps: ['-'] });
   const flows = [f('pf-a'), f('pf-b'), f('pf-undo'), f('pf-manual'), f('pf-gone')];
 

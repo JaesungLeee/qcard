@@ -33,7 +33,7 @@ export function Block({ title, children, aside }: { title: string; children: Rea
   );
 }
 
-/** 선택한 케이스의 상세: 보기·편집·승인 (F-QD-04, F-QD-09, F-QD-10) */
+/** 선택한 케이스의 상세: 보기·편집·승인 */
 export function CaseDetail({
   doc,
   c,

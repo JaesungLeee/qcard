@@ -32,7 +32,7 @@ import { getBytes, ref, type FirebaseStorage } from 'firebase/storage';
 import { CLAUDE_SETUP_REASON } from './runCycle';
 
 /*
- * 호스트 에이전트의 작업 처리 (PRD §5.2, §6.2): 웹에서 요청한 "QA 문서 생성"·"케이스 수정안"(F-QD-17)을
+ * 호스트 에이전트의 작업 처리 (docs/product/qa-doc.md, docs/architecture.md): 웹에서 요청한 "QA 문서 생성"·"케이스 수정안"을
  * 요청자 본인의 PC에서, 본인 Claude Code(플랜)로 만든다. 로그인한 사용자 권한으로 Firestore·Storage에 쓰므로 보안 규칙을 그대로 따른다.
  *
  *   pendingJobs → claimJob(대기 → 생성 중, 트랜잭션) → processJob(스펙 읽기 → 생성 → 저장 → 완료)
@@ -62,7 +62,7 @@ const jobRef = (db: Firestore, j: Pick<Job, 'projectId' | 'id'>) => doc(db, 'pro
 const clean = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 /**
- * 내가 요청한 대기 작업. 케이스 수정안(짧다)을 QA 문서 생성(길다)보다 먼저, 그 안에서는 오래된 것 먼저 (F-QD-17).
+ * 내가 요청한 대기 작업. 케이스 수정안(짧다)을 QA 문서 생성(길다)보다 먼저, 그 안에서는 오래된 것 먼저.
  * 다른 사람의 작업은 규칙상 보이지도 않는다
  */
 export async function pendingJobs(db: Firestore, uid: string): Promise<Job[]> {
@@ -141,7 +141,7 @@ export async function processJob(deps: JobDeps, job: QaDocJob): Promise<Job> {
     const prevBundle: ParsedBundle | undefined = prev
       ? (await loadBundle(db, storage, job.projectId, prev.specBundleId))?.parsed
       : undefined;
-    // 이전 버전의 준비 플로우를 이어받는다 (F-QD-08). 첫 버전은 빈 목록에서 시작
+    // 이전 버전의 준비 플로우를 이어받는다. 첫 버전은 빈 목록에서 시작
     const prepFlows = prev ? await api.listPrepFlows({ projectId: job.projectId, docId: prev.id }) : [];
     const docId = await docIdFor(db, job);
     log(`${job.input.appVersion}: 스펙 ${bundle.parsed.specs.length}개${prev ? ` · 이전 ${prev.appVersion}` : ''}`);
@@ -238,7 +238,7 @@ export async function processJob(deps: JobDeps, job: QaDocJob): Promise<Job> {
 }
 
 /**
- * 케이스 수정안 작업 하나를 처리한다 (F-QD-17): 케이스·답변된 질문·출처 스펙 행으로 수정안을 만들어 작업 결과에 쓴다.
+ * 케이스 수정안 작업 하나를 처리한다: 케이스·답변된 질문·출처 스펙 행으로 수정안을 만들어 작업 결과에 쓴다.
  * 케이스는 바꾸지 않는다 — 요청자가 웹에서 보고 적용한다
  */
 export async function processReviseJob(deps: JobDeps, job: CaseReviseJob): Promise<Job> {
@@ -470,7 +470,7 @@ export async function startRunJobs(deps: {
   return out;
 }
 
-/** 호스트 연결 신호 (웹의 "호스트 연결됨" 표시, F-DB-09) */
+/** 호스트 연결 신호 (웹의 "호스트 연결됨" 표시) */
 export async function heartbeat(db: Firestore, uid: string, host: Host): Promise<void> {
   await setDoc(doc(collection(db, 'users', uid, 'hosts'), host.id), clean(host));
 }

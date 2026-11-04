@@ -82,7 +82,7 @@ export function fakeGeneratorLlm(opts: { drop?: string; failOn?: { call: number;
   return { llm, calls };
 }
 
-/** 테스트용 가짜 수정안 모델 (F-QD-17). 정해진 응답을 차례로 돌려주고 받은 프롬프트를 남긴다 */
+/** 테스트용 가짜 수정안 모델. 정해진 응답을 차례로 돌려주고 받은 프롬프트를 남긴다 */
 export function fakeReviseLlm(...outs: (ReviseOutput | string)[]) {
   const prompts: string[] = [];
   const llm: LlmClient = {

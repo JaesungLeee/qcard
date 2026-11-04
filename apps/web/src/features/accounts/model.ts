@@ -36,7 +36,7 @@ export function kindRows(views: AccountView[], caseKinds: (string | undefined)[]
   );
 }
 
-/** 종류는 기본 외의 종류가 있을 때만 화면에 드러낸다 (F-PF-08) */
+/** 종류는 기본 외의 종류가 있을 때만 화면에 드러낸다 */
 export const showsKinds = (rows: KindRow[]) => rows.some((r) => r.kind !== DEFAULT_ACCOUNT_KIND);
 
 export type StateFilter = 'all' | 'free' | 'busy' | 'flagged';

@@ -1,4 +1,4 @@
-// 사이클 QA 시트 (PRD §5.10): ① 요약 ② 테스트 케이스 ③ 결함 목록 ④ 추적성 매트릭스 ⑤ 환경
+// 사이클 QA 시트 (docs/product/results.md): ① 요약 ② 테스트 케이스 ③ 결함 목록 ④ 추적성 매트릭스 ⑤ 환경
 import { Tab, TabList, TabListItem, TabPanel, token } from '@qcard/ui';
 import { useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router';

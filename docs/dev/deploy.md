@@ -10,7 +10,7 @@
 - Authentication → GitHub 공급자. GitHub OAuth App의 callback은 `https://qcard-d2ade.firebaseapp.com/__/auth/handler`.
 - Authentication → 설정 → 승인된 도메인에 `qcard.dev`(커스텀 도메인은 자동으로 들어가지 않는다).
 - 첫 Functions 배포 뒤 IAM에서 `<프로젝트번호>-compute@developer.gserviceaccount.com`에 **서비스 계정 토큰 생성자** 역할(`hostToken`이 커스텀 토큰을 만든다).
-- 테스트 계정 비밀값(F-EX-09)을 봉인할 Cloud KMS 키. 이름은 `apps/functions/src/index.ts`의 상수 `ACCOUNT_KMS_KEY`와 같아야 한다(배포 파라미터로 받지 않는다 — CI의 비대화형 배포가 값을 요구하며 멈춘다). 키가 없으면 계정 등록·배정 함수만 실패하고 나머지는 그대로 돈다.
+- 테스트 계정 비밀값을 봉인할 Cloud KMS 키. 이름은 `apps/functions/src/index.ts`의 상수 `ACCOUNT_KMS_KEY`와 같아야 한다(배포 파라미터로 받지 않는다 — CI의 비대화형 배포가 값을 요구하며 멈춘다). 키가 없으면 계정 등록·배정 함수만 실패하고 나머지는 그대로 돈다.
 
   ```sh
   gcloud services enable cloudkms.googleapis.com --project qcard-d2ade
@@ -20,7 +20,7 @@
     --member serviceAccount:<프로젝트번호>-compute@developer.gserviceaccount.com --role roles/cloudkms.cryptoKeyEncrypterDecrypter
   ```
 
-- 프로젝트 영구 삭제(F-TM-12, 예약 함수 `purgeDeletedProjects`, 매일 04:00)는 Storage `projects/<id>/` 아래 파일도 지운다. 함수의 서비스 계정에 `storage.objects.delete`가 있어야 한다(기본 compute 계정은 보통 `roles/editor`로 갖고 있다). 확인:
+- 프로젝트 영구 삭제(예약 함수 `purgeDeletedProjects`, 매일 04:00)는 Storage `projects/<id>/` 아래 파일도 지운다. 함수의 서비스 계정에 `storage.objects.delete`가 있어야 한다(기본 compute 계정은 보통 `roles/editor`로 갖고 있다). 확인:
 
   ```sh
   gcloud functions describe purgeDeletedProjects --region=asia-northeast3 --project=qcard-d2ade \
@@ -54,7 +54,7 @@ callable 함수의 공개 호출 권한(Cloud Run Invoker `allUsers`)은 CLI가 
 
 ## 데이터 옮기기
 
-### 준비 플로우를 QA 문서 버전별로 (PRD v0.17)
+### 준비 플로우를 QA 문서 버전별로
 
 준비 플로우가 `projects/{p}/prepFlows`에서 `projects/{p}/qaDocs/{d}/prepFlows`로 옮겨 갔다. 새 보안 규칙은 옛 위치를 막으므로, 이 변경이 `main`에 들어가 배포되기 **전에** 사본을 만들고 배포 **뒤에** 옛 위치를 지운다. 사람이 실행한다(`gcloud auth application-default login`).
 

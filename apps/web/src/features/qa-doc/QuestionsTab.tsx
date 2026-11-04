@@ -29,7 +29,7 @@ const flowName = (c: QuestionCategory) =>
   c.subFeature || (c.feature === NO_CASE_FEATURE ? '질문' : '(유저 플로우 없음)');
 const catName = (c: QuestionCategory) => `${c.feature} › ${flowName(c)}`;
 
-/** 스펙 확인 질문 (F-QD-03). 기능 › 유저 플로우 카테고리를 하나씩 골라 그 안의 질문을 처리한다. */
+/** 스펙 확인 질문. 기능 › 유저 플로우 카테고리를 하나씩 골라 그 안의 질문을 처리한다. */
 export function QuestionsTab({ doc }: { doc: QADocument }) {
   const { question, feature, flow, set } = useDocParams();
   const cats = useMemo(() => questionCategories(doc), [doc]);
