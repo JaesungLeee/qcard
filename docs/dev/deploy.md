@@ -32,6 +32,33 @@
 
   버킷의 소프트 삭제 보관 기간은 7일(2026-10-26 확인, `gcloud storage buckets describe gs://qcard-d2ade.firebasestorage.app --format="default(soft_delete_policy)"`)이라 지운 파일은 7일 동안 복구할 수 있는 상태로 남는다. 개인정보처리방침의 삭제 안내와 맞춘다.
 
+## GitHub App (결함 → 이슈 발행)
+
+결함 이슈 발행·상태 동기화([product/issues.md](../product/issues.md))는 qcard GitHub App으로 한다. 비밀이 아닌 등록값은 `apps/functions/src/index.ts`의 상수 `GITHUB_APP`(`appId`·`slug`·`clientId`)에, 비밀값 셋은 Secret Manager에 둔다. `appId`가 비어 있으면 GitHub 함수는 "GitHub App이 아직 설정되지 않았습니다"로 실패하고 나머지는 그대로 돈다.
+
+**Functions는 비밀값 셋을 선언하므로, Secret Manager에 없으면 Functions 배포가 실패한다.** App을 등록하기 전이라도 `main`에 합치기 전에 아래 셋을 만들어 둔다(값은 나중에 새 버전으로 바꾼다).
+
+1. GitHub → Settings → Developer settings → GitHub Apps → New GitHub App (조직 소유로 만들려면 조직 설정에서).
+   - 이름 `qcard-bot`(슬러그 = `GITHUB_APP.slug`, 이슈 작성자는 `qcard-bot[bot]`), Homepage `https://qcard.dev`
+   - Identifying and authorizing users → Redirect URI(예전 이름 Callback URL) `https://qcard.dev/github/callback`, Allow wildcard matching 끔, **Request user authorization (OAuth) during installation** 켬, Expire user authorization tokens 켬
+   - Setup URL은 비워 둔다(위 옵션을 켜면 설치 뒤 Callback URL로 돌아온다). Redirect on update 켬
+   - Webhook 켬, URL `https://asia-northeast3-qcard-d2ade.cloudfunctions.net/githubWebhook`, Secret은 새로 만든 임의 문자열(`openssl rand -hex 32`)
+   - Repository permissions: **Issues** Read and write, **Contents** Read-only, **Metadata** Read-only. 그 밖에는 주지 않는다
+   - Subscribe to events: **Issues**, **Repository**(설치·저장소 추가/제외 이벤트는 자동으로 온다)
+   - Where can this GitHub App be installed: **Any account**
+2. 만든 뒤 App ID·Client ID를 `GITHUB_APP`에 적고, 왼쪽 메뉴 **Credentials**에서 Client secrets 탭 → New secret, Key pairs 탭 → New key(.pem 다운로드)로 만든다.
+3. 비밀값 등록 (값은 터미널에 남기지 않게 파일·프롬프트로 넣는다):
+
+   ```sh
+   firebase functions:secrets:set GITHUB_APP_PRIVATE_KEY --project prod --data-file <내려받은 .pem>
+   firebase functions:secrets:set GITHUB_APP_CLIENT_SECRET --project prod
+   firebase functions:secrets:set GITHUB_WEBHOOK_SECRET --project prod
+   ```
+
+4. Functions를 배포한 뒤 App 설정의 Advanced → Recent Deliveries에서 ping이 200인지 본다. 서명이 틀리면 401이다.
+
+웹훅 실패는 GitHub가 자동으로 다시 보내지 않는다. 놓친 전달은 Recent Deliveries에서 Redeliver로 다시 보낼 수 있다.
+
 ## 웹
 
 `apps/web/.env.example`을 `apps/web/.env.production`으로 복사해 `apiKey`·`appId`를 채운다(공개값, gitignore).
@@ -48,7 +75,7 @@ callable 함수의 공개 호출 권한(Cloud Run Invoker `allUsers`)은 CLI가 
 
 웹 주소는 `https://qcard.dev`(Hosting 커스텀 도메인, 가비아 DNS). 기본 주소 `qcard-d2ade.web.app`·`qcard-d2ade.firebaseapp.com`으로 들어오면 `apps/web/index.html`의 스크립트가 같은 경로의 `qcard.dev`로 보낸다(로그인 핸들러 `/__/auth/*`는 그대로). Hosting은 모든 경로를 `index.html`로 보낸다(SPA).
 
-개인정보처리방침 `/privacy`·이용약관 `/terms`는 로그인 없이 열린다. 시행일은 2026-11-03(`apps/web/src/features/legal/policy.ts`의 `EFFECTIVE_DATE`, 비우면 두 문서가 "초안"으로 보인다). 내용을 바꾸면 시행일도 새로 정하고 변경 공지 기간을 지킨다. 데이터 처리 방식(수집 항목·보관 위치·삭제)을 바꾸면 `PrivacyPage.tsx`도 함께 고친다.
+개인정보처리방침 `/privacy`·이용약관 `/terms`는 로그인 없이 열린다. 시행일은 2026-11-13(`apps/web/src/features/legal/policy.ts`의 `EFFECTIVE_DATE`, 비우면 두 문서가 "초안"으로 보인다). 내용을 바꾸면 시행일도 새로 정하고 변경 공지 기간을 지킨다(7일 전, 불리한 변경은 30일 전). 시행일 전에는 앱 상단·프로젝트 목록에 공지 배너가 뜨므로(`PolicyNotice`, 요약은 `policy.ts`의 `CHANGE_SUMMARY`), 시행일까지 남은 날이 공지 기간보다 길게 배포한다. 데이터 처리 방식(수집 항목·보관 위치·삭제)을 바꾸면 `PrivacyPage.tsx`도 함께 고친다.
 
 시작 가이드 `/guide`·스펙 작성 규칙 `/guide/spec`(`apps/web/src/features/guide/`)도 로그인 없이 열린다. 화면 흐름·버튼 이름을 바꾸면 가이드 문구와 스크린샷을 함께 고친다: `pnpm --filter @qcard/web guide:shots`가 `public/guide/*.jpg`를 다시 찍고(공개 화면이라 테스트 데이터의 운영자 실명은 가상 이름으로 바꿔 찍는다), 스펙 파서 형식을 바꾸면 `/guide/spec`을, 하루콩 스펙을 바꾸면 `guide:example`로 예시 ZIP을 다시 만든다.
 

@@ -1,6 +1,6 @@
 # 호스트 에이전트
 
-호스트 에이전트(`apps/host-agent`)는 사이클 케이스를 실기기에서 `runCase`로 실행하고 Run 진행·결과를 Firestore에, 스크린샷을 Storage에 올린다(`runCycle`·`firestoreSink`). 웹에서 요청한 QA 문서 생성·케이스 수정안 작업도 받아 처리한다(`jobs.ts`·`serve`). 플랜 한도·로그인 문제·디바이스 잠김이면 일시정지한다.
+호스트 에이전트(`apps/host-agent`)는 사이클 케이스를 실기기에서 `runCase`로 실행하고 Run 진행·결과를 Firestore에, 스크린샷을 Storage에 올린다(`runCycle`·`firestoreSink`). 웹에서 요청한 QA 문서 생성·케이스 수정안·이슈 초안 작업도 받아 처리한다(`jobs.ts`·`serve`). 플랜 한도·로그인 문제·디바이스 잠김이면 일시정지한다.
 
 저장소의 pnpm 스크립트는 개발용 에뮬레이터에 붙으므로 `pnpm emu`가 떠 있어야 한다([emulators.md](emulators.md)). 사용자에게 배포하는 `qcard` 명령(npm `@qcard/host`, 진입점 `src/main.ts`)은 같은 코드를 운영 서비스로 실행한다 — 아래 [배포 패키지](#배포-패키지-qcardhost).
 
@@ -37,6 +37,7 @@ pnpm --filter @qcard/host serve --user jaesung-lee # 개발: 에뮬레이터 시
 - 웹에서 요청한 내 QA 문서 생성 작업을 받아 이 PC의 Claude Code로 처리한다(플랜 사용량 차감). 작업별 호출 녹화는 `~/.qcard/jobs/` — 일시정지 후 다시 시도하면 끝난 호출은 재생한다.
   생성하는 동안 작업 문서 아래 `specs`(생성 계획)·`drafts`(케이스 초안)·`events`(진행 기록)를 써서 웹의 작업 상세 화면(`/p/<프로젝트>/docs/jobs/<작업>`)에 보인다. 기록 id가 정해져 있어 다시 시도해도 같은 기록이 두 번 생기지 않는다.
 - 케이스 수정안 작업(`case_revise`)은 QA 문서와 출처 스펙 묶음을 읽어 수정안을 작업 결과에만 쓴다. 케이스는 바꾸지 않고, 요청자가 웹 질문 탭에서 적용한다. 작업은 한 번에 하나씩이며, 하나가 끝날 때마다 대기열을 다시 읽어 수정안을 QA 문서 생성보다 먼저 가져간다(진행 중인 생성은 끊지 않는다).
+- 이슈 초안 작업(`issue_draft`)은 결함·사이클 케이스 사본·빌드·대상 디바이스 텍스트와 웹이 넘긴 템플릿으로 Reporter(`packages/reporter`, Sonnet)를 불러 초안을 작업 결과에만 쓴다. 스크린샷·화면 구조는 읽지 않는다. QA 문서 생성과 따로 한 줄로 처리해 생성 중에도 기다리지 않는다.
 
 ## run-cycle — 개발·자동화용
 
