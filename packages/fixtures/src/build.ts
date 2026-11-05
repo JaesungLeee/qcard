@@ -39,6 +39,7 @@ import { rowHash } from '@qcard/spec';
 import raw from './data/onboarding-flow.json';
 import generatedPoints from './data/onboarding-points.json';
 import { APP_PACKAGE } from './device';
+import { HARUKONG_REPO } from './github';
 import { SCREENS, element, type MockElement } from './screens';
 
 type Row = {
@@ -232,6 +233,18 @@ export const project: Project = {
   packageName: 'com.example.harukong',
   createdBy: PEOPLE.lead,
   createdAt: T(1, 9),
+  // 이슈 발행 (docs/product/issues.md): 가상 저장소(github.ts)를 연결해 두었다
+  repo: {
+    installationId: HARUKONG_REPO.installationId,
+    repoId: HARUKONG_REPO.repoId,
+    owner: HARUKONG_REPO.owner,
+    name: HARUKONG_REPO.name,
+    private: HARUKONG_REPO.private,
+    status: 'active',
+    connectedBy: PEOPLE.lead,
+    connectedAt: T(2, 10),
+  },
+  assigneeMap: { [SPEC]: ['seojun-choi'] },
 };
 
 // ---------------------------------------------------------------- 프로젝트·멤버·초대
@@ -1193,6 +1206,19 @@ export const defects130: Defect[] = [
     expected: 'FR-009 문구와 같다',
     actual: '"…습관이 돼요 메이트가 들어오면" — 마침표가 빠짐',
     status: 'fixed',
+    // 개발자가 이슈를 고쳐서 닫았다 → fixed. QA 재테스트 뒤 closed로 바꾸는 흐름 (github.ts의 #12)
+    issue: {
+      repoId: HARUKONG_REPO.repoId,
+      repo: `${HARUKONG_REPO.owner}/${HARUKONG_REPO.name}`,
+      number: 12,
+      url: `https://github.com/${HARUKONG_REPO.owner}/${HARUKONG_REPO.name}/issues/12`,
+      state: 'closed',
+      closeReason: 'completed',
+      link: 'linked',
+      publishedBy: PEOPLE.qa,
+      publishedAt: T(3, 15),
+    },
+    statusLog: [{ to: 'fixed', by: 'seojun-choi', via: 'github', at: T(4, 11) }],
   },
 ];
 

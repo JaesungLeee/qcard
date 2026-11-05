@@ -26,6 +26,9 @@ importers:
       firebase-functions:
         specifier: 7.4.0
         version: 7.4.0(firebase-admin@14.5.0(@firebase/app-compat@0.5.19)(@firebase/app@0.16.3))
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
     devDependencies:
       '@firebase/rules-unit-testing':
         specifier: 6.0.0
@@ -87,6 +90,9 @@ importers:
       '@qcard/qadoc':
         specifier: workspace:*
         version: link:../../packages/qadoc
+      '@qcard/reporter':
+        specifier: workspace:*
+        version: link:../../packages/reporter
       '@qcard/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -376,8 +382,39 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.19.0)(vite@7.3.6(@types/node@24.19.0)(tsx@4.23.15)(yaml@2.9.1))
 
+  packages/reporter:
+    dependencies:
+      '@qcard/llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@qcard/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@anthropic-ai/sdk':
+        specifier: 0.131.0
+        version: 0.131.0(zod@4.6.5)
+      '@qcard/fixtures':
+        specifier: workspace:*
+        version: link:../fixtures
+      '@types/node':
+        specifier: 24.19.0
+        version: 24.19.0
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.19.0)(vite@7.3.6(@types/node@24.19.0)(tsx@4.23.15)(yaml@2.9.1))
+
   packages/shared:
     dependencies:
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
       zod:
         specifier: 4.6.5
         version: 4.6.5
