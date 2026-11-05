@@ -205,12 +205,17 @@ service cloud.firestore {
         allow update, delete: if false;
       }
       // 결함: 사람만 만든다. 번호는 같은 요청에서 사이클의 defectSeq를 하나 올린 값이라 겹치지 않는다.
-      // 만든 뒤에는 심각도·상태만 바꾸고 지우지 않는다 (결과 칸의 defectId가 가리킨다)
+      // 만든 뒤에는 심각도·상태만 바꾸고 지우지 않는다 (결과 칸의 defectId가 가리킨다).
+      // GitHub 이슈 연결(issue·statusLog·publishing)은 Functions만 쓴다. 이슈가 연결된 결함의 상태는
+      // 이슈와 맞춰야 해서 Functions(setDefectStatus)로만 바꾼다 (docs/product/issues.md)
       match /cycles/{c}/defects/{id} {
         allow read: if isMember(p);
-        allow create: if canEdit(p) && !isHost() && defectNumbered(p, c, id);
+        allow create: if canEdit(p) && !isHost() && defectNumbered(p, c, id)
+          && !request.resource.data.keys().hasAny(['issue', 'statusLog', 'publishing']);
         allow update: if canEdit(p) && !isHost()
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['severity', 'status']);
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['severity', 'status'])
+          && (!('issue' in resource.data)
+            || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status']));
         allow delete: if false;
       }
       // 그 밖의 사이클 하위 문서 (cases·verdictLog·results·attempts·runs·defects는 위 규칙만 — 여기서 쓰기를 열지 않는다)
@@ -272,6 +277,14 @@ service cloud.firestore {
 
     // 초대 토큰 → 초대 위치. Functions만 읽는다 (토큰을 모르는 사람이 초대를 찾지 못하게)
     match /invitationTokens/{token} {
+      allow read, write: if false;
+    }
+
+    // GitHub 이슈 → 결함 색인(웹훅용)과 저장소 연결 진행(확인한 저장소 목록). Functions만 읽고 쓴다
+    match /issueLinks/{id} {
+      allow read, write: if false;
+    }
+    match /githubConnects/{state} {
       allow read, write: if false;
     }
 

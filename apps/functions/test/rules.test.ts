@@ -350,6 +350,42 @@ describe('결함', () => {
     await assertFails(updateDoc(doc(as('u-viewer'), `${C}/defects/D-1`), { status: 'closed' }));
     await assertFails(deleteDoc(at));
   });
+
+  it('GitHub 이슈 연결은 클라이언트가 쓰지 못한다', async () => {
+    const issue = { repoId: 1, repo: 'o/r', number: 3, url: 'u', state: 'open', link: 'linked' };
+    await assertFails(create(as('u-qa'), 1, { ...defect, issue }));
+    await assertFails(create(as('u-qa'), 1, { ...defect, statusLog: [] }));
+    await assertSucceeds(create(as('u-qa'), 1));
+    const at = doc(as('u-qa'), `${C}/defects/D-1`);
+    await assertFails(updateDoc(at, { issue }));
+    await assertFails(updateDoc(at, { publishing: { by: 'x', at: 't' } }));
+  });
+
+  it('이슈가 연결된 결함은 상태를 Functions로만 바꾼다 (심각도는 그대로 바꾼다)', async () => {
+    await env.withSecurityRulesDisabled((c) =>
+      setDoc(doc(c.firestore(), `${C}/defects/D-1`), {
+        ...defect,
+        issue: { repoId: 1, repo: 'o/r', number: 3, url: 'u', state: 'open', link: 'linked' },
+      }),
+    );
+    const at = doc(as('u-qa'), `${C}/defects/D-1`);
+    await assertFails(updateDoc(at, { status: 'closed' }));
+    await assertSucceeds(updateDoc(at, { severity: 'critical' }));
+  });
+
+  it('이슈 색인·저장소 연결 진행은 아무도 직접 읽거나 쓰지 못한다', async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      await setDoc(doc(c.firestore(), 'issueLinks/1_3'), { projectId: 'haru' });
+      await setDoc(doc(c.firestore(), 'githubConnects/s1'), { projectId: 'haru', uid: 'u-admin' });
+    });
+    await assertFails(getDoc(doc(as('u-admin'), 'issueLinks/1_3')));
+    await assertFails(setDoc(doc(as('u-admin'), 'issueLinks/1_4'), { projectId: 'haru' }));
+    await assertFails(getDoc(doc(as('u-admin'), 'githubConnects/s1')));
+  });
+
+  it('프로젝트의 저장소 연결·담당자 매핑은 Admin도 직접 쓰지 못한다', async () => {
+    await assertFails(updateDoc(doc(as('u-admin'), 'projects/haru'), { assigneeMap: { a: ['kim'] } }));
+  });
 });
 
 describe('사이클 완료', () => {

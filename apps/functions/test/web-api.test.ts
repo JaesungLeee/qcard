@@ -6,13 +6,16 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { FirebaseError } from 'firebase/app';
 import { collection, doc, getDocs, setDoc, setLogLevel, updateDoc, type Firestore } from 'firebase/firestore';
 import { GITHUB, PEOPLE } from '@qcard/fixtures';
-import { DEFAULT_RUN_LIMITS, MembershipError, runLimitsOf, type PrepFlow, type TestCycle } from '@qcard/shared';
+import { DEFAULT_ISSUE_TEMPLATE, DEFAULT_RUN_LIMITS, MembershipError, runLimitsOf, type PrepFlow, type TestCycle } from '@qcard/shared';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConflictError, NotFoundError, PermissionError, PrepFlowConflictError, RuleError } from '@qcard/data';
 import { createFirebaseApi, writeAll } from '@qcard/data/firebase';
 import { createMemoryApi } from '../../web/src/data/memory';
+import { SAMPLE_REPOS } from '@qcard/fixtures/github';
 import * as acc from '../src/accounts';
+import { FakeGitHub } from '../src/githubFake';
 import * as h from '../src/handlers';
+import * as iss from '../src/issues';
 import { localBox } from '../src/secretBox';
 import { seedDocs, SEED_USERS } from '@qcard/data/seed';
 
@@ -35,17 +38,28 @@ beforeAll(async () => {
 });
 afterAll(() => env.cleanup());
 beforeEach(async () => {
+  fakeGithub = new FakeGitHub(SAMPLE_REPOS);
   await env.clearFirestore();
   await env.withSecurityRulesDisabled((c) => writeAll(c.firestore() as unknown as Firestore, seedDocs()));
 });
 
 const CODE = { permission: 'permission-denied', rule: 'failed-precondition', not_found: 'not-found' } as const;
 
+// GitHub은 가짜 (fixture의 하루콩 저장소, 메모리 구현과 같은 값)
+let fakeGithub = new FakeGitHub(SAMPLE_REPOS);
+const withGithub =
+  (fn: (ctx: iss.IssueCtx, data: unknown) => Promise<unknown>) =>
+  (ctx: h.Ctx, data: unknown) =>
+    fn({ ...ctx, gh: fakeGithub }, data);
 // Storage는 핸들러 테스트(handlers.test.ts)가 본다
 const handlers = {
   ...h,
   ...acc,
   deleteCycle: (ctx: h.Ctx, data: unknown) => h.deleteCycle(ctx, data, async () => {}),
+  getIssueContext: withGithub(iss.getIssueContext),
+  publishIssue: withGithub(iss.publishIssue),
+  setDefectStatus: withGithub(iss.setDefectStatus),
+  setAssigneeMap: withGithub(iss.setAssigneeMap),
 };
 const box = localBox('test');
 
@@ -510,5 +524,44 @@ describe('호스트 연결', () => {
       expect(await api.myHostConnections()).toEqual([]);
       await expect(api.disconnectHost(cred.hostId)).rejects.toBeInstanceOf(Error);
     }
+  });
+});
+
+describe('GitHub 이슈 (메모리 구현과 같은 결과)', () => {
+  const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
+
+  it('발행 팝업의 저장소 정보', async () => {
+    expect(await apiAs(PEOPLE.qa).getIssueContext('haru')).toEqual(
+      await createMemoryApi({ currentUser: PEOPLE.qa }).getIssueContext('haru'),
+    );
+    await expect(apiAs(PEOPLE.planner).getIssueContext('haru')).rejects.toBeInstanceOf(PermissionError);
+  });
+
+  it('이슈가 연결된 결함의 상태는 Functions로 바뀌고 이슈와 맞춘다', async () => {
+    const fb = await apiAs(PEOPLE.qa).updateDefect(cref, 'D-2', { status: 'open', severity: 'minor' });
+    const mem = await createMemoryApi({ currentUser: PEOPLE.qa }).updateDefect(cref, 'D-2', {
+      status: 'open',
+      severity: 'minor',
+    });
+    const noTime = (d: typeof fb) => ({ ...d, statusLog: d.statusLog?.map(({ at: _a, ...x }) => x) });
+    expect(noTime(fb)).toEqual(noTime(mem));
+    expect(fb).toMatchObject({ status: 'open', severity: 'minor', issue: { state: 'open' } });
+    expect(fakeGithub.issue(1001, 12)).toMatchObject({ state: 'open', comments: ['QA에서 다시 열림 (@minji-kim)'] });
+  });
+
+  it('초안 요청·발행', async () => {
+    const fb = apiAs(PEOPLE.qa);
+    const mem = createMemoryApi({ currentUser: PEOPLE.qa });
+    const job = await fb.requestIssueDraft(cref, 'D-1', DEFAULT_ISSUE_TEMPLATE);
+    expect(await fb.getIssueDraft(cref, 'D-1')).toEqual(job);
+    expect(job.id).toBe(`draft-cycle-130-1-D-1-${GITHUB[PEOPLE.qa]}`);
+
+    const input = { ...cref, defectId: 'D-1', title: '[Bug] 뒤로가기', body: '본문', labels: ['bug'], assignees: [] };
+    const a = await fb.publishIssue(input);
+    const b = await mem.publishIssue(input);
+    const noTime = (d: typeof a) => ({ ...d, issue: { ...d.issue!, publishedAt: '' } });
+    expect(noTime(a)).toEqual(noTime(b));
+    await expect(fb.publishIssue(input)).rejects.toBeInstanceOf(RuleError);
+    await expect(fb.requestIssueDraft(cref, 'D-1', job.input.template)).rejects.toBeInstanceOf(RuleError);
   });
 });
