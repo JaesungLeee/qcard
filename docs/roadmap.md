@@ -48,7 +48,7 @@ MVP(Android) 기능은 들어가 있다. `pnpm verify`(Fake·녹화 재생·에�
 
 ### 결함 재테스트
 
-**설계 중**(2026-11-05). 이전 사이클의 fixed 결함을 새 빌드 사이클에서 다시 확인하고, 그 결과로 결함을 closed로 확정하거나 다시 연다. 이슈가 연결돼 있으면 이슈 코멘트에 재테스트 근거를 남긴다. 규칙은 [product/results.md](product/results.md#재테스트), 고른 이유는 [decisions.md](decisions.md#재테스트는-새-빌드-사이클-안에서). 다음 단계는 같은 TC의 결함·이슈를 묶는 것(발행 전 비슷한 결함 표시, 기존 이슈에 연결, 재발 감지)이다.
+**구현 완료, 배포 전**(2026-11-05). 이전 사이클의 fixed 결함을 새 빌드 사이클에서 다시 확인하고, 그 결과로 결함을 closed로 확정하거나 다시 연다. 이슈가 연결돼 있으면 이슈 코멘트에 재테스트 근거를 남긴다. 규칙은 [product/results.md](product/results.md#재테스트), 고른 이유는 [decisions.md](decisions.md#재테스트는-새-빌드-사이클-안에서). 확정은 Functions `confirmRetest`라 GitHub 이슈 발행과 함께 Functions 배포가 필요하다. 다음 단계는 같은 TC의 결함·이슈를 묶는 것(발행 전 비슷한 결함 표시, 기존 이슈에 연결, 재발 감지)이다.
 
 ### 테스트 가능성 리포트
 

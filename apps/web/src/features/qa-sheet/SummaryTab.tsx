@@ -16,9 +16,18 @@ import {
 import { useMemo } from 'react';
 import { Link } from 'react-router';
 import { fmtDate, fmtPercent } from '../../components/format';
-import { deviceStats, oneLineSummary, progressMatrix, resultKey, type MatrixRow } from './model';
+import {
+  deviceStats,
+  oneLineSummary,
+  progressMatrix,
+  resultKey,
+  retestCounts,
+  retestRows,
+  type MatrixRow,
+} from './model';
 import {
   Card,
+  CellDefectName,
   KV,
   Mono,
   RunState,
@@ -47,6 +56,7 @@ export function SummaryTab({ d, index, projectId, projectName }: SheetProps) {
     .sort((a, b) => ['fail', 'check', 'blocked'].indexOf(a.verdict) - ['fail', 'check', 'blocked'].indexOf(b.verdict));
   const checks = issues.filter((r) => r.verdict === 'check');
   const defects = [...d.defects].sort((a, b) => SEVERITY_RANK.indexOf(a.severity) - SEVERITY_RANK.indexOf(b.severity));
+  const retest = retestCounts(retestRows(d, index));
 
   return (
     <TabBody>
@@ -57,6 +67,18 @@ export function SummaryTab({ d, index, projectId, projectName }: SheetProps) {
         >
           확인필요 {checks.length}칸이 남아 있습니다
         </SectionMessage>
+      )}
+      {retest.total > 0 && (
+        <Link
+          to={`/p/${projectId}/cycles/${d.cycle.id}?tab=defects`}
+          className={`qc-card qs-retest-strip ${textClass('label1')}`}
+        >
+          <span className={textClass('label1', 'bold')}>재테스트 대상 결함 {retest.total}건</span>
+          <span className="qs-muted">
+            Pass {retest.pass} · Fail {retest.fail} · 남음 {retest.pending}
+          </span>
+          <span className={`qs-link ${textClass('label2', 'medium')}`}>③ 결함 목록에서 확정</span>
+        </Link>
       )}
 
       <div className="qs-summary-grid qs-summary-top">
@@ -187,7 +209,7 @@ export function SummaryTab({ d, index, projectId, projectName }: SheetProps) {
                       </span>
                     </div>
                     {r.defectId ? (
-                      <Mono className={`${textClass('caption1', 'medium')} qs-muted`}>{r.defectId}</Mono>
+                      <CellDefectName r={r} d={d} className={`${textClass('caption1', 'medium')} qs-muted`} />
                     ) : (
                       r.verdict === 'fail' && <NoDefect />
                     )}

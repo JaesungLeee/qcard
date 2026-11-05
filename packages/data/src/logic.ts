@@ -2,7 +2,11 @@ import { hash } from '@qcard/fixtures';
 import {
   canPublishIssue,
   CaseBody,
+  isNewerBuild,
+  isRetestTarget,
   issueDraftJobId,
+  retestsIn,
+  type RetestSource,
   type Build,
   type CaseResult,
   type CaseReviseJob,
@@ -284,6 +288,29 @@ export function changedDefect(d: Defect, patch: DefectPatch): Defect {
     ...(patch.severity ? { severity: patch.severity } : {}),
     ...(patch.status ? { status: patch.status } : {}),
   };
+}
+
+/**
+ * 재테스트 목록을 만들 때 결함을 읽을 사이클: 같은 패키지의 더 오래된 빌드로 만든 다른 사이클
+ * (docs/product/results.md#재테스트). 결함은 이 사이클들에서만 읽는다
+ */
+export function retestSourceCycles<C extends { cycle: TestCycle; build: Build }>(b: C, all: C[]): C[] {
+  if (!retestsIn(b.cycle)) return [];
+  return all.filter((c) => c.cycle.id !== b.cycle.id && !c.cycle.deletingAt && isNewerBuild(c.build, b.build));
+}
+
+const defectSeqOf = (id: string) => Number(/\d+$/.exec(id)?.[0] ?? 0);
+
+/** 재테스트 목록: 대상만, 결함 사이클이 새것부터, 사이클 안에서는 결함 번호순 */
+export function retestList(b: { cycle: TestCycle; build: Build }, sources: RetestSource[]): RetestSource[] {
+  return sources
+    .filter((s) => isRetestTarget(s, b))
+    .sort(
+      (x, y) =>
+        y.cycle.period.start.localeCompare(x.cycle.period.start) ||
+        x.cycle.id.localeCompare(y.cycle.id) ||
+        defectSeqOf(x.defect.id) - defectSeqOf(y.defect.id),
+    );
 }
 
 /** 진행 중 사이클: 끝나지 않았고 로컬 실행 묶음이 아닌 것 */

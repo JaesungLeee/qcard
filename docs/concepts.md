@@ -91,12 +91,14 @@ Project(name, createdBy, deletedAt?, runLimits?, repo?{installationId, repoId, o
 └─ TestCycle(qaDocument, build, targetDevices[], caseSnapshot[], period, completedBy?)
      ├─ CycleCase(tcId, 승인된 케이스 내용 사본)                            ← 바꿀 수 없음
      ├─ Run(executorUid, hostId, device, status, pauseReason?, currentTcId?, llmUsage)
-     ├─ RunCase(tcId, contentHash, attempt, verdict, decidedBy, autoConfirmed, unmetConditions[], attachments[])
+     ├─ RunCase(tcId, contentHash, attempt, verdict, decidedBy, autoConfirmed, unmetConditions[], attachments[],
+     │          defectId?, defectCycleId?(재테스트에서 다시 연 이전 사이클 결함 — Functions만 씀))
      │    ├─ Step(action, target, input(마스킹), intent, screenshot)
      │    ├─ VerificationPoint(expected, method: tree|vision, observed, result: match|mismatch|unknown, evidence)
      │    └─ VerdictHistory                                                ← 바꿀 수 없음
      └─ Defect(seq D-n, tcId, device, severity, status: open|fixed|closed, repro, expected, actual,
-               issue?{repoId, number, url, state, link, publishedBy}, statusLog[], publishing?)   ← Functions만 씀
+               issue?{repoId, number, url, state, link, publishedBy}, statusLog[], publishing?,
+               retests[]{cycle, build, 칸, verdict, to, by, at})                     ← issue 이하는 Functions만 씀
 
 Host(user, machine, credentialHash, lastSeenAt, revokedAt?, jobKinds[], consoleUrl?, claudeCode)
 IssueLink(repoId, issueNumber → project, cycle, defect)                     ← 웹훅 색인, Functions만 읽고 씀

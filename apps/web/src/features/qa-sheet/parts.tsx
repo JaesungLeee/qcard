@@ -2,9 +2,9 @@
 import { PAUSE_REASON_LABEL, VERDICT_LABEL, type PauseReason, type Verdict } from '@qcard/shared';
 import { Icons, VerdictBadge, textClass, token } from '@qcard/ui';
 import { Fragment, useEffect, useState, type ReactNode } from 'react';
-import type { VerdictCounts } from '../../data/api';
+import type { CycleDetail, VerdictCounts } from '../../data/api';
 import { fmtDate } from '../../components/format';
-import { VERDICTS } from './model';
+import { cellDefect, VERDICTS } from './model';
 
 /** 카드 + 섹션 제목(headline2 bold) */
 export function Card({
@@ -92,6 +92,27 @@ export const periodLabel = (p: { start: string; end?: string }) =>
   `${fmtDate(p.start)} ~ ${p.end ? fmtDate(p.end) : '진행 중'}`;
 
 export const SERVER_ENV_LABEL = { dev: 'Dev', stage: 'Stage', prod: 'Prod' } as const;
+
+/** 칸에 연결된 결함: 번호만 고정폭. 이전 사이클 결함은 사이클 이름, 지운 사이클이면 "삭제된 결함"을 붙인다 */
+export function CellDefectName({
+  r,
+  d,
+  className,
+}: {
+  r: Parameters<typeof cellDefect>[0];
+  d: Pick<CycleDetail, 'retests'>;
+  className?: string;
+}) {
+  const ref = cellDefect(r, d);
+  if (!ref) return null;
+  return (
+    <span className={className}>
+      {ref.deleted && '삭제된 결함 '}
+      <Mono>{ref.id}</Mono>
+      {ref.cycleName && ` · ${ref.cycleName}`}
+    </span>
+  );
+}
 
 export function Mono({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <span className={`qc-mono ${className}`}>{children}</span>;

@@ -7,6 +7,7 @@ import { consoleUrlOf } from '../console/Open';
 import {
   autoConfirmChecks,
   caseVerdictCounts,
+  cellDefect,
   cellRun,
   deviceStats,
   indexResults,
@@ -18,6 +19,12 @@ import {
   primaryDevice,
   progressMatrix,
   resultKey,
+  retestAction,
+  retestColumn,
+  retestCounts,
+  retestMarks,
+  retestOutcome,
+  retestRows,
   runLaunch,
   traceability,
   traceSummary,
@@ -254,5 +261,49 @@ describe('Run 케이스 고르기', () => {
     const index = indexResults(d.results);
     const mine = pickRows(d.cases, (c) => index.get(resultKey(c.tcId, launch.target.id))?.verdict);
     expect(defaultPicked(mine).size).toBe(launch.remaining);
+  });
+});
+
+describe('재테스트 (docs/product/results.md#재테스트)', () => {
+  const ref = { projectId: 'haru', cycleId: 'cycle-130-1' };
+
+  it('1.2.1의 fixed 결함을 1.3.0의 같은 칸에서 읽는다: Pass · Fail · 남음', async () => {
+    const d = await createMemoryApi().getCycle(ref);
+    const rows = retestRows(d, indexResults(d.results));
+    expect(rows.map((r) => [r.label, r.reading, retestAction(r)])).toEqual([
+      ['1.2.1 (121) 회귀 D-2', 'pass', 'close'],
+      ['1.2.1 (121) 회귀 D-3', 'fail', 'reopen'],
+      ['1.2.1 (121) 회귀 D-4', 'pending', undefined],
+    ]);
+    expect(retestCounts(rows)).toEqual({ total: 3, pass: 1, fail: 1, pending: 1 });
+    const d2 = rows[0]!;
+    expect(retestMarks(rows).get(resultKey(d2.src.defect.tcId, 'galaxy-s24-15'))).toEqual(['D-2']);
+  });
+
+  it('확정하면 기록이 남고, 다시 연 결함을 칸이 사이클 이름과 함께 가리킨다', async () => {
+    const api = createMemoryApi();
+    const source = (defectId: string) => ({ cycleId: 'cycle-121-1', defectId });
+    await api.confirmRetest({ ...ref, source: source('D-2'), to: 'closed' });
+    const reopened = await api.confirmRetest({ ...ref, source: source('D-3'), to: 'open' });
+    const d = await api.getCycle(ref);
+    const rows = retestRows(d, indexResults(d.results));
+    expect(rows.map((r) => [r.src.defect.status, r.record?.to, retestOutcome(r), retestAction(r)])).toEqual([
+      ['closed', 'closed', 'pass', undefined],
+      ['open', 'open', 'fail', undefined],
+      ['fixed', undefined, 'pending', undefined],
+    ]);
+    const cell = d.results.find((r) => r.tcId === reopened.tcId && r.deviceId === 'galaxy-s24-15')!;
+    expect(cellDefect(cell, d)).toEqual({
+      id: 'D-3',
+      label: '1.2.1 (121) 회귀 D-3',
+      cycleId: 'cycle-121-1',
+      cycleName: '1.2.1 (121) 회귀',
+    });
+    expect(cellDefect({ defectId: 'D-9', defectCycleId: 'gone' }, d)?.label).toBe('삭제된 결함 D-9');
+    // 결함 사이클의 재테스트 컬럼
+    const a = await api.getCycle({ projectId: 'haru', cycleId: 'cycle-121-1' });
+    const col = (id: string) => retestColumn(a.defects.find((x) => x.id === id)!);
+    expect([col('D-2').last?.verdict, col('D-2').waiting]).toEqual(['pass', false]);
+    expect([col('D-4').last, col('D-4').waiting]).toEqual([undefined, true]);
   });
 });

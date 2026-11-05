@@ -441,3 +441,107 @@ describe('삭제', () => {
     expect(fake.issue(HARUKONG_REPO.repoId, 1).state).toBe('open');
   });
 });
+
+describe('재테스트 확정', () => {
+  // 결함 D-1은 c1(빌드 120)의 Galaxy S24 (Android 14)에서 났다. c2(빌드 130)의 같은 칸에서 다시 돌린다
+  const S24 = { id: 'galaxy-s24-14', model: 'Galaxy S24', osMajor: 14, resolution: '—', label: 'Galaxy S24 (Android 14)' };
+  const TC = 'TC-ONBOARDING-001';
+  const C2 = 'c2';
+  const cellDoc = () => db.doc(`projects/${P}/cycles/${C2}/results/${TC}__${S24.id}`);
+  const input = (to: 'closed' | 'open') => ({
+    projectId: P,
+    cycleId: C2,
+    source: { cycleId: C, defectId: 'D-1' },
+    to,
+  });
+  const cycleBase = { projectId: P, docId: 'doc', targets: [S24], period: { start: NOW }, serverEnv: 'stage' };
+
+  beforeEach(async () => {
+    for (const [id, n] of [
+      ['b120', 120],
+      ['b130', 130],
+    ] as const)
+      await db.doc(`projects/${P}/builds/${id}`).set({
+        id,
+        version: `1.${n}`,
+        buildNumber: n,
+        packageName: 'com.harukong',
+        signingSha1: 'AA',
+        uploadedAt: NOW,
+      });
+    const snapshot = [{ tcId: TC, contentHash: 'h1' }];
+    await db.doc(`projects/${P}/cycles/${C}`).set({ ...cycleBase, id: C, name: '1.2.0 회귀', buildId: 'b120', snapshot, createdBy: '이재성', defectSeq: 1 });
+    await db.doc(`projects/${P}/cycles/${C2}`).set({ ...cycleBase, id: C2, name: '1.3.0 회귀', buildId: 'b130', snapshot, createdBy: '이재성' });
+    await defectDoc().update({ deviceId: S24.id, status: 'fixed' });
+    await cellDoc().set({
+      tcId: TC,
+      deviceId: S24.id,
+      verdict: 'pass',
+      decidedBy: { kind: 'agent' },
+      autoConfirmed: true,
+      unmetConditions: [],
+      attempts: 1,
+      steps: [],
+      points: [],
+      history: [],
+    });
+  });
+
+  it('Pass면 closed로 닫고, 이슈에 재테스트 근거를 남긴다', async () => {
+    await connect();
+    await iss.publishIssue(ctx('qa'), publishInput);
+    const d = await iss.confirmRetest(ctx('qa'), input('closed'));
+    expect([d.status, d.issue?.state]).toEqual(['closed', 'closed']);
+    expect(d.retests).toEqual([
+      {
+        cycleId: C2,
+        cycleName: '1.3.0 회귀',
+        build: { version: '1.130', buildNumber: 130 },
+        tcId: TC,
+        deviceId: S24.id,
+        deviceLabel: S24.label,
+        verdict: 'pass',
+        to: 'closed',
+        traceUrl: `https://qcard.dev/p/${P}/cycles/${C2}/results/${TC}/${S24.id}`,
+        by: '김민지',
+        at: NOW,
+      },
+    ]);
+    const issue = fake.issue(HARUKONG_REPO.repoId, 1);
+    expect([issue.state, issue.stateReason]).toEqual(['closed', 'completed']);
+    expect(issue.comments.at(-1)).toBe(
+      [
+        'QA 재테스트 Pass — 빌드 1.130 (130) · 사이클 "1.3.0 회귀" · Galaxy S24 (Android 14)',
+        `판정 추적: https://qcard.dev/p/${P}/cycles/${C2}/results/${TC}/${S24.id}`,
+        '확인: @minji-kim',
+      ].join('\n'),
+    );
+    // 한 번 닫으면 fixed가 아니라 다시 확정하지 못한다
+    await expectRule(iss.confirmRetest(ctx('qa'), input('closed')), 'rule', 'fixed가 아닙니다');
+  });
+
+  it('사람이 확정한 Fail이면 다시 열고 칸이 그 결함을 가리킨다 (이슈 없는 결함)', async () => {
+    await cellDoc().update({ verdict: 'fail', decidedBy: { kind: 'agent' }, autoConfirmed: false, actualSummary: '빈 화면' });
+    await expectRule(iss.confirmRetest(ctx('qa'), input('open')), 'rule', '먼저 사람이');
+    await cellDoc().update({ decidedBy: { kind: 'human', name: '김민지' } });
+    const d = await iss.confirmRetest(ctx('qa'), input('open'));
+    expect([d.status, d.retests?.[0]?.verdict, d.statusLog]).toEqual(['open', 'fail', undefined]);
+    const cell = (await cellDoc().get()).data();
+    expect([cell?.defectId, cell?.defectCycleId]).toEqual(['D-1', C]);
+  });
+
+  it('GitHub 호출이 실패하면 바꾸지 않는다', async () => {
+    await connect();
+    await iss.publishIssue(ctx('qa'), publishInput);
+    fake.failNext.set('setIssueState', new GitHubError('forbidden', 'GitHub 403'));
+    await expectRule(iss.confirmRetest(ctx('qa'), input('closed')), 'permission');
+    const d = await defect();
+    expect([d.status, d.retests]).toEqual(['fixed', undefined]);
+  });
+
+  it('Viewer는 확정하지 못하고, 새 빌드가 아니면 막는다', async () => {
+    await expectRule(iss.confirmRetest(ctx('viewer'), input('closed')), 'permission');
+    await db.doc(`projects/${P}/cycles/${C2}`).update({ buildId: 'b120' });
+    await expectRule(iss.confirmRetest(ctx('qa'), input('closed')), 'rule', '새 빌드가 아닙니다');
+  });
+});

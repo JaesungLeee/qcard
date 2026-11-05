@@ -14,6 +14,8 @@ import type {
   PrepFlowInput,
   PrepFlowUse,
   CaseResult,
+  RetestSource,
+  RetestTo,
   Defect,
   Host,
   HostConnection,
@@ -192,6 +194,12 @@ export interface QcardApi {
   /** 결함의 심각도·상태 바꾸기. 이슈가 연결된 결함의 상태는 이슈에 먼저 반영한다(실패하면 바꾸지 않는다). Admin·QA만 */
   updateDefect(ref: CycleRef, defectId: string, patch: DefectPatch): Promise<Defect>;
   /**
+   * 재테스트 확정 (docs/product/results.md#재테스트): 이 사이클의 재테스트 칸 결과로 이전 사이클 결함을 closed로 닫거나
+   * 다시 연다. 서버가 칸 결과를 다시 읽어 확인한다(`retestConfirmation`). 다시 열면 칸이 그 결함을 가리킨다.
+   * 이슈가 연결돼 있으면 이슈에 먼저 반영한다(실패하면 바꾸지 않는다). Admin·QA만
+   */
+  confirmRetest(input: ConfirmRetestInput): Promise<Defect>;
+  /**
    * 사이클 완료: 새 Run을 받지 않는다. 사람 확정은 계속 된다. 남은 확인필요·N/T 경고는 화면이 먼저 보인다
    * (`completionWarnings`). 이미 완료됐거나 로컬 실행 묶음이면 `RuleError`. Admin·QA만
    */
@@ -260,6 +268,8 @@ export type NewCycleInput = {
 export type DefectDraft = Pick<Defect, 'title' | 'severity' | 'repro' | 'expected' | 'actual'>;
 export type NewDefectInput = DefectDraft & { projectId: string; cycleId: string; tcId: string; deviceId: string };
 export type DefectPatch = Partial<Pick<Defect, 'severity' | 'status'>>;
+/** `cycleId`는 재테스트 칸이 있는 사이클, `source`는 결함이 난 사이클의 결함 */
+export type ConfirmRetestInput = CycleRef & { source: { cycleId: string; defectId: string }; to: RetestTo };
 
 export type ConnectReposInput = { state: string; code?: string; installationId?: number };
 
@@ -331,6 +341,8 @@ export type CycleDetail = {
   results: CaseResult[];
   defects: Defect[];
   runs: Run[];
+  /** 이 사이클에서 재테스트할 이전 사이클 결함 (`isRetestTarget`, 결함 사이클이 새것부터) */
+  retests: RetestSource[];
 };
 
 export type ConfirmVerdictInput = {

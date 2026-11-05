@@ -13,15 +13,21 @@ import {
   pickAssignees,
   pickLabels,
   requireAdmin,
+  retestCell,
+  retestConfirmation,
+  retestIssueComment,
   requireEditor,
   statusOnIssueEvent,
   traceUrlOf,
   withIssueFooter,
+  type Build,
+  type CaseResult,
   type Defect,
   type DefectIssue,
   type DefectStatusChange,
   type IssueCloseReason,
   type IssueContext,
+  type IssueAction,
   type IssueEvent,
   type Project,
   type ProjectRepo,
@@ -395,26 +401,105 @@ export async function setDefectStatus(ctx: IssueCtx, data: unknown): Promise<Def
       by: actor,
       at: nowOf(ctx),
     });
-    if (action) {
-      const repo = project.repo!;
-      const number = defect.issue.number;
-      if (action.state) {
-        const { to, reason } = action.state;
-        await gh(() => ctx.gh.setIssueState(repo, number, to, reason));
-      }
-      // 이슈 상태를 이미 바꿨으면 코멘트 실패로 되돌리지 않는다 (qcard도 같은 상태로 맞춘다)
-      await gh(() => ctx.gh.comment(repo, number, action.comment)).catch((e: unknown) => {
-        if (!action.state) throw e;
-        console.warn(`이슈 코멘트 실패 (상태는 반영함): ${repo.repoId}#${number}`, e);
-      });
-    }
-    patch.statusLog = FieldValue.arrayUnion(change);
-    if (issue.state !== defect.issue.state) {
-      patch['issue.state'] = issue.state;
-      patch['issue.closeReason'] = issue.closeReason ?? FieldValue.delete();
-    }
+    if (action) await applyIssueAction(ctx, project.repo!, defect.issue.number, action);
+    Object.assign(patch, issuePatch(defect.issue, issue, change));
   }
   await dRef.update(patch);
+  return (await dRef.get()).data() as Defect;
+}
+
+/** 이슈 상태를 바꾸고 코멘트를 남긴다. 실패하면 던진다 — 호출한 쪽은 qcard 상태를 바꾸지 않는다 */
+async function applyIssueAction(ctx: IssueCtx, repo: ProjectRepo, number: number, action: IssueAction) {
+  if (action.state) {
+    const { to, reason } = action.state;
+    await gh(() => ctx.gh.setIssueState(repo, number, to, reason));
+  }
+  // 이슈 상태를 이미 바꿨으면 코멘트 실패로 되돌리지 않는다 (qcard도 같은 상태로 맞춘다)
+  await gh(() => ctx.gh.comment(repo, number, action.comment)).catch((e: unknown) => {
+    if (!action.state) throw e;
+    console.warn(`이슈 코멘트 실패 (상태는 반영함): ${repo.repoId}#${number}`, e);
+  });
+}
+
+/** 이슈가 연결된 결함에 함께 쓸 상태 기록·이슈 상태 */
+function issuePatch(before: DefectIssue, after: DefectIssue, change: DefectStatusChange): Record<string, unknown> {
+  const patch: Record<string, unknown> = { statusLog: FieldValue.arrayUnion(change) };
+  if (after.state !== before.state) {
+    patch['issue.state'] = after.state;
+    patch['issue.closeReason'] = after.closeReason ?? FieldValue.delete();
+  }
+  return patch;
+}
+
+// ------------------------------------------------------------------ 재테스트
+
+const RetestInput = z.object({
+  projectId: z.string().min(1),
+  /** 재테스트 칸이 있는 사이클 */
+  cycleId: z.string().min(1),
+  source: z.object({ cycleId: z.string().min(1), defectId: z.string().min(1) }),
+  to: z.enum(['closed', 'open']),
+});
+
+/**
+ * 재테스트 확정 (docs/product/results.md#재테스트): 재테스트 칸 결과를 서버에서 다시 읽어 확인하고(`retestConfirmation`)
+ * 결함 상태·재테스트 기록을 쓴다. 다시 열면 칸이 그 결함을 가리킨다. 이슈가 동기화 중이면 재테스트 근거 코멘트와 함께
+ * 이슈에 먼저 반영하고, GitHub 호출이 실패하면 바꾸지 않는다. Admin·QA만
+ */
+export async function confirmRetest(ctx: IssueCtx, data: unknown): Promise<Defect> {
+  const input = parse(RetestInput, data);
+  const now = nowOf(ctx);
+  const cycleDoc = (c: string) => ctx.db.doc(`projects/${input.projectId}/cycles/${c}`);
+  const buildDoc = (b: string) => ctx.db.doc(`projects/${input.projectId}/builds/${b}`);
+  const dRef = defectRef(ctx.db, input.projectId, input.source.cycleId, input.source.defectId);
+  const checked = await ctx.db.runTransaction(async (tx) => {
+    const project = await read<Project>(tx, projectRef(ctx.db, input.projectId), '프로젝트');
+    const actor = await actorOf(ctx, tx);
+    const members = await membersIn(tx, ctx.db, input.projectId);
+    const bCycle = await read<TestCycle>(tx, cycleDoc(input.cycleId), '사이클');
+    const aCycle = await read<TestCycle>(tx, cycleDoc(input.source.cycleId), '결함 사이클');
+    const [bBuild, aBuild] = await Promise.all([
+      read<Build>(tx, buildDoc(bCycle.buildId), '빌드'),
+      read<Build>(tx, buildDoc(aCycle.buildId), '빌드'),
+    ]);
+    const defect = await read<Defect>(tx, dRef, '결함');
+    const src = { cycle: aCycle, build: aBuild, defect };
+    const cell = retestCell(src, bCycle);
+    const rRef =
+      cell.kind === 'found' ? cycleDoc(input.cycleId).collection('results').doc(`${cell.tcId}__${cell.deviceId}`) : undefined;
+    const result = rRef ? ((await tx.get(rRef)).data() as CaseResult | undefined) : undefined;
+    const { record, linkCell } = retestConfirmation({
+      members,
+      actor,
+      projectId: input.projectId,
+      src,
+      b: { cycle: bCycle, build: bBuild },
+      result,
+      to: input.to,
+      at: now,
+    });
+    if (defect.publishing && !defect.issue)
+      throw fail('rule', `${defect.publishing.by}님이 이 결함을 이슈로 발행하고 있습니다. 잠시 뒤 다시 확정하세요.`);
+    return { project, actor, defect, result, record, linkCell, rRef };
+  });
+  const { project, actor, defect, result, record, linkCell, rRef } = checked;
+  const patch: Record<string, unknown> = { status: input.to, retests: FieldValue.arrayUnion(record) };
+  if (defect.issue) {
+    const { action, issue, change } = linkedStatusChange({
+      project,
+      defect: { ...defect, issue: defect.issue },
+      to: input.to,
+      by: actor,
+      at: now,
+      comment: retestIssueComment({ ...record, by: actor.github, actual: result?.actualSummary }),
+    });
+    if (action) await applyIssueAction(ctx, project.repo!, defect.issue.number, action);
+    Object.assign(patch, issuePatch(defect.issue, issue, change));
+  }
+  const batch = ctx.db.batch();
+  batch.update(dRef, patch);
+  if (linkCell && rRef) batch.update(rRef, { defectId: defect.id, defectCycleId: input.source.cycleId });
+  await batch.commit();
   return (await dRef.get()).data() as Defect;
 }
 

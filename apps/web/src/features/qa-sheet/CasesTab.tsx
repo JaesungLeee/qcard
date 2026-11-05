@@ -17,12 +17,15 @@ import { qcardGridTheme } from '../../components/agGrid';
 import { fmtDateTime } from '../../components/format';
 import {
   caseVerdictCounts,
+  cellDefect,
   decidedByLabel,
   matchesQuery,
   matchesVerdict,
   oneLineSummary,
   primaryDevice,
   resultKey,
+  retestMarks,
+  retestRows,
   shortId,
   VERDICTS,
   type VerdictFilter,
@@ -30,7 +33,8 @@ import {
 import { TabBody, traceUrl } from './parts';
 import type { SheetProps } from './QaSheetPage';
 
-type Row = { tc: TestCase; results: Record<string, CaseResult | undefined> };
+/** `defects`: 결함 ID 컬럼에 보일 이름 — 칸의 결함(이전 사이클 결함은 사이클 이름과 함께)과 재테스트 표시 */
+type Row = { tc: TestCase; results: Record<string, CaseResult | undefined>; defects: string[] };
 
 const DEVICE_COL = 'device:';
 
@@ -69,14 +73,18 @@ export function CasesTab({ d, index, projectId }: SheetProps) {
   const multi = targets.length > 1;
   const wide = useMediaQuery('(min-width: 1100px)');
 
-  const rows = useMemo<Row[]>(
-    () =>
-      d.cases.map((tc) => ({
-        tc,
-        results: Object.fromEntries(targets.map((t) => [t.id, index.get(resultKey(tc.tcId, t.id))])),
-      })),
-    [d.cases, targets, index],
-  );
+  const rows = useMemo<Row[]>(() => {
+    const marks = retestMarks(retestRows(d, index));
+    return d.cases.map((tc) => {
+      const results = Object.fromEntries(targets.map((t) => [t.id, index.get(resultKey(tc.tcId, t.id))]));
+      const linked = Object.values(results).flatMap((r) => {
+        const label = r && cellDefect(r, d)?.label;
+        return label ? [label] : [];
+      });
+      const retest = targets.flatMap((t) => (marks.get(resultKey(tc.tcId, t.id)) ?? []).map((id) => `재테스트 ${id}`));
+      return { tc, results, defects: [...new Set([...linked, ...retest])] };
+    });
+  }, [d, targets, index]);
   const counts = useMemo(() => caseVerdictCounts(d.cases, targets, index), [d.cases, targets, index]);
   const visible = useMemo(
     () => rows.filter((r) => matchesQuery(r.tc, query) && matchesVerdict(r.tc, targets, index, verdict)),
@@ -244,12 +252,11 @@ export function CasesTab({ d, index, projectId }: SheetProps) {
             // 결함이 연결되지 않은 Fail 칸이 있으면 "결함 없음"을 함께 보인다
             valueGetter: (p) => {
               if (!p.data) return undefined;
-              const results = Object.values(p.data.results);
-              const ids = [...new Set(results.map((r) => r?.defectId).filter(Boolean))];
-              const missing = results.some((r) => r?.verdict === 'fail' && !r.defectId);
-              return [...ids, ...(missing ? ['결함 없음'] : [])].join(', ') || '—';
+              const missing = Object.values(p.data.results).some((r) => r?.verdict === 'fail' && !r.defectId);
+              return [...p.data.defects, ...(missing ? ['결함 없음'] : [])].join(', ') || '—';
             },
-            width: 120,
+            tooltipValueGetter: (p) => p.value,
+            width: 140,
             cellClass: 'qc-mono',
             cellClassRules: { 'qs-no-defect': (p) => String(p.value ?? '').includes('결함 없음') },
           },

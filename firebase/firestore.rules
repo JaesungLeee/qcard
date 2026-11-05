@@ -193,6 +193,7 @@ service cloud.firestore {
       // - Agent 판정: 그 Run(runId)을 실행한 사용자의 호스트만
       // - 사람: 사이클을 만들 때 N/T 칸, 그 뒤에는 판정·메모만 바꾼다(Agent 증거는 그대로). 사람 판정으로 바꾸면
       //   같은 요청에서 새 판정 로그를 남겨야 한다 (판정자·판정이 로그와 같다)
+      // - 다른 사이클 결함 연결(defectCycleId)은 재테스트 확정(Functions confirmRetest)만 쓴다
       match /cycles/{c}/results/{r} {
         allow read: if isMember(p);
         allow create, update: if canEdit(p) && (agentResult(p, c) || personResult(p, c));
@@ -206,12 +207,12 @@ service cloud.firestore {
       }
       // 결함: 사람만 만든다. 번호는 같은 요청에서 사이클의 defectSeq를 하나 올린 값이라 겹치지 않는다.
       // 만든 뒤에는 심각도·상태만 바꾸고 지우지 않는다 (결과 칸의 defectId가 가리킨다).
-      // GitHub 이슈 연결(issue·statusLog·publishing)은 Functions만 쓴다. 이슈가 연결됐거나 발행 중인 결함의 상태는
+      // GitHub 이슈 연결(issue·statusLog·publishing)과 재테스트 기록(retests)은 Functions만 쓴다. 이슈가 연결됐거나 발행 중인 결함의 상태는
       // 이슈와 맞춰야 해서 Functions(setDefectStatus)로만 바꾼다 (docs/product/issues.md)
       match /cycles/{c}/defects/{id} {
         allow read: if isMember(p);
         allow create: if canEdit(p) && !isHost() && defectNumbered(p, c, id)
-          && !request.resource.data.keys().hasAny(['issue', 'statusLog', 'publishing']);
+          && !request.resource.data.keys().hasAny(['issue', 'statusLog', 'publishing', 'retests']);
         allow update: if canEdit(p) && !isHost()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['severity', 'status'])
           && (!('issue' in resource.data || 'publishing' in resource.data)
