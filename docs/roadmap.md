@@ -40,12 +40,11 @@ MVP(Android) 기능은 들어가 있다. `pnpm verify`(Fake·녹화 재생·에�
 
 ### GitHub 이슈 발행
 
-**구현 완료, GitHub App 등록·배포 전**(2026-11-04). 결함을 연결한 GitHub 저장소의 이슈로 발행하고 상태를 양방향으로 맞춘다. 규칙은 [product/issues.md](product/issues.md), 고른 이유는 [decisions.md](decisions.md#결함-트래커는-github-issues).
+**구현·App 등록 완료, 배포 전**(2026-11-05). 결함을 연결한 GitHub 저장소의 이슈로 발행하고 상태를 양방향으로 맞춘다. 규칙은 [product/issues.md](product/issues.md), 고른 이유는 [decisions.md](decisions.md#결함-트래커는-github-issues).
 
-구현 외에 사람이 할 일:
-
-- qcard GitHub App 등록(권한·웹훅·설치 후 돌아올 주소), App 비밀 키·웹훅 비밀값·클라이언트 비밀값을 Secret Manager에 등록. 절차는 [dev/deploy.md](dev/deploy.md#github-app-결함--이슈-발행). 비밀값이 없으면 Functions 배포가 실패하므로 `main`에 합치기 전에 만든다.
-- 개인정보처리방침·이용약관에 GitHub로 나가는 데이터와 "발행한 이슈는 qcard가 지우지 못함"을 넣었다(시행일 2026-11-13). 시행 전에 서비스 안에서 알린다.
+- 끝남: qcard GitHub App 등록(`qcard-bot`, App ID 5619807), App 비밀 키·클라이언트 비밀값·웹훅 비밀값을 Secret Manager에 등록(2026-11-05). 절차는 [dev/deploy.md](dev/deploy.md#github-app-결함--이슈-발행).
+- 끝남: 개인정보처리방침·이용약관에 GitHub로 나가는 데이터와 "발행한 이슈는 qcard가 지우지 못함"을 넣었다(시행일 2026-11-13). 시행 전 공지 배너가 앱 상단·프로젝트 목록에 뜬다.
+- 남음: 운영 배포(2026-11-06까지 — 공지를 시행 7일 전부터 띄우려면), 배포 뒤 웹훅 ping·연결·초안·발행·양방향 동기화를 실제 GitHub·Claude로 확인, 확인 뒤 클라이언트 비밀값·웹훅 비밀값 교체.
 
 ### 테스트 가능성 리포트
 

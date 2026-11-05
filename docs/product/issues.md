@@ -2,7 +2,7 @@
 
 결함을 프로젝트에 연결한 GitHub 저장소의 이슈로 발행하고, 이슈와 결함의 상태를 맞추는 규칙이다. 결함 자체의 규칙은 [results.md](results.md#결함), 권한·비밀값은 [security.md](../security.md#github-이슈), 고른 이유는 [decisions.md](../decisions.md#결함-트래커는-github-issues)에 있다.
 
-구현돼 있고, 운영 환경은 qcard GitHub App을 등록하면 켜진다([dev/deploy.md](../dev/deploy.md#github-app-결함--이슈-발행), [roadmap.md](../roadmap.md#github-이슈-발행)). 코드는 Functions `apps/functions/src/issues.ts`·`github.ts`, 규칙·템플릿 해석 `packages/shared`(`issues.ts`·`issueTemplate.ts`), 초안 `packages/reporter`, 웹 `apps/web/src/features/issues/`.
+구현돼 있고 qcard GitHub App(`qcard-bot`)도 등록했다. 운영에 배포하면 켜진다([dev/deploy.md](../dev/deploy.md#github-app-결함--이슈-발행), [roadmap.md](../roadmap.md#github-이슈-발행)). 코드는 Functions `apps/functions/src/issues.ts`·`github.ts`, 규칙·템플릿 해석 `packages/shared`(`issues.ts`·`issueTemplate.ts`), 초안 `packages/reporter`, 웹 `apps/web/src/features/issues/`.
 
 ## 흐름
 
