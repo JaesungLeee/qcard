@@ -8,3 +8,5 @@ export * from './accounts';
 export * from './cycles';
 export * from './prepFlows';
 export * from './runLimits';
+export * from './issueTemplate';
+export * from './issues';

@@ -50,6 +50,25 @@ const sections: LegalSection[] = [
     ),
   },
   {
+    heading: 'GitHub 이슈 연동',
+    body: (
+      <ul>
+        <li>
+          프로젝트 Admin은 qcard GitHub App으로 GitHub 저장소를 연결할 수 있습니다. 연결하려면 그 저장소에 접근할 권한이
+          있어야 합니다.
+        </li>
+        <li>
+          이슈는 qcard GitHub App(<code>qcard-bot[bot]</code>) 이름으로 만들어지고, 본문에 발행한 이용자의 GitHub
+          사용자명이 남습니다. 무엇을 발행할지, 공개 저장소에 발행해도 되는지는 발행하는 이용자가 판단합니다.
+        </li>
+        <li>
+          발행한 이슈는 GitHub의 약관을 따르며 qcard가 지우지 못합니다. Claude가 쓴 초안은 틀릴 수 있으니 발행 전에
+          확인하세요.
+        </li>
+      </ul>
+    ),
+  },
+  {
     heading: 'Agent 실행',
     body: (
       <ul>
@@ -93,8 +112,8 @@ const sections: LegalSection[] = [
     body: (
       <p>
         qcard는 서비스를 있는 그대로 제공합니다. qcard의 고의나 중대한 과실이 없는 한, Agent의 판정 오류, 디바이스나 앱
-        데이터의 변경, 이용자의 Claude 플랜 사용량, 이용자 PC·Anthropic 등 qcard 밖에서 생긴 손해에 책임을 지지
-        않습니다.
+        데이터의 변경, 이용자의 Claude 플랜 사용량, 발행한 GitHub 이슈의 내용, 이용자 PC·Anthropic·GitHub 등 qcard
+        밖에서 생긴 손해에 책임을 지지 않습니다.
       </p>
     ),
   },

@@ -61,3 +61,28 @@ export function ErrorMessage({ error, title = '할 수 없습니다' }: { error:
     </SectionMessage>
   );
 }
+
+/** 설정 화면의 섹션 카드 */
+export function Section({
+  title,
+  icon,
+  children,
+  className = '',
+}: {
+  title: string;
+  icon: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`qp-card ${className}`} aria-label={title}>
+      <div className="qp-card-head">
+        {icon}
+        <h2 className={textClass('headline2', 'bold')}>{title}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export const SECTION_ICON = { width: 20, height: 20 };

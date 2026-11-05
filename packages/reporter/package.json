@@ -1,0 +1,24 @@
+{
+  "name": "@qcard/reporter",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@qcard/llm": "workspace:*",
+    "@qcard/shared": "workspace:*",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "0.131.0",
+    "@qcard/fixtures": "workspace:*",
+    "@types/node": "24.19.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}

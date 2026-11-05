@@ -5,7 +5,7 @@
 
 - [concepts.md](docs/concepts.md) — 용어·판정·데이터 모델
 - [architecture.md](docs/architecture.md) — 구성 요소·Agent 구조·기술 스택
-- [product/](docs/product/) — 기능별 동작 규칙: `qa-doc`·`prep-flows`(준비 플로우·테스트 계정)·`cycles`·`execution`(판정·위험 액션·안전장치·일시정지)·`console`·`results`(QA 시트·확정·결함)·`projects`
+- [product/](docs/product/) — 기능별 동작 규칙: `qa-doc`·`prep-flows`(준비 플로우·테스트 계정)·`cycles`·`execution`(판정·위험 액션·안전장치·일시정지)·`console`·`results`(QA 시트·확정·결함)·`issues`(GitHub 이슈 발행·동기화)·`projects`
 - [security.md](docs/security.md) — LLM 전송 경로·권한·비밀값·삭제
 - [spec-format.md](docs/spec-format.md) · [decisions.md](docs/decisions.md) · [roadmap.md](docs/roadmap.md)
 
@@ -15,21 +15,22 @@
 
 pnpm workspace + Turborepo, TypeScript 단일 언어.
 
-| 경로                | 내용                                                                                                                                                                              |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/web`          | 웹 대시보드(React 18 + Vite + react-router 7 + TanStack Query). `features/`: `qa-sheet`·`qa-doc`·`console`. `/__ui` 카탈로그                                                      |
-| `apps/functions`    | Cloud Functions(callable): 프로젝트·멤버·초대, 호스트 연결, 테스트 계정(KMS 봉인·배정), 사이클·준비 플로우 삭제. 예약: 삭제 유예 지난 프로젝트 영구 삭제. 보안 규칙은 `firebase/` |
-| `apps/host-agent`   | 실기기에서 사이클 실행 → Firestore·Storage 업로드, QA 문서 생성 작업 처리, 로컬 콘솔(`console/`). npm `@qcard/host`(명령 `qcard`)                                                 |
-| `packages/ui`       | 디자인 시스템 "Montage for qcard" — Montage 재수출, `--qc-*` 토큰, `VerdictBadge`                                                                                                 |
-| `packages/shared`   | 도메인 스키마(Zod, docs/concepts.md)·표시용 라벨·규칙(membership·테스트 계정·사이클 삭제·준비 플로우). Agent 도구·Verifier 출력 스키마는 `src/agent.ts`                           |
-| `packages/data`     | 데이터 접근 인터페이스 `QcardApi`, 공용 계산 `logic.ts`, Firestore 구현, 에뮬레이터 시드                                                                                          |
-| `packages/fixtures` | 가상 앱 하루콩의 온보딩 스펙(`spec/`)에서 만든 결정적 데이터와 목업 디바이스 화면(`screens.ts`)·합성 시나리오(`device.ts`)                                                        |
-| `packages/device`   | `DeviceDriver`, 접근성 트리 파서, `AdbDriver`·녹화(`@qcard/device/node`), `FakeDevice`                                                                                            |
-| `packages/llm`      | `LlmClient`, 실제 호출(본인 Claude Code `claude -p` = 기본 / API 키 = 개발용), 녹화·재생(cassette), 사용량·한도                                                                   |
-| `packages/agent`    | Executor 루프(`runSteps`), 검증 포인트 판정(`verifyPoints`·`settle`), 판정 집계(`judge`), 케이스 실행(`runCase`), `e2e/`                                                          |
-| `packages/spec`     | 스펙 파서(`spec.md` → 요구사항·TS/EC 행)와 버전 매칭(출처 ID, TC ID 이어받기). LLM 없음                                                                                           |
-| `packages/qadoc`    | QA Doc Generator: 스펙 묶음 + 이전 QA 문서 → 새 QA 문서. 결정적인 부분은 코드, 케이스 변환 등은 Opus(`prompts.ts`)                                                                |
-| `packages/apk`      | APK 매니페스트(패키지·버전)·서명 인증서 지문 읽기(브라우저·Node 공용). 테스트 APK는 `scripts/make-fixtures.sh`                                                                    |
+| 경로                | 내용                                                                                                                                                                                                                  |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`          | 웹 대시보드(React 18 + Vite + react-router 7 + TanStack Query). `features/`: `qa-sheet`·`qa-doc`·`console`·`issues`. `/__ui` 카탈로그                                                                                          |
+| `apps/functions`    | Cloud Functions(callable): 프로젝트·멤버·초대, 호스트 연결, 테스트 계정(KMS 봉인·배정), 사이클·준비 플로우 삭제, GitHub 이슈(App·웹훅, `issues.ts`). 예약: 삭제 유예 지난 프로젝트 영구 삭제. 보안 규칙은 `firebase/` |
+| `apps/host-agent`   | 실기기에서 사이클 실행 → Firestore·Storage 업로드, QA 문서 생성 작업 처리, 로컬 콘솔(`console/`). npm `@qcard/host`(명령 `qcard`)                                                                                     |
+| `packages/ui`       | 디자인 시스템 "Montage for qcard" — Montage 재수출, `--qc-*` 토큰, `VerdictBadge`                                                                                                                                     |
+| `packages/shared`   | 도메인 스키마(Zod, docs/concepts.md)·표시용 라벨·규칙(membership·테스트 계정·사이클 삭제·준비 플로우). Agent 도구·Verifier 출력 스키마는 `src/agent.ts`                                                               |
+| `packages/data`     | 데이터 접근 인터페이스 `QcardApi`, 공용 계산 `logic.ts`, Firestore 구현, 에뮬레이터 시드                                                                                                                              |
+| `packages/fixtures` | 가상 앱 하루콩의 온보딩 스펙(`spec/`)에서 만든 결정적 데이터와 목업 디바이스 화면(`screens.ts`)·합성 시나리오(`device.ts`)                                                                                            |
+| `packages/device`   | `DeviceDriver`, 접근성 트리 파서, `AdbDriver`·녹화(`@qcard/device/node`), `FakeDevice`                                                                                                                                |
+| `packages/llm`      | `LlmClient`, 실제 호출(본인 Claude Code `claude -p` = 기본 / API 키 = 개발용), 녹화·재생(cassette), 사용량·한도                                                                                                       |
+| `packages/agent`    | Executor 루프(`runSteps`), 검증 포인트 판정(`verifyPoints`·`settle`), 판정 집계(`judge`), 케이스 실행(`runCase`), `e2e/`                                                                                              |
+| `packages/spec`     | 스펙 파서(`spec.md` → 요구사항·TS/EC 행)와 버전 매칭(출처 ID, TC ID 이어받기). LLM 없음                                                                                                                               |
+| `packages/reporter` | Reporter: 결함·케이스 텍스트 + GitHub 이슈 템플릿 → 이슈 초안(Sonnet). 템플릿 해석·본문 조립은 `packages/shared`                                                                                                      |
+| `packages/qadoc`    | QA Doc Generator: 스펙 묶음 + 이전 QA 문서 → 새 QA 문서. 결정적인 부분은 코드, 케이스 변환 등은 Opus(`prompts.ts`)                                                                                                    |
+| `packages/apk`      | APK 매니페스트(패키지·버전)·서명 인증서 지문 읽기(브라우저·Node 공용). 테스트 APK는 `scripts/make-fixtures.sh`                                                                                                        |
 
 ## 명령
 

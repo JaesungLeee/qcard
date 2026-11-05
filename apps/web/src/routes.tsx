@@ -6,6 +6,7 @@ import { LiveConsolePage } from './features/console/live';
 import { ConsoleOpenPage } from './features/console/Open';
 import { GuidePage, SpecGuidePage } from './features/guide';
 import { ConnectHostPage, HostsPage } from './features/hosts';
+import { GithubCallbackPage } from './features/issues';
 import { PrivacyPage, TermsPage } from './features/legal';
 import { InvitePage, NewProjectPage, ProjectListPage, ProjectSettingsPage } from './features/projects';
 import { JobProgressPage, NewQaDocPage, PrepFlowPage, QaDocListPage, QaDocReviewPage } from './features/qa-doc';
@@ -19,6 +20,7 @@ import { LoginPage } from './shell/LoginPage';
  * - QA 시트: `?tab=summary|cases|defects|traceability|env`
  * - QA 문서 검토: `?tab=cases|questions|suggestions|traceability&case=<TC ID>`
  * - QA 문서 생성 작업: `?spec=<스펙>&row=<행 ID>&page=<행 페이지>&same=hide&log=<기록 페이지>`
+ * - GitHub 저장소 연결: GitHub App 설치·인가 뒤 `/github/callback?code&installation_id&state`로 돌아온다
  * - 로그인: `/login?next=<돌아갈 주소>`. 개인정보처리방침 `/privacy`·이용약관 `/terms`·시작 가이드 `/guide`도 로그인 없이 본다.
  *   나머지 화면은 모두 RequireAuth 아래에 둔다
  * - 로컬 콘솔 `/console/live`는 예외: 호스트의 콘솔 서버(127.0.0.1)가 웹 빌드를 직접 주고 일회용 주소·쿠키로 확인한다.
@@ -40,6 +42,7 @@ export const router = createBrowserRouter([
       { path: '/invite/:token', element: <InvitePage /> },
       { path: '/hosts', element: <HostsPage /> },
       { path: '/connect', element: <ConnectHostPage /> },
+      { path: '/github/callback', element: <GithubCallbackPage /> },
       {
         path: '/p/:projectId',
         element: <AppShell />,

@@ -7,6 +7,7 @@ import {
   cycleUsesFlows,
   deletion,
   invitationState,
+  ISSUE_DRAFTS,
   leaving,
   MembershipError,
   newInvitation,
@@ -51,6 +52,7 @@ import type { SecretBox } from './secretBox';
  *   projects/{p}/accounts/{id}               테스트 계정 (accounts.ts)
  *   projects/{p}/accountSecrets/{id}         테스트 계정 비밀값 (암호화, Functions만 읽는다)
  *   projects/{p}/secretAccessLog/{id}        비밀값 전달 기록 (감사 로그)
+ *   issueLinks/{id} · githubConnects/{state}  GitHub 이슈 색인·저장소 연결 진행 (issues.ts)
  */
 
 /**
@@ -197,6 +199,7 @@ export async function purgeDeletedProjects(db: Firestore, now: string, removeFil
       await removeFiles(`projects/${doc.id}/`);
       const tokens = await db.collection('invitationTokens').where('projectId', '==', doc.id).get();
       await Promise.all(tokens.docs.map((t) => t.ref.delete()));
+      await removeIssueLinks(db, doc.id);
       await db.recursiveDelete(doc.ref);
       purged.push(doc.id);
     } catch (e) {
@@ -225,7 +228,23 @@ export async function deleteCycle(ctx: Ctx, data: unknown, removeFiles: RemoveFi
     if (!cycle.deletingAt) tx.update(ref, { deletingAt: now });
   });
   await removeFiles(`projects/${projectId}/cycles/${cycleId}/`);
+  await removeIssueLinks(ctx.db, projectId, cycleId);
+  // 이 사이클 결함의 이슈 초안 (결함·케이스 텍스트가 들어 있다). 프로젝트를 지울 때는 프로젝트 문서와 함께 지워진다
+  const drafts = await ctx.db
+    .collection(`projects/${projectId}/${ISSUE_DRAFTS}`)
+    .where('input.cycleId', '==', cycleId)
+    .get();
+  await Promise.all(drafts.docs.map((d) => d.ref.delete()));
   await ctx.db.recursiveDelete(ref);
+}
+
+/** 사이클·프로젝트를 지울 때 이슈 색인(`issueLinks`, issues.ts)도 지운다. GitHub 이슈는 지우지 않는다 */
+export async function removeIssueLinks(db: Firestore, projectId: string, cycleId?: string): Promise<number> {
+  let q = db.collection('issueLinks').where('projectId', '==', projectId);
+  if (cycleId) q = q.where('cycleId', '==', cycleId);
+  const snap = await q.get();
+  await Promise.all(snap.docs.map((d) => d.ref.delete()));
+  return snap.size;
 }
 
 const FlowId = ProjectId.extend({ docId: z.string().min(1), flowId: z.string().min(1) });

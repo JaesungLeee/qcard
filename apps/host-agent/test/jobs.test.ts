@@ -6,12 +6,23 @@ import { createFirebaseApi, writeAll } from '@qcard/data/firebase';
 import { seedDocs } from '@qcard/data/seed';
 import { GITHUB, PEOPLE } from '@qcard/fixtures';
 import { PlanLimitError, type LlmClient } from '@qcard/llm';
-import type { CaseReviseJob, QaDocJob } from '@qcard/shared';
+import { DEFAULT_ISSUE_TEMPLATE, type CaseReviseJob, type IssueDraftJob, type QaDocJob } from '@qcard/shared';
 import { fakeGeneratorLlm, fakeReviseLlm } from '@qcard/qadoc';
+import { fakeReporterLlm } from '@qcard/reporter';
 import { setLogLevel, type Firestore } from 'firebase/firestore';
 import type { FirebaseStorage } from 'firebase/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { claimJob, heartbeat, HOST_JOBS, pendingJobs, processJob, processReviseJob } from '../src';
+import {
+  claimJob,
+  failJob,
+  heartbeat,
+  HOST_JOBS,
+  pendingDrafts,
+  pendingJobs,
+  processDraftJob,
+  processJob,
+  processReviseJob,
+} from '../src';
 
 /*
  * QA 문서 생성 작업 (docs/product/qa-doc.md, docs/architecture.md): 웹이 스펙을 올려 작업을 만들고 → 요청자의 호스트가 받아 생성 → Firestore에 저장.
@@ -267,6 +278,47 @@ describe('QA 문서 생성 작업', () => {
     expect(paused).toMatchObject({ status: 'paused', error: { kind: 'plan_limit' } });
   });
 
+  it('이슈 초안: 결함·케이스 사본·빌드 텍스트로 초안을 만들어 작업 결과에 쓴다 (스크린샷은 넘기지 않는다)', async () => {
+    const qa = as(PEOPLE.qa);
+    const cref = { projectId: PROJECT, cycleId: 'cycle-130-1' };
+    const job = await qa.api.requestIssueDraft(cref, 'D-1', DEFAULT_ISSUE_TEMPLATE);
+    expect((await pendingDrafts(qa.db, qa.uid)).map((j) => j.id)).toEqual([job.id]);
+    // 작업 대기열에는 없다 — 이슈 초안을 모르는 예전 호스트가 QA 문서 생성으로 맡지 않게
+    expect(await pendingJobs(qa.db, qa.uid)).toEqual([]);
+    const fake = fakeReporterLlm({
+      title: '사용법 안내 스텝 3에서 뒤로가기 시 앱이 백그라운드로 감',
+      fields: [{ id: 's0', value: '뒤로가기 시 앱이 닫힌다', picked: [] }],
+    });
+    const running = (await claimJob(qa.db, job, 'pc', 'now')) as IssueDraftJob;
+    const done = await processDraftJob(qa.deps(fake.llm), running);
+    expect(done).toMatchObject({ status: 'done', result: { values: { s0: '뒤로가기 시 앱이 닫힌다' } } });
+    const prompt = fake.calls[0]!.messages[0]!.content as string;
+    expect(prompt).toContain('# 결함 D-1: 사용법 안내 스텝 3에서 뒤로가기 시 앱이 백그라운드로 감');
+    expect(prompt).toContain('앱 버전: 1.3.0 (빌드 130)');
+    expect(prompt).toMatch(/TC ID: TC-[A-Z]+-\d+ · 출처: onboarding-flow\/TS-034/);
+    expect(prompt).not.toMatch(/storage|screenshot|png/i);
+    expect(await qa.api.getIssueDraft(cref, 'D-1')).toMatchObject({ status: 'done' });
+    // 다른 멤버의 초안은 따로다
+    expect(await as(PEOPLE.lead).api.getIssueDraft(cref, 'D-1')).toBeUndefined();
+  });
+
+  it('이슈 초안: Claude Code를 쓸 수 없으면 대기열에 두지 않고 이유와 함께 실패로 남긴다', async () => {
+    const qa = as(PEOPLE.qa);
+    const cref = { projectId: PROJECT, cycleId: 'cycle-130-1' };
+    const job = await qa.api.requestIssueDraft(cref, 'D-1', DEFAULT_ISSUE_TEMPLATE);
+    const running = (await claimJob(qa.db, job, 'pc', 'now')) as IssueDraftJob;
+    await failJob(qa.db, running, 'Claude Code에 로그인하세요', 'later');
+    expect(await pendingDrafts(qa.db, qa.uid)).toEqual([]);
+    expect(await qa.api.getIssueDraft(cref, 'D-1')).toMatchObject({
+      status: 'failed',
+      error: { kind: 'failed', message: 'Claude Code에 로그인하세요' },
+    });
+    // 웹의 [다시 시도]로 다시 대기열에 넣을 수 있다
+    expect(await qa.api.requestIssueDraft(cref, 'D-1', DEFAULT_ISSUE_TEMPLATE)).toMatchObject({
+      status: 'queued',
+    });
+  });
+
   it('Viewer는 요청할 수 없고, 스펙 묶음은 만든 뒤 바꿀 수 없다', async () => {
     await expect(
       as(PEOPLE.planner).api.requestQaDoc(PROJECT, { appVersion: '2.0.0', files: FILES }),
@@ -290,6 +342,7 @@ describe('QA 문서 생성 작업', () => {
     const hostDb = env.authenticatedContext(lead.uid, { host: 'mbp' }).firestore() as unknown as Firestore;
     // 처리할 수 있는 작업 종류를 함께 보내 웹이 옛 호스트를 알아본다
     const beat = { id: 'mbp', name: 'MacBook Pro', lastSeen: '2026-10-22T10:00:00Z', jobs: HOST_JOBS };
+    expect(HOST_JOBS).toContain('issue_draft');
     await heartbeat(hostDb, lead.uid, beat);
     expect(await lead.api.myHosts()).toEqual([beat]);
     expect(await as(PEOPLE.qa).api.myHosts()).toEqual([]);

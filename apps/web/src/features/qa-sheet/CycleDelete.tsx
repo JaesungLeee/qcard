@@ -134,10 +134,14 @@ export function CycleDeleteMessage({ c }: { c: CycleDelete }) {
     defects: d.defects.length,
   };
   const judged = d.results.filter((r) => r.verdict !== 'nt').length;
+  // GitHub 이슈는 지우지 않는다 (docs/product/issues.md#삭제)
+  const issues = d.defects.filter((df) => df.issue && df.issue.link !== 'deleted').length;
   const build = d.cycle.origin === 'local_run' ? d.build.packageName : `${d.build.version} (${d.build.buildNumber})`;
   const notes = [
     `함께 지워지는 것: 결과 ${deleted.results}칸(판정 있음 ${judged}칸) · Run ${deleted.runs}개 · 결함 ${deleted.defects}건 · 판정 이력과 스크린샷 증거`,
-    `남는 것: 빌드 ${build} · QA 문서 v${d.doc.appVersion}`,
+    `남는 것: 빌드 ${build} · QA 문서 v${d.doc.appVersion}${
+      issues ? ` · 발행한 GitHub 이슈 ${issues}건(이슈 속 판정 추적 링크는 열리지 않게 됩니다)` : ''
+    }`,
     '잘못 만든 사이클을 지울 때 씁니다. 끝난 사이클은 지우지 말고 완료로 남겨 두세요 — 다음 사이클과 비교하는 기준이 됩니다.',
     `확인을 위해 사이클 이름 「${d.cycle.name}」을 입력하세요.`,
   ];

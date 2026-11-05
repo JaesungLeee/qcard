@@ -25,7 +25,7 @@ version() { node -p "require('./$1').version"; }
 # 각 앱이 (간접으로라도) 의존하는 워크스페이스 패키지. 의존을 바꾸면 여기도 바꾼다
 web_pkgs='apk|data|device|fixtures|shared|spec|ui'
 functions_pkgs='apk|data|device|fixtures|shared|spec'
-host_pkgs='agent|apk|data|device|fixtures|llm|qadoc|shared|spec'
+host_pkgs='agent|apk|data|device|fixtures|llm|qadoc|reporter|shared|spec'
 
 # 서비스(웹·Functions·규칙): 기준 커밋 이후. 테스트·문서만 바뀌면 배포하지 않는다
 changed=$(changed_since "$base")

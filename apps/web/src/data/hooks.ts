@@ -3,18 +3,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useRef } from 'react';
 import type {
   ConfirmVerdictInput,
+  ConnectReposInput,
   CycleRef,
   DefectPatch,
   DocRef,
   NewDefectInput,
   NewCycleInput,
   NewProjectInput,
+  PublishIssueInput,
   QcardApi,
   QuestionResolution,
   RequestQaDocInput,
   RequestRunInput,
 } from './api';
-import type { Role, RunLimits } from '@qcard/shared';
+import type { IssueTemplate, Role, RunLimits } from '@qcard/shared';
 
 export const ApiContext = createContext<QcardApi | null>(null);
 
@@ -48,6 +50,10 @@ export const keys = {
   hostConnections: ['hostConnections'] as const,
   builds: (projectId: string) => ['builds', projectId] as const,
   accounts: (projectId: string) => ['accounts', projectId] as const,
+  issueContext: (projectId: string) => ['issueContext', projectId] as const,
+  issueDraft: (projectId: string, cycleId: string, defectId: string) =>
+    ['issueDraft', projectId, cycleId, defectId] as const,
+  connectableRepos: (state: string) => ['connectableRepos', state] as const,
 };
 
 export function useProject(projectId: string) {
@@ -512,3 +518,90 @@ export const useClearAccountFlag = (projectId: string) =>
   useAccountMutation(projectId, (api, v: { id: string; flag: 'loginFailed' | 'quarantine' }) =>
     api.clearAccountFlag(projectId, v.id, v.flag),
   );
+
+// ---------------------------------------------------------------- GitHub 이슈 (docs/product/issues.md)
+
+/** 저장소 연결 시작·연결·해제, 담당자 매핑 저장. 바뀌면 프로젝트를 다시 읽는다 */
+export function useRepoSettings(projectId: string) {
+  const api = useApi();
+  const qc = useQueryClient();
+  const settled = () => void qc.invalidateQueries({ queryKey: keys.project(projectId) });
+  return {
+    start: useMutation({ mutationFn: () => api.startRepoConnect(projectId) }),
+    disconnect: useMutation({ mutationFn: () => api.disconnectRepo(projectId), onSettled: settled }),
+    assignees: useMutation({
+      mutationFn: (map: Record<string, string[]>) => api.setAssigneeMap(projectId, map),
+      onSettled: settled,
+    }),
+  };
+}
+
+/** GitHub에서 돌아온 뒤 고를 저장소 (같은 state로 다시 읽어도 처음 목록) */
+export function useConnectableRepos(input: ConnectReposInput) {
+  const api = useApi();
+  return useQuery({
+    queryKey: keys.connectableRepos(input.state),
+    queryFn: () => api.listConnectableRepos(input),
+    retry: false,
+    staleTime: Infinity,
+  });
+}
+
+export function useConnectRepo() {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { state: string; repoId: number; confirmPublic?: boolean }) => api.connectRepo(v),
+    onSuccess: (p) => void qc.invalidateQueries({ queryKey: keys.project(p.id) }),
+  });
+}
+
+/** 발행 팝업을 열 때마다 저장소 템플릿·라벨·지정 가능한 사람을 새로 읽는다 */
+export function useIssueContext(projectId: string, enabled: boolean) {
+  const api = useApi();
+  return useQuery({
+    queryKey: keys.issueContext(projectId),
+    queryFn: () => api.getIssueContext(projectId),
+    enabled,
+    staleTime: 0,
+    retry: false,
+  });
+}
+
+/** 이 결함의 내 마지막 초안. 대기·생성 중이면 2초마다 다시 읽는다 */
+export function useIssueDraft(ref: CycleRef, defectId: string, enabled: boolean) {
+  const api = useApi();
+  return useQuery({
+    queryKey: keys.issueDraft(ref.projectId, ref.cycleId, defectId),
+    queryFn: async () => (await api.getIssueDraft(ref, defectId)) ?? null,
+    enabled,
+    refetchInterval: (q) => {
+      const s = q.state.data?.status;
+      return s === 'queued' || s === 'running' ? 2000 : false;
+    },
+  });
+}
+
+export function useRequestIssueDraft(ref: CycleRef, defectId: string) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    // 다시 시도도 같은 요청이다 (결함·요청자마다 id가 정해져 있어 이전 초안을 덮어쓴다)
+    mutationFn: async (v: { template: IssueTemplate }) => {
+      await api.requestIssueDraft(ref, defectId, v.template);
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: keys.issueDraft(ref.projectId, ref.cycleId, defectId) }),
+  });
+}
+
+export function usePublishIssue(ref: CycleRef) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: PublishIssueInput) => api.publishIssue(input),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: keys.cycle(ref.projectId, ref.cycleId) });
+      void qc.invalidateQueries({ queryKey: keys.project(ref.projectId) });
+    },
+  });
+}

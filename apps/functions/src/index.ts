@@ -3,12 +3,17 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import { setGlobalOptions } from 'firebase-functions/v2';
-import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
+import { defineSecret } from 'firebase-functions/params';
+import { HttpsError, onCall, onRequest, type CallableRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { MembershipError } from '@qcard/shared';
 import * as acc from './accounts';
+import { SAMPLE_REPOS } from '@qcard/fixtures/github';
 import * as cells from './cells';
+import { githubApp, type GitHub } from './github';
+import { FakeGitHub } from './githubFake';
 import * as h from './handlers';
+import * as iss from './issues';
 import { kmsBox, localBox, type SecretBox } from './secretBox';
 
 /*
@@ -30,6 +35,34 @@ const secretBox = () =>
     ? localBox('qcard-emulator')
     : kmsBox(ACCOUNT_KMS_KEY, async () => (await applicationDefault().getAccessToken()).access_token));
 
+/**
+ * qcard GitHub App (docs/product/issues.md). 등록값 중 비밀이 아닌 것은 코드에, 비밀 키·클라이언트 비밀값·웹훅 비밀값은
+ * Secret Manager에 둔다. 등록 절차는 docs/dev/deploy.md. appId가 비어 있으면 GitHub 기능이 꺼진 것으로 본다
+ */
+const GITHUB_APP = { appId: '5619807', slug: 'qcard-bot', clientId: 'Iv23li7QSA6P0wpL3jnQ' };
+const GITHUB_SECRETS = {
+  privateKey: defineSecret('GITHUB_APP_PRIVATE_KEY'),
+  clientSecret: defineSecret('GITHUB_APP_CLIENT_SECRET'),
+  webhookSecret: defineSecret('GITHUB_WEBHOOK_SECRET'),
+};
+let github: GitHub | undefined;
+/** 에뮬레이터는 하루콩 가짜 저장소로 GitHub 없이 연결·발행 흐름을 돌린다 (인가 코드 `fake-dev`) */
+const githubOf = (): GitHub => {
+  if (github) return github;
+  if (emulator) {
+    const fake = new FakeGitHub(SAMPLE_REPOS);
+    fake.users.set('fake-dev', { login: 'fake-dev', repoIds: SAMPLE_REPOS.map((r) => r.repoId) });
+    return (github = fake);
+  }
+  if (!GITHUB_APP.appId) throw new HttpsError('failed-precondition', 'GitHub App이 아직 설정되지 않았습니다.');
+  return (github = githubApp({
+    ...GITHUB_APP,
+    privateKey: GITHUB_SECRETS.privateKey.value(),
+    clientSecret: GITHUB_SECRETS.clientSecret.value(),
+    webhookSecret: GITHUB_SECRETS.webhookSecret.value(),
+  }));
+};
+
 const CODE = { permission: 'permission-denied', rule: 'failed-precondition', not_found: 'not-found' } as const;
 
 const toHttps = (e: unknown) => (e instanceof MembershipError ? new HttpsError(CODE[e.kind], e.message) : e);
@@ -40,9 +73,13 @@ const toHttps = (e: unknown) => (e instanceof MembershipError ? new HttpsError(C
  */
 function call<T>(
   fn: (ctx: h.Ctx, data: unknown, req: CallableRequest) => Promise<T>,
-  opts: { allowHost?: boolean; timeoutSeconds?: number } = {},
+  opts: { allowHost?: boolean; timeoutSeconds?: number; secrets?: ReturnType<typeof defineSecret>[] } = {},
 ) {
-  return onCall({ ...(opts.timeoutSeconds ? { timeoutSeconds: opts.timeoutSeconds } : {}) }, async (req) => {
+  const options = {
+    ...(opts.timeoutSeconds ? { timeoutSeconds: opts.timeoutSeconds } : {}),
+    ...(opts.secrets ? { secrets: opts.secrets } : {}),
+  };
+  return onCall(options, async (req) => {
     if (!req.auth) throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
     const host = typeof req.auth.token.host === 'string' ? req.auth.token.host : undefined;
     if (host && !opts.allowHost)
@@ -102,6 +139,48 @@ export const releaseAccount = call(acc.releaseAccount, { allowHost: true });
 
 // 칸 자동 선점: 케이스를 시작하기 전에 실행 중인 호스트가 부른다
 export const claimCell = call(cells.claimCell, { allowHost: true });
+
+// GitHub 이슈 발행·상태 동기화 (issues.ts). 사람만 부른다
+const withGithub =
+  (fn: (ctx: iss.IssueCtx, data: unknown) => Promise<unknown>) =>
+  (ctx: h.Ctx, data: unknown) =>
+    fn({ ...ctx, gh: githubOf() }, data);
+const ghSecrets = Object.values(GITHUB_SECRETS);
+export const startRepoConnect = call(withGithub(iss.startRepoConnect), { secrets: ghSecrets });
+export const listConnectableRepos = call(withGithub(iss.listConnectableRepos), { secrets: ghSecrets });
+export const connectRepo = call(withGithub(iss.connectRepo), { secrets: ghSecrets });
+export const disconnectRepo = call(withGithub(iss.disconnectRepo), { secrets: ghSecrets });
+export const setAssigneeMap = call(withGithub(iss.setAssigneeMap), { secrets: ghSecrets });
+export const getIssueContext = call(withGithub(iss.getIssueContext), { secrets: ghSecrets });
+export const publishIssue = call(withGithub(iss.publishIssue), { secrets: ghSecrets });
+export const setDefectStatus = call(withGithub(iss.setDefectStatus), { secrets: ghSecrets });
+
+/** App 웹훅: 서명(X-Hub-Signature-256)을 확인한 요청만 처리한다. GitHub는 실패한 전달을 다시 보내지 않는다 */
+export const githubWebhook = onRequest({ secrets: ghSecrets }, async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).send('POST only');
+    return;
+  }
+  const gh = githubOf();
+  if (!gh.verifyWebhook(req.rawBody, req.get('x-hub-signature-256'))) {
+    res.status(401).send('bad signature');
+    return;
+  }
+  try {
+    const out = await iss.handleWebhook(
+      getFirestore(),
+      req.get('x-github-event') ?? '',
+      req.body,
+      new Date().toISOString(),
+      `${GITHUB_APP.slug}[bot]`,
+    );
+    console.log(`github webhook: ${out}`);
+    res.status(200).send(out);
+  } catch (e) {
+    console.error('github webhook 실패', e);
+    res.status(500).send('error');
+  }
+});
 
 /**
  * 삭제 유예(30일)가 지난 프로젝트 영구 삭제. 스크린샷이 많으면 오래 걸려 제한 시간을 최대로 둔다 —

@@ -1,4 +1,5 @@
-// ③ 결함 목록 (docs/product/results.md). Admin·QA는 심각도·상태를 그 자리에서 바꾼다. 결함은 판정 추적 뷰의 Fail 칸에서 등록한다
+// ③ 결함 목록 (docs/product/results.md). Admin·QA는 심각도·상태를 그 자리에서 바꾸고 GitHub 이슈로 발행한다
+// (docs/product/issues.md). 결함은 판정 추적 뷰의 Fail 칸에서 등록한다
 import { SEVERITY_LABEL, Severity, type Defect } from '@qcard/shared';
 import {
   ContentBadge,
@@ -17,6 +18,7 @@ import {
 import { Link } from 'react-router';
 import { fmtDateTime } from '../../components/format';
 import { useMyRole, useUpdateDefect } from '../../data/hooks';
+import { IssueCell } from '../issues/IssueCell';
 import { ErrorMessage } from '../projects/parts';
 import { resultKey } from './model';
 import { Mono, OsBuild, TabBody, traceUrl } from './parts';
@@ -47,7 +49,7 @@ export function DefectsTab({ d, index, projectId }: SheetProps) {
       <ErrorMessage error={update.error} title="결함을 바꾸지 못했습니다" />
       <div className="qc-card" style={{ padding: 0 }}>
         <div className="qs-scroll-x">
-          <Table sx={{ minWidth: 1200 }}>
+          <Table sx={{ minWidth: 1320 }}>
             <TableHead>
               <TableRow>
                 <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>결함 ID</TableHeadCell>
@@ -58,6 +60,7 @@ export function DefectsTab({ d, index, projectId }: SheetProps) {
                 <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>재현 절차</TableHeadCell>
                 <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>기대 / 실제 결과</TableHeadCell>
                 <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>상태</TableHeadCell>
+                <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>GitHub 이슈</TableHeadCell>
                 <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>등록</TableHeadCell>
               </TableRow>
             </TableHead>
@@ -150,6 +153,9 @@ export function DefectsTab({ d, index, projectId }: SheetProps) {
                           {DEFECT_STATUS_LABEL[df.status]}
                         </ContentBadge>
                       )}
+                    </TableCell>
+                    <TableCell sx={{ verticalAlign: 'top' }}>
+                      <IssueCell projectId={projectId} cycle={d.cycle} defect={df} cases={d.cases} canEdit={canEdit} />
                     </TableCell>
                     <TableCell sx={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
                       {df.createdBy ? (

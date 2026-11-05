@@ -1,7 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
 /** 호출 목적. 사용량을 역할별로 나눠 보고, 녹화 파일에도 남긴다. */
-export type LlmRole = 'executor' | 'verifier' | 'locator' | 'helper' | 'generator';
+export type LlmRole = 'executor' | 'verifier' | 'locator' | 'helper' | 'generator' | 'reporter';
 export type LlmCallMeta = { role: LlmRole; caseId?: string };
 
 export type LlmRequest = Anthropic.MessageCreateParamsNonStreaming;
@@ -31,12 +31,15 @@ export const MODELS: Record<LlmRole, string> = {
   helper: 'claude-haiku-5-5',
   /** QA Doc Generator */
   generator: 'claude-opus-5-5',
+  /** Reporter: 결함 → 이슈 초안 */
+  reporter: 'claude-sonnet-5-5',
 };
 
 /** 작업 종류별로 부르는 모델. 시작 전에 Claude Code가 이 모델들을 지원하는 버전인지 본다 */
 export const MODELS_FOR = {
   run: [...new Set([MODELS.executor, MODELS.verifier, MODELS.locator])],
   qadoc: [MODELS.generator],
+  reporter: [MODELS.reporter],
 } as const satisfies Record<string, readonly string[]>;
 
 /**
