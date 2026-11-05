@@ -191,3 +191,11 @@
     padding: var(--qc-space-16);
   }
 }
+
+/* 약관 변경 공지: 비어 있으면 자리를 차지하지 않는다 */
+.qc-policy-notice {
+  padding-bottom: 0;
+}
+.qc-policy-notice:empty {
+  display: none;
+}
