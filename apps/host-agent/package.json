@@ -25,6 +25,7 @@
     "@qcard/fixtures": "workspace:*",
     "@qcard/llm": "workspace:*",
     "@qcard/qadoc": "workspace:*",
+    "@qcard/reporter": "workspace:*",
     "@qcard/shared": "workspace:*",
     "@qcard/spec": "workspace:*",
     "firebase": "13.0.0",
