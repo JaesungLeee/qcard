@@ -167,7 +167,13 @@ export const githubWebhook = onRequest({ secrets: ghSecrets }, async (req, res) 
     return;
   }
   try {
-    const out = await iss.handleWebhook(getFirestore(), req.get('x-github-event') ?? '', req.body, new Date().toISOString());
+    const out = await iss.handleWebhook(
+      getFirestore(),
+      req.get('x-github-event') ?? '',
+      req.body,
+      new Date().toISOString(),
+      `${GITHUB_APP.slug}[bot]`,
+    );
     console.log(`github webhook: ${out}`);
     res.status(200).send(out);
   } catch (e) {

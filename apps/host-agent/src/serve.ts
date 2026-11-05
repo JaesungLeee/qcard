@@ -36,14 +36,17 @@ import {
   type ClaudeCodeStatus,
   type LlmClient,
 } from '@qcard/llm';
+import { ISSUE_DRAFTS } from '@qcard/shared';
 import { collectionGroup, onSnapshot, query, where } from 'firebase/firestore';
 import { HostDisconnectedError, openHostSession, targetFromEnv } from './connect';
 import { attachScreen, ConsoleService, launchConsole, type OnDemandScreen } from './console';
 import { RESTORED, restoreAwake } from './awake';
 import {
   claimJob,
+  failJob,
   heartbeat,
   HOST_JOBS,
+  pendingDrafts,
   pendingJobs,
   processDraftJob,
   processJob,
@@ -299,14 +302,20 @@ async function drainDrafts() {
   try {
     for (;;) {
       draftAgain = false;
-      const job = (await pendingJobs(db, user.uid)).find((j) => j.kind === 'issue_draft');
+      const [job] = await pendingDrafts(db, user.uid);
       if (!job) {
         if (draftAgain) continue;
         break;
       }
-      if (claudeCodeProblem(await readClaude(), MODELS_FOR.reporter)) break;
+      const problem = claudeCodeProblem(await readClaude(), MODELS_FOR.reporter);
       const running = await claimJob(db, job, host.name, new Date().toISOString());
       if (running?.kind !== 'issue_draft') continue;
+      // 초안은 사람이 팝업에서 기다린다 — 대기열에 두지 않고 이유와 함께 실패로 남겨 [다시 시도]·[초안 없이 작성]을 고르게 한다
+      if (problem) {
+        await failJob(db, running, problem.message, new Date().toISOString());
+        console.log(`\n이슈 초안 ${running.input.defectId}을(를) 만들지 못했습니다: ${problem.message}`);
+        continue;
+      }
       console.log(`\n■ ${job.projectId} · 이슈 초안 ${running.input.defectId} (${job.id})`);
       const live = createLiveLlm(undefined, { turnTimeoutMs: 300_000 });
       try {
@@ -358,9 +367,15 @@ onSnapshot(
   (snap) => {
     const queued = snap.docChanges().filter((c) => c.doc.data().status === 'queued');
     if (queued.some((c) => c.doc.data().kind === 'run_cycle')) void startRuns();
-    if (queued.some((c) => c.doc.data().kind === 'issue_draft')) void drainDrafts();
     if (queued.some((c) => ['qa_doc_generate', 'case_revise'].includes(c.doc.data().kind as string))) void drain();
   },
   (e) => console.error(`작업 구독 실패: ${e.message}`),
+);
+onSnapshot(
+  query(collectionGroup(db, ISSUE_DRAFTS), where('requestedBy', '==', user.uid)),
+  (snap) => {
+    if (snap.docChanges().some((c) => c.doc.data().status === 'queued')) void drainDrafts();
+  },
+  (e) => console.error(`이슈 초안 구독 실패: ${e.message}`),
 );
 console.log('웹에서 요청한 작업을 기다립니다 (Ctrl+C로 종료)');

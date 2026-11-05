@@ -1,10 +1,9 @@
 import { SAMPLE_REPOS, type FixtureDb } from '@qcard/fixtures';
 import {
   canPublishIssue,
-  issueActionFor,
+  linkedStatusChange,
   issueDraftJobId,
   issueFieldLabel,
-  issueSyncs,
   normalizeAssigneeMap,
   parseIssueTemplate,
   pickAssignees,
@@ -65,6 +64,8 @@ export function memoryGithub(deps: Deps) {
   const repos = structuredClone(SAMPLE_REPOS);
   const nextNumber = new Map(repos.map((r) => [r.repoId, Math.max(0, ...(r.issues ?? []).map((i) => i.number)) + 1]));
   const connects = new Map<string, { projectId: string; uid: string }>();
+  /** 이슈 초안 작업 (Firestore의 `issueDrafts`처럼 작업 목록과 따로 둔다) */
+  const drafts = new Map<string, IssueDraftJob>();
 
   const repoOf = (repoId: number) => {
     const r = repos.find((x) => x.repoId === repoId);
@@ -136,23 +137,19 @@ export function memoryGithub(deps: Deps) {
   function changeLinkedStatus(ref: CycleRef, defectId: string, patch: DefectPatch): Defect | undefined {
     const { list, i, defect } = defectIn(ref, defectId);
     if (!defect.issue || !patch.status || patch.status === defect.status) return undefined;
-    let issue = defect.issue;
-    if (issueSyncs(project(ref.projectId), defect)) {
-      const action = issueActionFor(patch.status, issue.state, actor().github);
-      if (action.state) {
-        const { closeReason: _c, ...rest } = issue;
-        issue =
-          action.state.to === 'closed'
-            ? { ...rest, state: 'closed', closeReason: 'completed' }
-            : { ...rest, state: 'open' };
-      }
-    }
+    const { issue, change } = linkedStatusChange({
+      project: project(ref.projectId),
+      defect: { ...defect, issue: defect.issue },
+      to: patch.status,
+      by: actor(),
+      at: now(),
+    });
     const next: Defect = {
       ...defect,
       ...(patch.severity ? { severity: patch.severity } : {}),
       status: patch.status,
       issue,
-      statusLog: [...(defect.statusLog ?? []), { to: patch.status, by: actor().name, via: 'qcard', at: now() }],
+      statusLog: [...(defect.statusLog ?? []), change],
     };
     list[i] = next;
     deps.notify(ref);
@@ -246,18 +243,17 @@ export function memoryGithub(deps: Deps) {
         requireEditor(membersOf(ref.projectId), actor().uid);
         const { defect } = defectIn(ref, defectId);
         const job = issueDraftRequest(ref.projectId, ref, defect, template, actor(), now());
-        db.jobs = [job, ...db.jobs.filter((j) => j.id !== job.id)];
+        drafts.set(job.id, job);
         if (deps.hostOnline()) {
           setTimeout(() => {
-            const i = db.jobs.findIndex((j) => j.id === job.id && j.createdAt === job.createdAt);
-            if (i < 0) return;
-            db.jobs[i] = {
+            if (drafts.get(job.id) !== job) return;
+            drafts.set(job.id, {
               ...job,
               status: 'done',
               host: '이재성의 MacBook Pro',
               finishedAt: now(),
               result: sampleDraft(ref, defect, template),
-            };
+            });
           }, DRAFT_DELAY_MS);
         }
         return job;
@@ -266,7 +262,7 @@ export function memoryGithub(deps: Deps) {
     async getIssueDraft(ref, defectId) {
       return rules(() => {
         const id = issueDraftJobId(ref.cycleId, defectId, actor().uid);
-        return db.jobs.find((j): j is IssueDraftJob => j.id === id && j.kind === 'issue_draft');
+        return drafts.get(id);
       });
     },
     async publishIssue(input) {

@@ -1,4 +1,4 @@
-import type { Defect, DefectStatus, IssueCloseReason, Project } from './domain';
+import type { Defect, DefectIssue, DefectStatus, DefectStatusChange, IssueCloseReason, Project } from './domain';
 import type { IssueTemplateEntry } from './issueTemplate';
 
 /*
@@ -119,6 +119,30 @@ export function issueActionFor(to: DefectStatus, issueState: 'open' | 'closed', 
   }
 }
 
+/**
+ * qcard에서 이슈가 연결된 결함의 상태를 바꿀 때 (Functions setDefectStatus·메모리 구현 공용):
+ * 동기화 중이면 이슈에 할 일(`action`), 그 일이 성공한 뒤 결함에 쓸 이슈(`issue`)와 상태 기록(`change`)
+ */
+export function linkedStatusChange(input: {
+  project: Pick<Project, 'repo' | 'deletedAt'>;
+  defect: Pick<Defect, 'issue'> & { issue: DefectIssue };
+  to: DefectStatus;
+  by: { name: string; github: string };
+  at: string;
+}): { action?: IssueAction; issue: DefectIssue; change: DefectStatusChange } {
+  const { defect, to, by, at } = input;
+  const change: DefectStatusChange = { to, by: by.name, via: 'qcard', at };
+  if (!issueSyncs(input.project, defect)) return { issue: defect.issue, change };
+  const action = issueActionFor(to, defect.issue.state, by.github);
+  const { closeReason: _c, ...rest } = defect.issue;
+  const issue: DefectIssue = !action.state
+    ? defect.issue
+    : action.state.to === 'closed'
+      ? { ...rest, state: 'closed', closeReason: 'completed' }
+      : { ...rest, state: 'open' };
+  return { action, issue, change };
+}
+
 /** 이슈 색인 문서 id (`issueLinks/{id}`): 웹훅은 저장소 ID + 이슈 번호로 결함을 찾는다 */
 export const issueLinkId = (repoId: number, number: number) => `${repoId}_${number}`;
 
@@ -137,4 +161,10 @@ export type IssueContext = {
 };
 
 /** 이슈 초안 작업 id: 결함마다 요청자의 마지막 초안 하나만 남는다 */
+/**
+ * 이슈 초안 작업을 두는 하위 컬렉션 (`projects/{p}/issueDrafts/{id}`). 작업(`jobs`)과 따로 둔다 — 이슈 초안을 모르는
+ * 예전 호스트는 `jobs`에서 모르는 작업을 QA 문서 생성으로 맡는다
+ */
+export const ISSUE_DRAFTS = 'issueDrafts';
+
 export const issueDraftJobId = (cycleId: string, defectId: string, uid: string) => `draft-${cycleId}-${defectId}-${uid}`;

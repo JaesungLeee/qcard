@@ -246,6 +246,22 @@ describe('쓰기', () => {
       setDoc(doc(as('u-viewer'), 'projects/haru/jobs/j3'), { kind: 'qa_doc_generate', requestedBy: 'u-viewer' }),
     );
   });
+
+  it('이슈 초안은 작업과 따로, 요청자 본인만 읽고 쓴다', async () => {
+    const draft = (by: string) => ({ kind: 'issue_draft', requestedBy: by, status: 'queued' });
+    const at = (who: string) => doc(as(who), 'projects/haru/issueDrafts/d1');
+    await assertSucceeds(setDoc(at('u-qa'), draft('u-qa')));
+    await assertFails(setDoc(doc(as('u-qa'), 'projects/haru/issueDrafts/d2'), draft('u-admin')));
+    await assertFails(
+      setDoc(doc(as('u-qa'), 'projects/haru/issueDrafts/d3'), { ...draft('u-qa'), kind: 'qa_doc_generate' }),
+    );
+    await assertFails(setDoc(doc(as('u-viewer'), 'projects/haru/issueDrafts/d4'), draft('u-viewer')));
+    await assertSucceeds(getDoc(at('u-qa')));
+    await assertFails(getDoc(at('u-admin')));
+    await assertSucceeds(updateDoc(at('u-qa'), { status: 'running' }));
+    await assertFails(updateDoc(at('u-admin'), { status: 'running' }));
+    await assertFails(updateDoc(at('u-qa'), { requestedBy: 'u-admin' }));
+  });
 });
 
 describe('호스트 토큰', () => {
@@ -367,6 +383,15 @@ describe('결함', () => {
         ...defect,
         issue: { repoId: 1, repo: 'o/r', number: 3, url: 'u', state: 'open', link: 'linked' },
       }),
+    );
+    const at = doc(as('u-qa'), `${C}/defects/D-1`);
+    await assertFails(updateDoc(at, { status: 'closed' }));
+    await assertSucceeds(updateDoc(at, { severity: 'critical' }));
+  });
+
+  it('발행 중인 결함도 상태를 직접 바꾸지 못한다 (새 이슈와 어긋나지 않게)', async () => {
+    await env.withSecurityRulesDisabled((c) =>
+      setDoc(doc(c.firestore(), `${C}/defects/D-1`), { ...defect, publishing: { by: '김민지', at: 't' } }),
     );
     const at = doc(as('u-qa'), `${C}/defects/D-1`);
     await assertFails(updateDoc(at, { status: 'closed' }));

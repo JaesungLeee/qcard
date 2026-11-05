@@ -104,6 +104,19 @@ describe('저장소 연결', () => {
     await expectRule(iss.listConnectableRepos(ctx('qa'), { state }), 'rule', '만료');
   });
 
+  it('읽기 권한만 있는 저장소는 고를 수 없다 (triage 이상만)', async () => {
+    fake.users.set('code-reader', {
+      login: 'reader',
+      repoIds: [HARUKONG_REPO.repoId, HARUKONG_PUBLIC_REPO.repoId],
+      readOnly: [HARUKONG_REPO.repoId],
+    });
+    const { installUrl } = await iss.startRepoConnect(ctx('lead'), { projectId: P });
+    const state = new URL(installUrl).searchParams.get('state')!;
+    const list = await iss.listConnectableRepos(ctx('lead'), { state, code: 'code-reader' });
+    expect(list.repos.map((r) => r.name)).toEqual(['harukong-feedback']);
+    await expectRule(iss.connectRepo(ctx('lead'), { state, repoId: HARUKONG_REPO.repoId }), 'permission');
+  });
+
   it('확인하지 않은 저장소는 연결하지 않는다 (설치 ID만으로 연결하지 않는다)', async () => {
     const { installUrl } = await iss.startRepoConnect(ctx('lead'), { projectId: P });
     const state = new URL(installUrl).searchParams.get('state')!;
@@ -223,6 +236,29 @@ describe('발행', () => {
     expect(d.issue).toBeUndefined();
   });
 
+  it('이슈를 만든 뒤 결함 기록이 실패하면 발행 중 표시를 남겨 다시 발행하지 않게 한다', async () => {
+    await connect();
+    let commits = 0;
+    const flaky = new Proxy(db, {
+      get(target, key) {
+        if (key !== 'batch') return Reflect.get(target, key, target) as unknown;
+        return () => {
+          const b = target.batch();
+          return Object.assign(b, {
+            commit: () => (++commits, Promise.reject(new Error('unavailable'))),
+          });
+        };
+      },
+    });
+    await expectRule(iss.publishIssue({ ...ctx('qa'), db: flaky }, publishInput), 'rule', '다시 발행하지 말고');
+    expect(commits).toBe(3);
+    const d = await defect();
+    expect(d.issue).toBeUndefined();
+    expect(d.publishing?.by).toBe('김민지');
+    await expectRule(iss.publishIssue(ctx('lead'), publishInput), 'rule', '발행하고 있습니다');
+    expect(fake.repos.get(HARUKONG_REPO.repoId)!.issues.size).toBe(1);
+  });
+
   it('공개 저장소는 확인을 받아야 발행한다 (발행할 때의 공개 여부로)', async () => {
     await connect();
     fake.repos.get(HARUKONG_REPO.repoId)!.private = false;
@@ -300,7 +336,7 @@ describe('GitHub → qcard 웹훅', () => {
     issue: { number: 1, ...extra },
     sender: { login: 'dev-hana' },
   });
-  const hook = (name: string, payload: unknown) => iss.handleWebhook(db, name, payload, NOW);
+  const hook = (name: string, payload: unknown) => iss.handleWebhook(db, name, payload, NOW, 'qcard-bot[bot]');
 
   it('닫힘(completed)은 fixed, 다시 열림은 open, not planned는 closed', async () => {
     await connect();
@@ -327,6 +363,15 @@ describe('GitHub → qcard 웹훅', () => {
     const d = await defect();
     expect(d.status).toBe('closed');
     expect(d.statusLog).toHaveLength(1);
+  });
+
+  it('qcard App이 한 변경의 웹훅은 받지 않는다 (결함을 쓰기 전에 도착해도 기록이 꼬이지 않는다)', async () => {
+    await connect();
+    await iss.publishIssue(ctx('qa'), publishInput);
+    const echo = { ...event('closed', { state_reason: 'completed' }), sender: { login: 'qcard-bot[bot]' } };
+    expect(await hook('issues', echo)).toContain('qcard가 한 변경');
+    const d = await defect();
+    expect([d.status, d.statusLog]).toEqual(['open', undefined]);
   });
 
   it('삭제·이전은 연결 표시만 바꾸고, 그 뒤 이벤트는 받지 않는다', async () => {
@@ -365,6 +410,15 @@ describe('GitHub → qcard 웹훅', () => {
       repositories_removed: [{ id: 999 }],
     });
     expect((await project()).repo?.status).toBe('active');
+    await hook('installation', { action: 'deleted', installation: { id: 999 } });
+    expect((await project()).repo?.status).toBe('active');
+    await hook('installation_repositories', {
+      action: 'removed',
+      installation: { id: 77 },
+      repositories_removed: [{ id: HARUKONG_REPO.repoId }],
+    });
+    expect((await project()).repo?.status).toBe('broken');
+    await db.doc(`projects/${P}`).update({ 'repo.status': 'active' });
     await hook('installation', { action: 'deleted', installation: { id: 77 } });
     expect((await project()).repo?.status).toBe('broken');
   });

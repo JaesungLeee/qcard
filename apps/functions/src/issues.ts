@@ -1,12 +1,12 @@
 import { randomBytes } from 'node:crypto';
-import { FieldValue, type Firestore } from 'firebase-admin/firestore';
+import { FieldValue, type DocumentReference, type Firestore } from 'firebase-admin/firestore';
 import {
   canPublishIssue,
   DefectStatus,
-  issueActionFor,
   issueFooter,
   issueLinkId,
   issueSyncs,
+  linkedStatusChange,
   MAX_ISSUE_ASSIGNEES,
   normalizeAssigneeMap,
   parseIssueTemplate,
@@ -47,6 +47,8 @@ export type IssueCtx = Ctx & { gh: GitHub };
 const CONNECT_TTL_MS = 30 * 60_000;
 /** 발행 중 표시가 이보다 오래되면 실패한 것으로 보고 다시 발행을 허용한다 */
 const PUBLISH_LOCK_MS = 2 * 60_000;
+/** 만든 이슈를 결함에 기록하는 시도 횟수 */
+const LINK_ATTEMPTS = 3;
 
 type ConnectDoc = {
   projectId: string;
@@ -281,6 +283,7 @@ export async function publishIssue(ctx: IssueCtx, data: unknown): Promise<Defect
     return { project, cycle, defect, actor };
   });
   const repo = project.repo!;
+  let created: DefectIssue | undefined;
   try {
     const info = await gh(() => markBrokenOn404(ctx, input.projectId, () => ctx.gh.repo(repo)));
     if (!info.private && !input.confirmPublic)
@@ -297,7 +300,7 @@ export async function publishIssue(ctx: IssueCtx, data: unknown): Promise<Defect
       }),
       requester: actor.github,
     });
-    const created = await gh(() =>
+    const made = await gh(() =>
       ctx.gh.createIssue(repo, {
         title: input.title.trim(),
         body: withIssueFooter(input.body, footer),
@@ -308,28 +311,54 @@ export async function publishIssue(ctx: IssueCtx, data: unknown): Promise<Defect
     const issue: DefectIssue = {
       repoId: repo.repoId,
       repo: `${info.owner}/${info.name}`,
-      number: created.number,
-      url: created.url,
-      state: created.state,
+      number: made.number,
+      url: made.url,
+      state: made.state,
       link: 'linked',
       publishedBy: actor.name,
       publishedAt: now,
     };
-    const batch = ctx.db.batch();
-    batch.update(dRef, { issue, publishing: FieldValue.delete() });
-    batch.set(linkRef(ctx.db, repo.repoId, created.number), {
+    created = issue;
+    await linkIssue(ctx.db, dRef, issue, {
       projectId: input.projectId,
       cycleId: input.cycleId,
       defectId: defect.id,
       repoId: repo.repoId,
-      number: created.number,
-    } satisfies IssueLinkDoc);
-    await batch.commit();
+      number: issue.number,
+    });
     const { publishing: _p, ...rest } = defect;
     return { ...rest, issue };
   } catch (e) {
-    await dRef.update({ publishing: FieldValue.delete() }).catch(() => undefined);
+    // 이슈를 만든 뒤에는 발행 중 표시를 풀지 않는다 — 풀면 다시 발행해 이슈가 둘 생긴다
+    if (!created) await dRef.update({ publishing: FieldValue.delete() }).catch(() => undefined);
     throw e;
+  }
+}
+
+/** 만든 이슈를 결함에 연결하고 웹훅 색인을 남긴다. 일시적인 Firestore 오류는 몇 번 다시 시도한다 */
+async function linkIssue(
+  db: Firestore,
+  dRef: DocumentReference,
+  issue: DefectIssue,
+  link: IssueLinkDoc,
+): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const batch = db.batch();
+      batch.update(dRef, { issue, publishing: FieldValue.delete() });
+      batch.set(linkRef(db, link.repoId, link.number), link);
+      await batch.commit();
+      return;
+    } catch (e) {
+      if (attempt >= LINK_ATTEMPTS) {
+        console.error(`이슈 연결 기록 실패: ${issue.repo}#${issue.number}`, e);
+        throw fail(
+          'rule',
+          `이슈 #${issue.number}을(를) 만들었지만 결함에 연결하지 못했습니다. 다시 발행하지 말고 ${issue.url}을 확인하세요.`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, 200 * attempt));
+    }
   }
 }
 
@@ -357,29 +386,32 @@ export async function setDefectStatus(ctx: IssueCtx, data: unknown): Promise<Def
     return { project, defect, actor };
   });
   if (defect.status === input.status) return defect;
-  let issueState = defect.issue?.state;
-  if (defect.issue && issueSyncs(project, defect)) {
-    const repo = project.repo!;
-    const action = issueActionFor(input.status, defect.issue.state, actor.github);
-    const number = defect.issue.number;
-    if (action.state) {
-      const { to, reason } = action.state;
-      await gh(() => ctx.gh.setIssueState(repo, number, to, reason));
-      issueState = to;
-    }
-    // 이슈 상태를 이미 바꿨으면 코멘트 실패로 되돌리지 않는다 (qcard도 같은 상태로 맞춘다)
-    await gh(() => ctx.gh.comment(repo, number, action.comment)).catch((e: unknown) => {
-      if (!action.state) throw e;
-      console.warn(`이슈 코멘트 실패 (상태는 반영함): ${repo.repoId}#${number}`, e);
-    });
-  }
-  const change: DefectStatusChange = { to: input.status, by: actor.name, via: 'qcard', at: nowOf(ctx) };
   const patch: Record<string, unknown> = { status: input.status };
   if (defect.issue) {
+    const { action, issue, change } = linkedStatusChange({
+      project,
+      defect: { ...defect, issue: defect.issue },
+      to: input.status,
+      by: actor,
+      at: nowOf(ctx),
+    });
+    if (action) {
+      const repo = project.repo!;
+      const number = defect.issue.number;
+      if (action.state) {
+        const { to, reason } = action.state;
+        await gh(() => ctx.gh.setIssueState(repo, number, to, reason));
+      }
+      // 이슈 상태를 이미 바꿨으면 코멘트 실패로 되돌리지 않는다 (qcard도 같은 상태로 맞춘다)
+      await gh(() => ctx.gh.comment(repo, number, action.comment)).catch((e: unknown) => {
+        if (!action.state) throw e;
+        console.warn(`이슈 코멘트 실패 (상태는 반영함): ${repo.repoId}#${number}`, e);
+      });
+    }
     patch.statusLog = FieldValue.arrayUnion(change);
-    if (issueState !== defect.issue.state) {
-      patch['issue.state'] = issueState;
-      patch['issue.closeReason'] = issueState === 'closed' ? 'completed' : FieldValue.delete();
+    if (issue.state !== defect.issue.state) {
+      patch['issue.state'] = issue.state;
+      patch['issue.closeReason'] = issue.closeReason ?? FieldValue.delete();
     }
   }
   await dRef.update(patch);
@@ -404,16 +436,27 @@ type Payload = {
  *   installation deleted·suspend, installation_repositories removed → 저장소 연결 끊김
  *   repository privatized·publicized → 공개 여부
  */
-export async function handleWebhook(db: Firestore, event: string, payload: unknown, now: string): Promise<string> {
+export async function handleWebhook(
+  db: Firestore,
+  event: string,
+  payload: unknown,
+  now: string,
+  botLogin: string,
+): Promise<string> {
   const p = payload as Payload;
-  if (event === 'issues' && p.repository && p.issue) return issueEvent(db, p, now);
+  if (event === 'issues' && p.repository && p.issue) {
+    // qcard가 바꾼 이슈 상태의 메아리: setDefectStatus가 결함에 이미 반영했다. 받아들이면 결함을 쓰기 전에 도착한
+    // closed 이벤트가 open 결함을 fixed로 바꾸는 등 상태 기록이 꼬인다
+    if (p.sender?.login === botLogin) return `${p.repository.id}#${p.issue.number} ${p.action}: qcard가 한 변경`;
+    return issueEvent(db, p, now);
+  }
   if (event === 'installation' && p.installation && (p.action === 'deleted' || p.action === 'suspend')) {
-    const n = await markBroken(db, (r) => r.installationId === p.installation!.id);
+    const n = await markBroken(db, p.installation.id, () => true);
     return `installation ${p.action}: 끊김 ${n}`;
   }
   if (event === 'installation_repositories' && p.action === 'removed' && p.installation) {
     const removed = new Set((p.repositories_removed ?? []).map((r) => r.id));
-    const n = await markBroken(db, (r) => r.installationId === p.installation!.id && removed.has(r.repoId));
+    const n = await markBroken(db, p.installation.id, (r) => removed.has(r.repoId));
     return `repositories removed: 끊김 ${n}`;
   }
   if (event === 'repository' && p.repository && (p.action === 'privatized' || p.action === 'publicized')) {
@@ -424,9 +467,17 @@ export async function handleWebhook(db: Firestore, event: string, payload: unkno
   return `무시: ${event}.${p.action ?? ''}`;
 }
 
-async function markBroken(db: Firestore, match: (r: ProjectRepo) => boolean): Promise<number> {
-  const snap = await db.collection('projects').where('repo.status', '==', 'active').get();
-  const hits = snap.docs.filter((d) => match((d.data() as Project).repo!));
+/** 그 설치로 연결한 프로젝트만 읽어 끊김으로 표시한다 */
+async function markBroken(
+  db: Firestore,
+  installationId: number,
+  match: (r: ProjectRepo) => boolean,
+): Promise<number> {
+  const snap = await db.collection('projects').where('repo.installationId', '==', installationId).get();
+  const hits = snap.docs.filter((d) => {
+    const repo = (d.data() as Project).repo;
+    return repo?.status === 'active' && match(repo);
+  });
   await Promise.all(hits.map((d) => d.ref.update({ 'repo.status': 'broken' })));
   return hits.length;
 }

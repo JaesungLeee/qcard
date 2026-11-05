@@ -586,9 +586,9 @@ export function useRequestIssueDraft(ref: CycleRef, defectId: string) {
   const api = useApi();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (v: { template: IssueTemplate } | { retryJobId: string }) => {
-      if ('retryJobId' in v) await api.retryJob(ref.projectId, v.retryJobId);
-      else await api.requestIssueDraft(ref, defectId, v.template);
+    // 다시 시도도 같은 요청이다 (결함·요청자마다 id가 정해져 있어 이전 초안을 덮어쓴다)
+    mutationFn: async (v: { template: IssueTemplate }) => {
+      await api.requestIssueDraft(ref, defectId, v.template);
     },
     onSettled: () => void qc.invalidateQueries({ queryKey: keys.issueDraft(ref.projectId, ref.cycleId, defectId) }),
   });

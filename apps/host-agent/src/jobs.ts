@@ -4,6 +4,7 @@ import { generateQaDoc, reviseCase, type GenerateProgress } from '@qcard/qadoc';
 import { draftIssue } from '@qcard/reporter';
 import {
   hash,
+  ISSUE_DRAFTS,
   type Build,
   type CaseReviseJob,
   type Defect,
@@ -63,7 +64,8 @@ export type JobDeps = {
 /** 이 호스트가 처리하는 작업 종류. 연결 신호에 실어 보내 웹이 옛 호스트를 알아본다 (Host.jobs) */
 export const HOST_JOBS: Job['kind'][] = ['qa_doc_generate', 'run_cycle', 'case_revise', 'issue_draft'];
 
-const jobRef = (db: Firestore, j: Pick<Job, 'projectId' | 'id'>) => doc(db, 'projects', j.projectId, 'jobs', j.id);
+const jobRef = (db: Firestore, j: Pick<Job, 'projectId' | 'id' | 'kind'>) =>
+  doc(db, 'projects', j.projectId, j.kind === 'issue_draft' ? ISSUE_DRAFTS : 'jobs', j.id);
 /** Firestore는 undefined를 저장하지 못한다 */
 const clean = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
@@ -78,6 +80,15 @@ export async function pendingJobs(db: Firestore, uid: string): Promise<Job[]> {
     .map((d) => d.data() as Job)
     .filter((j) => j.status === 'queued')
     .sort((a, b) => rank(a) - rank(b) || (a.createdAt < b.createdAt ? -1 : 1));
+}
+
+/** 내 이슈 초안 대기열 (작업과 따로 둔다 — `ISSUE_DRAFTS`). 오래된 것부터 */
+export async function pendingDrafts(db: Firestore, uid: string): Promise<IssueDraftJob[]> {
+  const snap = await getDocs(query(collectionGroup(db, ISSUE_DRAFTS), where('requestedBy', '==', uid)));
+  return snap.docs
+    .map((d) => d.data() as IssueDraftJob)
+    .filter((j) => j.status === 'queued')
+    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
 }
 
 /** 대기 → 생성 중. 다른 호스트(같은 사용자의 다른 PC)가 먼저 가져갔으면 undefined */
@@ -298,6 +309,13 @@ export async function processReviseJob(deps: JobDeps, job: CaseReviseJob): Promi
  * 이슈 초안 작업 하나를 처리한다 (docs/product/issues.md#초안): 결함·케이스 사본·빌드·대상 디바이스 텍스트와
  * 웹이 넘긴 템플릿으로 초안을 만들어 작업 결과에 쓴다. 스크린샷·화면 구조는 읽지도 넘기지도 않는다
  */
+/** 맡은 작업을 시작하지 못하고 실패로 남긴다 (웹에서 이유를 보고 다시 요청한다) */
+export async function failJob<J extends Job>(db: Firestore, job: J, message: string, now: string): Promise<J> {
+  const next = { ...job, status: 'failed', finishedAt: now, error: { kind: 'failed', message } } as J;
+  await setDoc(jobRef(db, job), clean(next));
+  return next;
+}
+
 export async function processDraftJob(deps: JobDeps, job: IssueDraftJob): Promise<Job> {
   const { db } = deps;
   const now = deps.now ?? (() => new Date().toISOString());

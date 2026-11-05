@@ -19,8 +19,8 @@ export type FakeIssue = {
 
 export class FakeGitHub implements GitHub {
   readonly repos = new Map<number, Omit<SampleRepo, 'issues'> & { issues: Map<number, FakeIssue> }>();
-  /** 인가 코드 → 사용자명과 접근할 수 있는 저장소 id */
-  readonly users = new Map<string, { login: string; repoIds: number[] }>();
+  /** 인가 코드 → 사용자명과 접근할 수 있는 저장소 id (readOnly: 읽기 권한만 있는 저장소) */
+  readonly users = new Map<string, { login: string; repoIds: number[]; readOnly?: number[] }>();
   /** 다음 호출에서 던질 오류 (메서드 이름 → 오류) */
   readonly failNext = new Map<keyof GitHub, Error>();
   readonly webhookSecret = 'fake-webhook-secret';
@@ -77,6 +77,7 @@ export class FakeGitHub implements GitHub {
     const repos = user.repoIds
       .map((id) => this.repos.get(id))
       .filter((r) => !!r && (installationId === undefined || r.installationId === installationId))
+      .filter((r) => !user.readOnly?.includes(r!.repoId))
       .map((r) => ({
         installationId: r!.installationId,
         repoId: r!.repoId,

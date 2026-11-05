@@ -7,6 +7,7 @@ import {
   cycleUsesFlows,
   deletion,
   invitationState,
+  ISSUE_DRAFTS,
   leaving,
   MembershipError,
   newInvitation,
@@ -228,6 +229,12 @@ export async function deleteCycle(ctx: Ctx, data: unknown, removeFiles: RemoveFi
   });
   await removeFiles(`projects/${projectId}/cycles/${cycleId}/`);
   await removeIssueLinks(ctx.db, projectId, cycleId);
+  // 이 사이클 결함의 이슈 초안 (결함·케이스 텍스트가 들어 있다). 프로젝트를 지울 때는 프로젝트 문서와 함께 지워진다
+  const drafts = await ctx.db
+    .collection(`projects/${projectId}/${ISSUE_DRAFTS}`)
+    .where('input.cycleId', '==', cycleId)
+    .get();
+  await Promise.all(drafts.docs.map((d) => d.ref.delete()));
   await ctx.db.recursiveDelete(ref);
 }
 

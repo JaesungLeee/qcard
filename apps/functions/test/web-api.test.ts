@@ -549,6 +549,13 @@ describe('GitHub 이슈 (메모리 구현과 같은 결과)', () => {
     expect(fakeGithub.issue(1001, 12)).toMatchObject({ state: 'open', comments: ['QA에서 다시 열림 (@minji-kim)'] });
   });
 
+  it('발행 중인 결함의 상태 변경은 이유와 함께 거절한다 (말없이 버리지 않는다)', async () => {
+    await admin.doc('projects/haru/cycles/cycle-130-1/defects/D-1').update({ publishing: { by: '이재성', at: 't' } });
+    await expect(apiAs(PEOPLE.qa).updateDefect(cref, 'D-1', { status: 'closed' })).rejects.toThrow('발행하고 있습니다');
+    const d = (await admin.doc('projects/haru/cycles/cycle-130-1/defects/D-1').get()).data();
+    expect(d?.status).toBe('open');
+  });
+
   it('초안 요청·발행', async () => {
     const fb = apiAs(PEOPLE.qa);
     const mem = createMemoryApi({ currentUser: PEOPLE.qa });

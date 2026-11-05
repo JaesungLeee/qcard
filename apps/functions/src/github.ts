@@ -142,8 +142,21 @@ export function githubApp(cfg: GitHubAppConfig, fetchFn: Fetch = fetch): GitHub 
     return out;
   }
 
-  type ApiRepo = { id: number; name: string; private: boolean; owner: { login: string }; default_branch: string };
+  type ApiRepo = {
+    id: number;
+    name: string;
+    private: boolean;
+    owner: { login: string };
+    default_branch: string;
+    /** 사용자 토큰으로 읽을 때만 온다: 그 사용자의 저장소 권한 */
+    permissions?: { admin?: boolean; maintain?: boolean; push?: boolean; triage?: boolean };
+  };
   const repoPath = (r: RepoRef) => `/repositories/${r.repoId}`;
+  /** 연결하는 사람이 GitHub에서 직접 이슈를 닫고 열 수 있는(triage 이상) 저장소만 연결할 수 있다 */
+  const canTriage = (r: ApiRepo) =>
+    !!(r.permissions?.admin || r.permissions?.maintain || r.permissions?.push || r.permissions?.triage);
+  /** contents API 경로: 파일 이름의 `#`·`?`·공백 등을 경로 조각마다 인코딩한다 */
+  const contentsPath = (path: string) => path.split('/').map(encodeURIComponent).join('/');
 
   return {
     installUrl: (state) => `https://github.com/apps/${cfg.slug}/installations/new?state=${encodeURIComponent(state)}`,
@@ -178,7 +191,7 @@ export function githubApp(cfg: GitHubAppConfig, fetchFn: Fetch = fetch): GitHub 
           (p) => (p as { repositories: ApiRepo[] }).repositories,
         );
         repos.push(
-          ...list.map((r) => ({
+          ...list.filter(canTriage).map((r) => ({
             installationId: id,
             repoId: r.id,
             owner: r.owner.login,
@@ -207,7 +220,7 @@ export function githubApp(cfg: GitHubAppConfig, fetchFn: Fetch = fetch): GitHub 
       return Promise.all(
         files.map(async (f) => ({
           path: f.path,
-          content: await call<string>(`${repoPath(r)}/contents/${f.path}?ref=${encodeURIComponent(ref)}`, token, {
+          content: await call<string>(`${repoPath(r)}/contents/${contentsPath(f.path)}?ref=${encodeURIComponent(ref)}`, token, {
             raw: true,
           }),
         })),

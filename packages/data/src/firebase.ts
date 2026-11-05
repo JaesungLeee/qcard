@@ -3,6 +3,7 @@ import {
   accountState,
   cycleUsesFlows,
   issueDraftJobId,
+  ISSUE_DRAFTS,
   leaseLive,
   newPrepFlow,
   prepFlowChange,
@@ -684,25 +685,29 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
           return made.defect;
         }),
       ),
-    // 이슈가 연결된 결함의 상태는 이슈와 맞춰야 해서 Functions로 바꾼다 (보안 규칙이 직접 쓰기를 막는다)
+    // 이슈가 연결된 결함의 상태는 이슈와 맞춰야 해서 Functions로 바꾼다 (보안 규칙이 직접 쓰기를 막는다).
+    // 연결 여부는 트랜잭션 안에서 본다 — 읽은 뒤에 다른 사람이 발행했으면 상태 변경을 버리지 않고 Functions로 넘긴다
     updateDefect: (ref, defectId, patch) =>
-      guard(async () => {
+      guard(async (): Promise<Defect> => {
         const at = doc(db, P(ref.projectId), 'cycles', ref.cycleId, 'defects', defectId);
-        const snap = await getDoc(at);
-        if (!snap.exists()) throw new NotFoundError(`결함 없음: ${defectId}`);
-        let current = strip<Defect>(snap.data());
-        if (current.issue && patch.status && patch.status !== current.status) {
-          current = strip<Defect>(await call<Defect>('setDefectStatus', { ...ref, defectId, status: patch.status }));
-          if (!patch.severity || patch.severity === current.severity) return current;
+        let statusDone = false;
+        for (;;) {
+          const out = await runTransaction(db, async (tx) => {
+            const fresh = await tx.get(at);
+            if (!fresh.exists()) throw new NotFoundError(`결함 없음: ${defectId}`);
+            const before = strip<Defect>(fresh.data());
+            const statusChange = !statusDone && !!patch.status && patch.status !== before.status;
+            if (statusChange && before.publishing && !before.issue)
+              throw new RuleError(`${before.publishing.by}님이 이 결함을 이슈로 발행하고 있습니다. 잠시 뒤 다시 바꾸세요.`);
+            if (statusChange && before.issue) return { viaIssue: true as const };
+            const next = changedDefect(before, before.issue || statusDone ? { severity: patch.severity } : patch);
+            tx.update(at, { severity: next.severity, status: next.status });
+            return { next };
+          });
+          if ('next' in out && out.next) return out.next;
+          await call<Defect>('setDefectStatus', { ...ref, defectId, status: patch.status });
+          statusDone = true;
         }
-        return runTransaction(db, async (tx) => {
-          const fresh = await tx.get(at);
-          if (!fresh.exists()) throw new NotFoundError(`결함 없음: ${defectId}`);
-          const before = strip<Defect>(fresh.data());
-          const next = changedDefect(before, before.issue ? { severity: patch.severity } : patch);
-          tx.update(at, { severity: next.severity, status: next.status });
-          return next;
-        });
       }),
     completeCycle: (ref) => guard(() => updateCycle(ref, (c) => completedCycle(c, me(), now()))),
     reopenCycle: (ref) => guard(() => updateCycle(ref, reopenedCycle)),
@@ -804,12 +809,13 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
         const d = await getDoc(doc(db, P(ref.projectId), 'cycles', ref.cycleId, 'defects', defectId));
         if (!d.exists()) throw new NotFoundError(`결함 없음: ${defectId}`);
         const job = issueDraftRequest(ref.projectId, ref, strip<Defect>(d.data()), template, me(), now());
-        await setDoc(doc(db, P(ref.projectId), 'jobs', job.id), clean(job));
+        await setDoc(doc(db, P(ref.projectId), ISSUE_DRAFTS, job.id), clean(job));
         return job;
       }),
     getIssueDraft: (ref, defectId) =>
       guard(async () => {
-        const snap = await getDoc(doc(db, P(ref.projectId), 'jobs', issueDraftJobId(ref.cycleId, defectId, me().uid)));
+        const id = issueDraftJobId(ref.cycleId, defectId, me().uid);
+        const snap = await getDoc(doc(db, P(ref.projectId), ISSUE_DRAFTS, id));
         return snap.exists() ? (snap.data() as IssueDraftJob) : undefined;
       }),
     publishIssue: async (input) => strip<Defect>(await call<Defect>('publishIssue', input)),

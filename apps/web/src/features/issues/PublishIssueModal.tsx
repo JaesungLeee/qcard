@@ -106,6 +106,7 @@ function PublishFlow({ onOpenChange, project, cycle, defect, specName, requester
     );
   }, [picked, form, ctx.data, job?.status, job?.result, noDraft, defect, project.assigneeMap, specName]);
 
+  const host = hostSupport(hosts.data ?? [], 'issue_draft');
   const choose = (t: IssueTemplate) => {
     setSince(new Date().toISOString());
     setPicked(t);
@@ -146,8 +147,8 @@ function PublishFlow({ onOpenChange, project, cycle, defect, specName, requester
         <ErrorMessage error={request.error} title="초안을 요청하지 못했습니다" />
         <DraftWait
           job={job}
-          host={hostSupport(hosts.data ?? [], 'issue_draft')}
-          onRetry={() => (job ? request.mutate({ retryJobId: job.id }) : request.mutate({ template: picked }))}
+          host={host}
+          onRetry={() => request.mutate({ template: picked })}
           onSkip={() => setNoDraft(true)}
         />
       </ModalContent>
@@ -240,7 +241,14 @@ function DraftWait({
   onSkip: () => void;
 }) {
   const failed = job?.status === 'failed' || job?.status === 'paused';
-  const message: ReactNode = failed ? (
+  const message: ReactNode = host === 'outdated' ? (
+    <SectionMessage
+      variant="cautionary"
+      description="이슈 초안을 만들려면 호스트를 업데이트하세요 (npm i -g @qcard/host). 업데이트하면 이 요청부터 초안을 만듭니다. 기다리지 않으려면 초안 없이 작성하세요."
+    >
+      호스트가 이슈 초안을 지원하지 않습니다
+    </SectionMessage>
+  ) : failed ? (
     <SectionMessage variant="negative" description={job?.error?.message ?? ''}>
       초안을 만들지 못했습니다
     </SectionMessage>
@@ -250,13 +258,6 @@ function DraftWait({
       description="이 PC에서 qcard 호스트를 켜면 초안을 만듭니다. 기다리지 않으려면 초안 없이 작성하세요."
     >
       호스트를 켜면 초안을 만듭니다
-    </SectionMessage>
-  ) : host === 'outdated' ? (
-    <SectionMessage
-      variant="cautionary"
-      description="이슈 초안을 만들려면 호스트를 업데이트하세요 (npm i -g @qcard/host)."
-    >
-      호스트가 이슈 초안을 지원하지 않습니다
     </SectionMessage>
   ) : (
     <div className="qi-wait">
@@ -275,7 +276,7 @@ function DraftWait({
     <div className="qi-stack">
       {message}
       <div className="qi-row">
-        {failed && (
+        {failed && host !== 'outdated' && (
           <Button size="small" variant="outlined" color="assistive" onClick={onRetry}>
             다시 시도
           </Button>
