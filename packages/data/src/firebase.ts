@@ -2,6 +2,7 @@ import { createFixtureDb, type ConsoleSession } from '@qcard/fixtures';
 import {
   accountState,
   cycleUsesFlows,
+  issueDraftJobId,
   leaseLive,
   newPrepFlow,
   prepFlowChange,
@@ -14,6 +15,7 @@ import {
   type HostConnection,
   type HostCredential,
   type Invitation,
+  type IssueDraftJob,
   type Job,
   type Member,
   type PrepFlow,
@@ -87,6 +89,7 @@ import {
   requireOpenCycle,
   retriedJob,
   resolveQuestionIn,
+  issueDraftRequest,
   runRequest,
   verdictChange,
 } from './logic';
@@ -681,17 +684,26 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
           return made.defect;
         }),
       ),
+    // 이슈가 연결된 결함의 상태는 이슈와 맞춰야 해서 Functions로 바꾼다 (보안 규칙이 직접 쓰기를 막는다)
     updateDefect: (ref, defectId, patch) =>
-      guard(() =>
-        runTransaction(db, async (tx) => {
-          const at = doc(db, P(ref.projectId), 'cycles', ref.cycleId, 'defects', defectId);
-          const snap = await tx.get(at);
-          if (!snap.exists()) throw new NotFoundError(`결함 없음: ${defectId}`);
-          const next = changedDefect(strip<Defect>(snap.data()), patch);
+      guard(async () => {
+        const at = doc(db, P(ref.projectId), 'cycles', ref.cycleId, 'defects', defectId);
+        const snap = await getDoc(at);
+        if (!snap.exists()) throw new NotFoundError(`결함 없음: ${defectId}`);
+        let current = strip<Defect>(snap.data());
+        if (current.issue && patch.status && patch.status !== current.status) {
+          current = strip<Defect>(await call<Defect>('setDefectStatus', { ...ref, defectId, status: patch.status }));
+          if (!patch.severity || patch.severity === current.severity) return current;
+        }
+        return runTransaction(db, async (tx) => {
+          const fresh = await tx.get(at);
+          if (!fresh.exists()) throw new NotFoundError(`결함 없음: ${defectId}`);
+          const before = strip<Defect>(fresh.data());
+          const next = changedDefect(before, before.issue ? { severity: patch.severity } : patch);
           tx.update(at, { severity: next.severity, status: next.status });
           return next;
-        }),
-      ),
+        });
+      }),
     completeCycle: (ref) => guard(() => updateCycle(ref, (c) => completedCycle(c, me(), now()))),
     reopenCycle: (ref) => guard(() => updateCycle(ref, reopenedCycle)),
     // 하위 문서·Storage 증거까지 지워야 해서 Functions가 한다 (보안 규칙이 직접 삭제를 막는다)
@@ -780,6 +792,28 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
           tx.set(r, clean(closedRevision(snap.data() as Job, outcome, me(), now())));
         }),
       ),
+    // ------------------------------------------------------------ GitHub 이슈: GitHub 호출은 Functions만 한다
+    startRepoConnect: (projectId) => call('startRepoConnect', { projectId }),
+    listConnectableRepos: (input) => call('listConnectableRepos', input),
+    connectRepo: (input) => call<Project>('connectRepo', input),
+    disconnectRepo: (projectId) => call<void>('disconnectRepo', { projectId }),
+    setAssigneeMap: (projectId, map) => call('setAssigneeMap', { projectId, map }),
+    getIssueContext: (projectId) => call('getIssueContext', { projectId }),
+    requestIssueDraft: (ref, defectId, template) =>
+      guard(async () => {
+        const d = await getDoc(doc(db, P(ref.projectId), 'cycles', ref.cycleId, 'defects', defectId));
+        if (!d.exists()) throw new NotFoundError(`결함 없음: ${defectId}`);
+        const job = issueDraftRequest(ref.projectId, ref, strip<Defect>(d.data()), template, me(), now());
+        await setDoc(doc(db, P(ref.projectId), 'jobs', job.id), clean(job));
+        return job;
+      }),
+    getIssueDraft: (ref, defectId) =>
+      guard(async () => {
+        const snap = await getDoc(doc(db, P(ref.projectId), 'jobs', issueDraftJobId(ref.cycleId, defectId, me().uid)));
+        return snap.exists() ? (snap.data() as IssueDraftJob) : undefined;
+      }),
+    publishIssue: async (input) => strip<Defect>(await call<Defect>('publishIssue', input)),
+
     myHosts: () =>
       guard(async () => (await getDocs(collection(db, 'users', me().uid, 'hosts'))).docs.map((d) => d.data() as Host)),
     myHostConnections: () =>

@@ -52,6 +52,7 @@ import {
   type QcardApi,
 } from './api';
 import { localRunCycle, type LocalRun } from './localRuns';
+import { memoryGithub } from './memoryGithub';
 import {
   approvalFor,
   attachmentProblem,
@@ -215,7 +216,20 @@ export function createMemoryApi(
     void api.getCycle(ref).then((d) => set.forEach((fn) => fn(d)));
   };
 
+  // GitHub 이슈: 하루콩 가상 저장소 (memoryGithub.ts)
+  const github = memoryGithub({
+    db,
+    project,
+    membersOf,
+    actor,
+    now,
+    hostOnline: () => currentUser === PEOPLE.lead && connections.some((c) => c.id === DEMO_HOST),
+    notify: (ref) => notify(ref),
+    rules,
+  });
+
   const api: MemoryApi = {
+    ...github.api,
     get currentUser() {
       return currentUser;
     },
@@ -540,10 +554,12 @@ export function createMemoryApi(
     async updateDefect(ref, defectId, patch) {
       return rules(() => {
         requireEditor(membersOf(ref.projectId), actor().uid);
+        const linked = github.changeLinkedStatus(ref, defectId, patch);
+        if (linked) return clone(linked);
         const list = db.defects[ref.cycleId] ?? [];
         const i = list.findIndex((x) => x.id === defectId);
         if (i < 0) throw new NotFoundError(`결함 없음: ${defectId}`);
-        list[i] = changedDefect(list[i]!, patch);
+        list[i] = changedDefect(list[i]!, list[i]!.issue ? { severity: patch.severity } : patch);
         notify(ref);
         return clone(list[i]);
       });
@@ -646,7 +662,7 @@ export function createMemoryApi(
           // 시드 사이클(1.3.0 1차 회귀)의 대상 — 웹에서 [내 호스트에서 실행]을 볼 수 있게
           devices: [{ serial: '3A281FDH2000AB', model: 'Pixel 8', osMajor: 16, resolution: '1080×2400' }],
           claudeCode: { version: '2.1.308', loggedIn: true, subscriptionType: 'max' },
-          jobs: ['qa_doc_generate', 'run_cycle', 'case_revise'],
+          jobs: ['qa_doc_generate', 'run_cycle', 'case_revise', 'issue_draft'],
           // `?demo=host-outdated`: Run을 맡길 수 없는 이전 버전 호스트 (UI 스냅샷용)
           version: globalThis.location?.search.includes('demo=host-outdated') ? '0.2.1' : MIN_HOST_VERSION,
         },

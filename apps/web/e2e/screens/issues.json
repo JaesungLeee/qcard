@@ -1,0 +1,33 @@
+[
+  {
+    "name": "issues-publish-templates",
+    "path": "/p/haru/cycles/cycle-130-1?tab=defects",
+    "waitFor": "앱이 백그라운드로 감",
+    "click": "이슈 발행",
+    "then": "템플릿을 고르면"
+  },
+  {
+    "name": "issues-publish-form",
+    "path": "/p/haru/cycles/cycle-130-1?tab=defects",
+    "waitFor": "앱이 백그라운드로 감",
+    "click": ["이슈 발행", "버그 리포트"],
+    "then": "직접 채울 칸이 있습니다"
+  },
+  {
+    "name": "issues-publish-markdown",
+    "path": "/p/haru/cycles/cycle-130-1?tab=defects",
+    "waitFor": "앱이 백그라운드로 감",
+    "click": ["이슈 발행", "qcard 기본 템플릿"],
+    "then": "본문 (Markdown)"
+  },
+  {
+    "name": "issues-callback",
+    "path": "/github/callback?code=memory&state=demo",
+    "waitFor": "harukong-feedback"
+  },
+  {
+    "name": "issues-callback-none",
+    "path": "/github/callback",
+    "waitFor": "GitHub App 설치를 마쳤습니다"
+  }
+]

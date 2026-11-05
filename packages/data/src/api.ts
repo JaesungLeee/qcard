@@ -6,6 +6,10 @@ import type {
   Build,
   CaseBody,
   CaseReviseJob,
+  ConnectableRepos,
+  IssueContext,
+  IssueDraftJob,
+  IssueTemplate,
   PrepFlow,
   PrepFlowInput,
   PrepFlowUse,
@@ -185,7 +189,7 @@ export interface QcardApi {
    * Fail이 아니거나 이미 결함이 있는 칸, 제목·재현 절차가 비면 `RuleError`. Admin·QA만
    */
   createDefect(input: NewDefectInput): Promise<Defect>;
-  /** 결함의 심각도·상태 바꾸기. Admin·QA만 */
+  /** 결함의 심각도·상태 바꾸기. 이슈가 연결된 결함의 상태는 이슈에 먼저 반영한다(실패하면 바꾸지 않는다). Admin·QA만 */
   updateDefect(ref: CycleRef, defectId: string, patch: DefectPatch): Promise<Defect>;
   /**
    * 사이클 완료: 새 Run을 받지 않는다. 사람 확정은 계속 된다. 남은 확인필요·N/T 경고는 화면이 먼저 보인다
@@ -199,6 +203,29 @@ export interface QcardApi {
    * 이름이 다르거나, 완료된 사이클이거나, 실행 중인 Run이 있으면 `RuleError`(`cycleDeleteBlocker`). Admin·QA만
    */
   deleteCycle(ref: CycleRef, confirmName: string): Promise<void>;
+
+  // ------------------------------------------------------------ GitHub 이슈 (docs/product/issues.md)
+  /**
+   * [GitHub 저장소 연결] 시작. Admin만. 새로 설치하면 `installUrl`, 이미 설치했으면 `authorizeUrl`로 보낸다.
+   * 어느 쪽이든 GitHub에서 `/github/callback`으로 돌아온다
+   */
+  startRepoConnect(projectId: string): Promise<{ installUrl: string; authorizeUrl: string }>;
+  /** GitHub에서 돌아온 뒤: 연결하는 사람이 접근할 수 있는 저장소. 같은 state로 다시 부르면 처음 목록을 준다 */
+  listConnectableRepos(input: ConnectReposInput): Promise<ConnectableRepos>;
+  /** 고른 저장소 연결. 공개 저장소는 `confirmPublic`이 없으면 `RuleError`. Admin만 */
+  connectRepo(input: { state: string; repoId: number; confirmPublic?: boolean }): Promise<Project>;
+  /** 연결 해제: 발행한 이슈와 결함의 연결은 남고 동기화만 멈춘다. Admin만 */
+  disconnectRepo(projectId: string): Promise<void>;
+  /** 담당자 매핑 저장 (표 전체). 사용자명 형식이 틀리면 `RuleError`. Admin만 */
+  setAssigneeMap(projectId: string, map: Record<string, string[]>): Promise<Record<string, string[]>>;
+  /** 발행 팝업: 저장소 템플릿·라벨·지정 가능한 사람. 저장소가 없거나 끊겼으면 `RuleError`. Admin·QA만 */
+  getIssueContext(projectId: string): Promise<IssueContext>;
+  /** 고른 템플릿으로 내 호스트에 초안 작업을 만든다. 같은 결함의 내 이전 초안을 덮어쓴다. Admin·QA만 */
+  requestIssueDraft(ref: CycleRef, defectId: string, template: IssueTemplate): Promise<IssueDraftJob>;
+  /** 이 결함의 내 마지막 초안 작업 */
+  getIssueDraft(ref: CycleRef, defectId: string): Promise<IssueDraftJob | undefined>;
+  /** 발행. 끝줄은 서버가 붙인다. 이미 발행했거나 발행 중이면 `RuleError`. Admin·QA만 */
+  publishIssue(input: PublishIssueInput): Promise<Defect>;
 
   /** Storage에 올린 스크린샷(`kind: 'storage'`)을 화면에 띄울 주소. 로그인 상태로 읽는다 */
   screenshotUrl(path: string): Promise<string>;
@@ -233,6 +260,18 @@ export type NewCycleInput = {
 export type DefectDraft = Pick<Defect, 'title' | 'severity' | 'repro' | 'expected' | 'actual'>;
 export type NewDefectInput = DefectDraft & { projectId: string; cycleId: string; tcId: string; deviceId: string };
 export type DefectPatch = Partial<Pick<Defect, 'severity' | 'status'>>;
+
+export type ConnectReposInput = { state: string; code?: string; installationId?: number };
+
+/** 발행 팝업에서 사람이 고친 값. 본문은 템플릿으로 조립한 것 (끝줄 제외) */
+export type PublishIssueInput = CycleRef & {
+  defectId: string;
+  title: string;
+  body: string;
+  labels: string[];
+  assignees: string[];
+  confirmPublic?: boolean;
+};
 
 /** QA 문서·사이클은 프로젝트 아래에 있다 (Firestore `projects/{p}/qaDocs/{d}`) */
 export type DocRef = { projectId: string; docId: string };

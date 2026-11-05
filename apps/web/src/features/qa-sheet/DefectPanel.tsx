@@ -18,6 +18,7 @@ import { Link } from 'react-router';
 import type { CycleDetail, DefectDraft } from '../../data/api';
 import { useCreateDefect, useMyRole } from '../../data/hooks';
 import { fmtDateTime } from '../../components/format';
+import { IssueCell } from '../issues/IssueCell';
 import { Card, KV, Mono } from './parts';
 import { DEFECT_STATUS_LABEL } from './SummaryTab';
 
@@ -65,6 +66,9 @@ export function DefectPanel({
             {df.createdBy}
             {df.createdAt ? ` · ${fmtDateTime(df.createdAt)}` : ''} 등록
           </span>
+        )}
+        {df && (
+          <IssueCell projectId={projectId} cycle={d.cycle} defect={df} cases={d.cases} canEdit={canEdit} />
         )}
         <Link to={listUrl} className={`qs-link ${textClass('label2', 'medium')}`}>
           ③ 결함 목록에서 보기

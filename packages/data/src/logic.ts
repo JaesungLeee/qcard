@@ -1,10 +1,14 @@
 import { hash } from '@qcard/fixtures';
 import {
+  canPublishIssue,
   CaseBody,
+  issueDraftJobId,
   type Build,
   type CaseResult,
   type CaseReviseJob,
   type Defect,
+  type IssueDraftJob,
+  type IssueTemplate,
   type Job,
   type QaDocJob,
   type QaDocJobDraft,
@@ -379,7 +383,7 @@ export function retriedJob(job: Job, uid: string): Job {
   if (job.requestedBy !== uid) throw new PermissionError('요청한 사람만 다시 시도할 수 있습니다.');
   if (job.status !== 'failed' && job.status !== 'paused')
     throw new RuleError('실패하거나 일시정지한 작업만 다시 시도합니다.');
-  if (job.kind === 'run_cycle' || job.kind === 'case_revise') {
+  if (job.kind !== 'qa_doc_generate') {
     const { error: _e, host: _h, result: _r, ...rest } = job;
     return { ...rest, status: 'queued' } as Job;
   }
@@ -468,6 +472,31 @@ export function runRequest(
       ...(input.tcIds?.length ? { tcIds: input.tcIds } : {}),
       ...(input.resumeRunId ? { resumeRunId: input.resumeRunId } : {}),
     },
+  };
+}
+
+/**
+ * 이슈 초안 요청 (작업 kind `issue_draft`, docs/product/issues.md#초안). id가 결함·요청자마다 정해져 있어
+ * 같은 결함을 다시 요청하면 내 이전 초안을 덮어쓴다. 이미 발행한 결함은 초안을 만들지 않는다
+ */
+export function issueDraftRequest(
+  projectId: string,
+  ref: { cycleId: string },
+  defect: Defect,
+  template: IssueTemplate,
+  user: { uid: string; name: string },
+  now: string,
+): IssueDraftJob {
+  if (!canPublishIssue(defect)) throw new RuleError(`${defect.id}은(는) 이미 이슈로 발행했습니다.`);
+  return {
+    id: issueDraftJobId(ref.cycleId, defect.id, user.uid),
+    projectId,
+    kind: 'issue_draft',
+    requestedBy: user.uid,
+    requestedByName: user.name,
+    createdAt: now,
+    status: 'queued',
+    input: { cycleId: ref.cycleId, defectId: defect.id, template },
   };
 }
 
