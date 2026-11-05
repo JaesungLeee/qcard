@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { CheckLabel } from '../../components/CheckLabel';
 import { useConnectableRepos, useConnectRepo } from '../../data/hooks';
+import { PlainShell } from '../../shell/PlainShell';
 import { ErrorMessage } from '../projects/parts';
 import '../projects/projects.css';
 import './issues.css';
@@ -14,8 +15,8 @@ export function GithubCallbackPage() {
   const [params] = useSearchParams();
   const state = params.get('state');
   return (
-    <div className="qc-page">
-      <div className="qp-card qp-form-col" style={{ margin: '0 auto', width: '100%', maxWidth: 640 }}>
+    <PlainShell>
+      <div className="qp-card qp-form-col" style={{ margin: '0 auto', width: '100%', wordBreak: 'keep-all' }}>
         <div className="qp-row" style={{ gap: 12 }}>
           <Icons.IconLink aria-hidden style={{ width: 24, height: 24 }} />
           <h1 className={textClass('title3', 'bold')}>GitHub 저장소 연결</h1>
@@ -32,7 +33,7 @@ export function GithubCallbackPage() {
           </SectionMessage>
         )}
       </div>
-    </div>
+    </PlainShell>
   );
 }
 
@@ -65,8 +66,7 @@ function Pick({ state, code, installationId }: { state: string; code?: string; i
               type="button"
               role="radio"
               aria-checked={picked?.repoId === r.repoId}
-              className="qi-template"
-              style={picked?.repoId === r.repoId ? { borderColor: 'var(--qc-line-brand-strong)' } : undefined}
+              className="qi-template qi-repo"
               onClick={() => {
                 setPicked(r);
                 setConfirmPublic(false);
@@ -97,16 +97,13 @@ function Pick({ state, code, installationId }: { state: string; code?: string; i
           </CheckLabel>
         </>
       )}
-      <ErrorMessage error={connect.error} title="연결하지 못했습니다" />
-      <div className="qi-row" style={{ justifyContent: 'flex-end' }}>
-        <Link to={`/p/${projectId}/settings`} className={`qi-link ${textClass('label2', 'medium')}`}>
-          취소
-        </Link>
+      <div className="qp-row">
         <Button
-          size="small"
           variant="solid"
           color="primary"
-          disabled={!picked || (!picked.private && !confirmPublic) || connect.isPending}
+          leadingContent={<Icons.IconLink />}
+          disabled={!picked || (!picked.private && !confirmPublic)}
+          loading={connect.isPending}
           onClick={() =>
             picked &&
             connect.mutate(
@@ -117,7 +114,11 @@ function Pick({ state, code, installationId }: { state: string; code?: string; i
         >
           연결
         </Button>
+        <Link to={`/p/${projectId}/settings`} className={`${textClass('label1', 'medium')} qp-muted`}>
+          취소
+        </Link>
       </div>
+      <ErrorMessage error={connect.error} title="연결하지 못했습니다" />
     </div>
   );
 }

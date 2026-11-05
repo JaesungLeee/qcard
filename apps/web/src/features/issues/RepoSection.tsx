@@ -97,20 +97,25 @@ export function RepoSection({ project, admin }: { project: Project; admin: boole
           )}
         </div>
       ) : admin ? (
-        <div className="qi-row">
-          <Button
-            size="small"
-            variant="solid"
-            color="primary"
-            leadingContent={<Icons.IconPlus aria-hidden />}
-            disabled={start.isPending}
-            onClick={() => go('installUrl')}
-          >
-            GitHub 저장소 연결
-          </Button>
-          <TextButton size="small" color="assistive" disabled={start.isPending} onClick={() => go('authorizeUrl')}>
-            이미 App을 설치했다면 저장소만 고르기
-          </TextButton>
+        <div className="qi-stack" style={{ gap: 'var(--qc-space-4)' }}>
+          <div className="qi-row">
+            <Button
+              size="small"
+              variant="solid"
+              color="primary"
+              leadingContent={<Icons.IconPlus aria-hidden />}
+              disabled={start.isPending}
+              onClick={() => go('installUrl')}
+            >
+              GitHub 저장소 연결
+            </Button>
+            <TextButton size="small" color="assistive" disabled={start.isPending} onClick={() => go('authorizeUrl')}>
+              설치한 App으로 저장소 고르기
+            </TextButton>
+          </div>
+          <span className={`${textClass('caption1')} qi-faint`}>
+            다른 프로젝트에서 이미 qcard App을 설치했다면 [설치한 App으로 저장소 고르기]로 설치 없이 저장소만 고릅니다.
+          </span>
         </div>
       ) : (
         <span className={`${textClass('caption1')} qi-faint`}>연결한 저장소가 없습니다. Admin이 연결합니다.</span>

@@ -121,27 +121,27 @@ function PublishFlow({ onOpenChange, project, cycle, defect, specName, requester
 
   if (ctx.isPending)
     return (
-      <ModalContent>
+      <ModalContent verticalPadding="bottom-only">
         <Loading aria-label="저장소 템플릿을 읽는 중" />
       </ModalContent>
     );
   if (ctx.error)
     return (
-      <ModalContent>
+      <ModalContent verticalPadding="bottom-only">
         <ErrorMessage error={ctx.error} title="저장소를 읽지 못했습니다" />
       </ModalContent>
     );
   const c = ctx.data;
   if (!picked)
     return (
-      <ModalContent gap="var(--qc-space-12)">
+      <ModalContent gap="var(--qc-space-12)" verticalPadding="bottom-only">
         <RepoLine repo={c.repo} />
         <TemplateList entries={templateChoices(c)} onPick={choose} />
       </ModalContent>
     );
   if (!form)
     return (
-      <ModalContent gap="var(--qc-space-12)">
+      <ModalContent gap="var(--qc-space-12)" verticalPadding="bottom-only">
         <PickedLine template={picked} onBack={back} />
         <ErrorMessage error={request.error} title="초안을 요청하지 못했습니다" />
         <DraftWait
