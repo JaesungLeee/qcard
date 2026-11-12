@@ -744,9 +744,13 @@ export const QaDocJob = z.object({
   input: z.object({ bundleId: z.string(), appVersion: z.string(), prevDocId: z.string().optional() }),
   progress: z
     .object({
+      /** 가장 늦게 시작한 단계. 계획이 끝난 스펙부터 케이스 변환을 하므로 cases인 동안에도 계획이 남아 있을 수 있다 */
       phase: z.enum(['plan', 'cases', 'save']),
+      /** 이 단계의 진행 (plan: 스펙 수 · cases: 행 수) */
       done: z.number(),
       total: z.number(),
+      /** 계획이 끝난 스펙 수. 케이스 변환과 겹치는 동안 계획 진행을 보인다 */
+      planDone: z.number().optional(),
       spec: z.string().optional(),
       /** 지금 모델이 만들고 있는 행 (출처 ID). 케이스 변환 중에만 */
       active: z.array(z.string()).optional(),

@@ -397,7 +397,15 @@ async function progressRecorder(
     write(() => setDoc(doc(r, 'events', id), e));
   };
   const at = now();
-  let state: Progress = { ...job.progress, phase: 'plan', done: 0, total: 0, phaseStartedAt: at, updatedAt: at };
+  let state: Progress = {
+    ...job.progress,
+    phase: 'plan',
+    done: 0,
+    total: 0,
+    planDone: 0,
+    phaseStartedAt: at,
+    updatedAt: at,
+  };
   const progress = (p: Partial<Progress>) => {
     const t = now();
     const phaseStartedAt = p.phase && p.phase !== state.phase ? t : state.phaseStartedAt;
@@ -437,8 +445,11 @@ async function progressRecorder(
         );
         return;
       }
+      // 케이스 변환이 시작된 뒤의 계획은 planDone으로만 보인다 (단계를 되돌리지 않는다)
       case 'plan':
-        return progress({ phase: 'plan', done: e.index, total: e.total, spec: e.spec });
+        return state.phase === 'plan'
+          ? progress({ phase: 'plan', done: e.index, total: e.total, spec: e.spec })
+          : undefined;
       case 'planned':
         event(`plan-${e.spec}`, 'plan', `${e.spec} 계획 · 보강 제안 ${e.suggestions}개`);
         if (e.prepFlows.length)
@@ -447,7 +458,7 @@ async function progressRecorder(
             'prep_flow',
             `새로 만듦: ${e.prepFlows.map((f) => `${f.id} (${f.name})`).join(', ')}`,
           );
-        return progress({ done: e.index + 1 });
+        return progress({ planDone: e.index + 1, ...(state.phase === 'plan' ? { done: e.index + 1 } : {}) });
       case 'batch_start':
         for (const s of e.sources) active.add(s);
         return progress({

@@ -129,7 +129,7 @@ describe('QA 문서 생성 작업', () => {
       id: job.id,
       status: 'done',
       plan: { specs: [{ name: 'sample', title: '샘플 기능', new: 3, changed: 0, same: 0 }], removed: 0 },
-      progress: { phase: 'save', done: 3, total: 3, active: [], drafted: { sample: 3 } },
+      progress: { phase: 'save', done: 3, total: 3, planDone: 1, active: [], drafted: { sample: 3 } },
     });
 
     // 작업 상세 화면: 생성 계획·초안·진행 기록이 남아 다른 멤버도 본다

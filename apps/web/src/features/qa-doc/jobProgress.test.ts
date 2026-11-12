@@ -47,6 +47,24 @@ describe('작업 상세 — 단계·시간', () => {
     expect(phaseSteps(job('job-130')).map((p) => p.state)).toEqual(['done', 'done', 'done']);
   });
 
+  it('케이스 변환 중에 계획이 남아 있으면 두 단계가 함께 진행 중', () => {
+    const j = job('job-140');
+    const plan = { specs: [...j.plan!.specs, { name: 'more', title: '더', new: 4, changed: 0, same: 0 }], removed: 0 };
+    const overlap = { ...j, plan, progress: { ...j.progress!, planDone: 1 } } as QaDocJob;
+    expect(phaseSteps(overlap)).toEqual([
+      { key: 'plan', state: 'current', count: '1/2' },
+      { key: 'cases', state: 'current', count: '16/40' },
+      { key: 'save', state: 'todo' },
+    ]);
+    const paused = { ...overlap, status: 'paused' } as QaDocJob;
+    expect(phaseSteps(paused).map((p) => p.state)).toEqual(['stopped', 'stopped', 'todo']);
+    // 계획을 다 끝냈으면 계획은 끝
+    expect(phaseSteps({ ...overlap, progress: { ...overlap.progress!, planDone: 2 } })[0]).toMatchObject({
+      state: 'done',
+      count: '2/2',
+    });
+  });
+
   it('남은 시간은 호스트가 마지막으로 갱신한 시각까지의 속도로 추정한다', () => {
     // 16:42에 변환 시작, 16:45까지 16행 → 남은 24행은 4.5분
     expect(jobTiming(job('job-140'))).toEqual({ elapsedMs: 4 * 60_000, etaMs: 4.5 * 60_000 });
