@@ -43,6 +43,7 @@ export type GenerateInput = {
   specRoot?: string;
   model?: string;
   batchSize?: number;
+  /** 케이스 변환을 동시에 부르는 묶음 수 (기본 6). 스펙 계획 1개와 함께 Claude Code 프로세스가 최대 7개 뜬다 */
   concurrency?: number;
   onProgress?: (e: GenerateProgress) => void;
 };
@@ -54,7 +55,7 @@ export type GenerateProgress =
   | { kind: 'plan'; spec: string; targets: number; index: number; total: number }
   /** 스펙 계획이 끝났다. prepFlows: 이 스펙에서 새로 만든 준비 플로우 */
   | { kind: 'planned'; spec: string; prepFlows: PrepFlow[]; suggestions: number; index: number; total: number }
-  /** 행 묶음을 모델에 보냈다 (출처 ID) */
+  /** 행 묶음을 모델에 보냈다 (출처 ID). 계획이 끝난 스펙부터 보내므로 뒤 스펙의 plan·planned와 섞여 온다 */
   | { kind: 'batch_start'; spec: string; sources: string[] }
   /** 행 묶음이 끝났다. drafts: 묶음의 케이스 초안 */
   | {
@@ -112,7 +113,8 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
   const targets = plan.rows.filter((r) => r.decision !== 'same');
   input.onProgress?.({ kind: 'match', specs: planSpecsOf(bundle, plan.rows), removed: plan.removed.length });
 
-  // ------------------------------------------------------------ 1. 스펙 계획 (스펙 순서대로 — 앞 스펙이 만든 준비 플로우를 뒤 스펙이 재사용)
+  // 스펙 계획은 스펙 순서대로 한다 — 앞 스펙이 만든 준비 플로우를 뒤 스펙이 재사용.
+  // 케이스 변환은 그 스펙의 계획만 있으면 되므로, 계획이 끝난 스펙의 묶음부터 뒤 스펙 계획과 함께 진행한다
   const flows = [...input.prepFlows];
   const added: PrepFlow[] = [];
   if (!flows.some((f) => f.id === CLEAN_FLOW.id)) {
@@ -136,102 +138,115 @@ export async function generateQaDoc(input: GenerateInput): Promise<GenerateResul
     });
   };
 
-  const planSpecs = bundle.specs.filter((s) => targets.some((r) => r.spec === s));
-  for (const [index, spec] of planSpecs.entries()) {
-    const rows = targets.filter((r) => r.spec === spec);
-    replannedSpecs.add(spec.name);
-    input.onProgress?.({ kind: 'plan', spec: spec.name, targets: rows.length, index, total: planSpecs.length });
-    const out = await ask(llm, model, PLAN_SYSTEM, SpecPlanOutput, planPrompt(spec, rows, flows), (o) =>
-      missingRows(rows, o.rows),
-    );
-    const addedBefore = added.length;
-    for (const f of out.prep_flows) {
-      if (flows.some((x) => x.id === f.id)) {
-        warnings.push(`${spec.name}: 준비 플로우 ID ${f.id}가 이미 있어 기존 것을 쓴다`);
-        continue;
-      }
-      const steps = unmark(f.steps, [...specSources(spec), ...reviewedFlows], `${spec.name}/${f.id}`);
-      const flow: PrepFlow = { id: f.id, name: f.name, kind: f.kind, check: f.check, steps };
-      flows.push(flow);
-      added.push(flow);
-    }
-    for (const r of out.rows) {
-      const unknown = r.prep_flow_ids.filter((id) => !flows.some((f) => f.id === id));
-      if (unknown.length) warnings.push(`${spec.name}/${r.row_id}: 없는 준비 플로우 ${unknown.join(', ')}를 뺐다`);
-      const ids = r.prep_flow_ids.filter((id) => !unknown.includes(id));
-      // 초기화는 다른 준비보다 먼저 한다
-      const clean = ids.includes(CLEAN_FLOW.id);
-      // 원복은 restore 플로우만 (준비 순서에는 넣지 않는다)
-      const restore = r.restore_flow_id ? flows.find((f) => f.id === r.restore_flow_id) : undefined;
-      if (r.restore_flow_id && restore?.kind !== 'restore') {
-        warnings.push(`${spec.name}/${r.row_id}: 원복 플로우가 아닌 ${r.restore_flow_id}를 뺐다`);
-      }
-      startOf.set(sourceId(spec.name, r.row_id), {
-        prepFlowIds: (clean ? [CLEAN_FLOW.id, ...ids.filter((id) => id !== CLEAN_FLOW.id)] : ids).filter(
-          (id) => flows.find((f) => f.id === id)?.kind !== 'restore',
-        ),
-        cleanState: clean,
-        ...(restore?.kind === 'restore' ? { restoreFlowId: restore.id } : {}),
-        ...(ids.some((id) => flows.find((f) => f.id === id)?.kind === 'login') ? { login: true } : {}),
-      });
-    }
-    for (const s of out.suggestions) {
-      const req = requirementOf(spec, s.requirement_id);
-      if (!req) {
-        warnings.push(`${spec.name}: 보강 제안의 요구사항 ${s.requirement_id}가 없어 뺐다`);
-        continue;
-      }
-      newSuggestions.push({ spec: spec.name, requirementId: req, technique: s.technique, text: s.text });
-    }
-    input.onProgress?.({
-      kind: 'planned',
-      spec: spec.name,
-      prepFlows: added.slice(addedBefore),
-      suggestions: newSuggestions.filter((s) => s.spec === spec.name).length,
-      index,
-      total: planSpecs.length,
-    });
-  }
-
-  // ------------------------------------------------------------ 2. 케이스 변환 (행 묶음, 동시에 몇 개씩)
-  const batches: RowPlan[][] = [];
-  const size = input.batchSize ?? 8;
-  for (const spec of bundle.specs) {
-    const rows = targets.filter((r) => r.spec === spec);
-    for (let i = 0; i < rows.length; i += size) batches.push(rows.slice(i, i + size));
-  }
+  // ------------------------------------------------------------ 케이스 변환 (행 묶음, 동시에 몇 개씩). 아래 스펙 계획이 스펙마다 넘긴다
   const generated = new Map<string, GenCase>();
+  const size = input.batchSize ?? 8;
+  // 6: 3스펙 183행 실측에서 3 → 390초, 4 → 284초, 6 → 219초 (재시도 없음). 6이면 뒤 스펙 계획이 다시 병목이다
+  const slot = limiter(input.concurrency ?? 6);
+  const converting: Promise<void>[] = [];
+  // 계획이나 묶음 하나가 실패하면 아직 시작하지 않은 묶음은 부르지 않는다
+  let failed: { error: unknown } | undefined;
   let done = 0;
-  await pool(batches, input.concurrency ?? 3, async (batch) => {
-    const spec = batch[0]!.spec.name;
-    input.onProgress?.({ kind: 'batch_start', spec, sources: batch.map((r) => r.sourceId) });
-    const out = await ask(
-      llm,
-      model,
-      CASE_SYSTEM,
-      CaseBatchOutput,
-      casePrompt(batch, flows, startOf, prev, input.prevBundle),
-      (o) => missingRows(batch, o.cases),
-    );
-    for (const c of out.cases) generated.set(sourceId(spec, c.row_id), c);
-    done += batch.length;
-    input.onProgress?.({
-      kind: 'batch',
-      spec,
-      rows: batch.map((r) => r.row.id),
-      sources: batch.map((r) => r.sourceId),
-      drafts: batch.flatMap((r) => {
-        const g = generated.get(r.sourceId);
-        if (!g) return [];
-        const body = bodyOf(g, r.tcId, startOf.get(r.sourceId) ?? { prepFlowIds: [], cleanState: false });
-        return [{ spec, rowId: r.row.id, tcId: r.tcId, body, questions: g.questions.map((q) => q.text) }];
-      }),
-      done,
-      total: targets.length,
+  const convert = (batch: RowPlan[]) =>
+    slot(async () => {
+      if (failed) return;
+      const spec = batch[0]!.spec.name;
+      input.onProgress?.({ kind: 'batch_start', spec, sources: batch.map((r) => r.sourceId) });
+      const out = await ask(
+        llm,
+        model,
+        CASE_SYSTEM,
+        CaseBatchOutput,
+        casePrompt(batch, flows, startOf, prev, input.prevBundle),
+        (o) => missingRows(batch, o.cases),
+      );
+      for (const c of out.cases) generated.set(sourceId(spec, c.row_id), c);
+      done += batch.length;
+      input.onProgress?.({
+        kind: 'batch',
+        spec,
+        rows: batch.map((r) => r.row.id),
+        sources: batch.map((r) => r.sourceId),
+        drafts: batch.flatMap((r) => {
+          const g = generated.get(r.sourceId);
+          if (!g) return [];
+          const body = bodyOf(g, r.tcId, startOf.get(r.sourceId) ?? { prepFlowIds: [], cleanState: false });
+          return [{ spec, rowId: r.row.id, tcId: r.tcId, body, questions: g.questions.map((q) => q.text) }];
+        }),
+        done,
+        total: targets.length,
+      });
+    }).catch((error: unknown) => {
+      failed ??= { error };
     });
-  });
 
-  // ------------------------------------------------------------ 3. 조립
+  // ------------------------------------------------------------ 스펙 계획 (스펙 순서대로, 끝난 스펙의 묶음을 변환에 넘긴다)
+  const planSpecs = bundle.specs.filter((s) => targets.some((r) => r.spec === s));
+  try {
+    for (const [index, spec] of planSpecs.entries()) {
+      if (failed) break;
+      const rows = targets.filter((r) => r.spec === spec);
+      replannedSpecs.add(spec.name);
+      input.onProgress?.({ kind: 'plan', spec: spec.name, targets: rows.length, index, total: planSpecs.length });
+      const out = await ask(llm, model, PLAN_SYSTEM, SpecPlanOutput, planPrompt(spec, rows, flows), (o) =>
+        missingRows(rows, o.rows),
+      );
+      const addedBefore = added.length;
+      for (const f of out.prep_flows) {
+        if (flows.some((x) => x.id === f.id)) {
+          warnings.push(`${spec.name}: 준비 플로우 ID ${f.id}가 이미 있어 기존 것을 쓴다`);
+          continue;
+        }
+        const steps = unmark(f.steps, [...specSources(spec), ...reviewedFlows], `${spec.name}/${f.id}`);
+        const flow: PrepFlow = { id: f.id, name: f.name, kind: f.kind, check: f.check, steps };
+        flows.push(flow);
+        added.push(flow);
+      }
+      for (const r of out.rows) {
+        const unknown = r.prep_flow_ids.filter((id) => !flows.some((f) => f.id === id));
+        if (unknown.length) warnings.push(`${spec.name}/${r.row_id}: 없는 준비 플로우 ${unknown.join(', ')}를 뺐다`);
+        const ids = r.prep_flow_ids.filter((id) => !unknown.includes(id));
+        // 초기화는 다른 준비보다 먼저 한다
+        const clean = ids.includes(CLEAN_FLOW.id);
+        // 원복은 restore 플로우만 (준비 순서에는 넣지 않는다)
+        const restore = r.restore_flow_id ? flows.find((f) => f.id === r.restore_flow_id) : undefined;
+        if (r.restore_flow_id && restore?.kind !== 'restore') {
+          warnings.push(`${spec.name}/${r.row_id}: 원복 플로우가 아닌 ${r.restore_flow_id}를 뺐다`);
+        }
+        startOf.set(sourceId(spec.name, r.row_id), {
+          prepFlowIds: (clean ? [CLEAN_FLOW.id, ...ids.filter((id) => id !== CLEAN_FLOW.id)] : ids).filter(
+            (id) => flows.find((f) => f.id === id)?.kind !== 'restore',
+          ),
+          cleanState: clean,
+          ...(restore?.kind === 'restore' ? { restoreFlowId: restore.id } : {}),
+          ...(ids.some((id) => flows.find((f) => f.id === id)?.kind === 'login') ? { login: true } : {}),
+        });
+      }
+      for (const s of out.suggestions) {
+        const req = requirementOf(spec, s.requirement_id);
+        if (!req) {
+          warnings.push(`${spec.name}: 보강 제안의 요구사항 ${s.requirement_id}가 없어 뺐다`);
+          continue;
+        }
+        newSuggestions.push({ spec: spec.name, requirementId: req, technique: s.technique, text: s.text });
+      }
+      input.onProgress?.({
+        kind: 'planned',
+        spec: spec.name,
+        prepFlows: added.slice(addedBefore),
+        suggestions: newSuggestions.filter((s) => s.spec === spec.name).length,
+        index,
+        total: planSpecs.length,
+      });
+      for (let i = 0; i < rows.length; i += size) converting.push(convert(rows.slice(i, i + size)));
+    }
+  } catch (error) {
+    failed ??= { error };
+  }
+  await Promise.all(converting);
+  if (failed) throw failed.error;
+
+  // ------------------------------------------------------------ 조립
   const prevQuestions = prev?.questions ?? [];
   const keptTcIds = new Set(plan.rows.filter((r) => r.previous).map((r) => r.tcId));
   const questions: SpecQuestion[] = prevQuestions.filter((q) => q.caseIds.some((id) => keptTcIds.has(id)));
@@ -501,11 +516,19 @@ async function ask<S extends typeof SpecPlanOutput | typeof CaseBatchOutput>(
   }
 }
 
-async function pool<T>(items: T[], n: number, fn: (item: T) => Promise<void>) {
-  let next = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(n, items.length) }, async () => {
-      while (next < items.length) await fn(items[next++]!);
-    }),
-  );
+/** 동시에 n개까지만 실행한다. 끝난 자리는 기다리던 다음 작업이 바로 이어받는다 */
+function limiter(n: number) {
+  let running = 0;
+  const waiting: (() => void)[] = [];
+  return async <T>(fn: () => Promise<T>): Promise<T> => {
+    if (running < n) running++;
+    else await new Promise<void>((resolve) => waiting.push(resolve));
+    try {
+      return await fn();
+    } finally {
+      const next = waiting.shift();
+      if (next) next();
+      else running--;
+    }
+  };
 }
