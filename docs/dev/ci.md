@@ -58,6 +58,12 @@ for role in roles/firebase.admin roles/cloudfunctions.admin roles/run.admin role
   gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$SA" --role=$role --condition=None
 done
 
+# Functions가 선언한 비밀값(deploy.md의 GitHub App): 배포가 비밀값을 확인하고 실행 계정에 접근 권한을 붙인다.
+# 프로젝트 전체가 아니라 그 비밀값에만 준다. 비밀값을 먼저 만든 뒤 실행한다
+for s in GITHUB_APP_PRIVATE_KEY GITHUB_APP_CLIENT_SECRET GITHUB_WEBHOOK_SECRET; do
+  gcloud secrets add-iam-policy-binding $s --member="serviceAccount:$SA" --role=roles/secretmanager.admin
+done
+
 # GitHub(이 저장소)가 그 서비스 계정으로 동작하도록 허용
 gcloud iam service-accounts add-iam-policy-binding $SA \
   --role=roles/iam.workloadIdentityUser \
@@ -97,6 +103,7 @@ gcloud iam service-accounts add-iam-policy-binding $SA \
 ## 실패할 때
 
 - `Permission 'iam.serviceAccounts.getAccessToken' denied`: 1단계 마지막 `workloadIdentityUser` 바인딩이 없거나 저장소 이름이 다르다.
+- Functions 배포 중 `Permission 'secretmanager.secrets.get' denied`: 1단계의 비밀값 바인딩이 없다. Functions가 새 비밀값을 선언하면 그 비밀값에도 같은 바인딩을 더한다.
 - `does not match the attribute condition`: `main`이 아닌 브랜치에서 deploy 잡이 돌았다(PR은 검증만 한다).
 - Functions 배포 중 권한 오류: 오류에 나온 역할을 1단계 서비스 계정에 더한다.
 - npm `404`/`ENEEDAUTH`: 2단계 Trusted Publisher의 저장소·워크플로 파일·Environment 이름이 다르다.
