@@ -36,7 +36,7 @@
 
 결함 이슈 발행·상태 동기화([product/issues.md](../product/issues.md))는 qcard GitHub App으로 한다. 비밀이 아닌 등록값은 `apps/functions/src/index.ts`의 상수 `GITHUB_APP`(`appId`·`slug`·`clientId`)에, 비밀값 셋은 Secret Manager에 둔다. `appId`가 비어 있으면 GitHub 함수는 "GitHub App이 아직 설정되지 않았습니다"로 실패하고 나머지는 그대로 돈다.
 
-**Functions는 비밀값 셋을 선언하므로, Secret Manager에 없으면 Functions 배포가 실패한다.** App을 등록하기 전이라도 `main`에 합치기 전에 아래 셋을 만들어 둔다(값은 나중에 새 버전으로 바꾼다).
+**Functions는 비밀값 셋을 선언하므로, Secret Manager에 없으면 Functions 배포가 실패한다.** App을 등록하기 전이라도 `main`에 합치기 전에 아래 셋을 만들어 두고, CI 배포 계정에 그 비밀값 권한을 준다([ci.md](ci.md#1-google-cloud-배포용-서비스-계정--workload-identity)). 값은 나중에 새 버전으로 바꾼다.
 
 1. GitHub → Settings → Developer settings → GitHub Apps → New GitHub App (조직 소유로 만들려면 조직 설정에서).
    - 이름 `qcard-bot`(슬러그 = `GITHUB_APP.slug`, 이슈 작성자는 `qcard-bot[bot]`), Homepage `https://qcard.dev`

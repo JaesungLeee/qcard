@@ -1,6 +1,6 @@
 # 로드맵
 
-지금 상태와 남은 일이다. 기준: 서비스·`@qcard/host` **1.0.0**(2026-11-04).
+지금 상태와 남은 일이다. 기준: 서비스·`@qcard/host` **1.1.0**(2026-11-15).
 
 ## 지금 상태
 
@@ -40,15 +40,16 @@ MVP(Android) 기능은 들어가 있다. `pnpm verify`(Fake·녹화 재생·에�
 
 ### GitHub 이슈 발행
 
-**구현·App 등록 완료, 배포 전**(2026-11-05). 결함을 연결한 GitHub 저장소의 이슈로 발행하고 상태를 양방향으로 맞춘다. 규칙은 [product/issues.md](product/issues.md), 고른 이유는 [decisions.md](decisions.md#결함-트래커는-github-issues).
+**운영 배포 완료**(1.1.0, 2026-11-15). 결함을 연결한 GitHub 저장소의 이슈로 발행하고 상태를 양방향으로 맞춘다. 규칙은 [product/issues.md](product/issues.md), 고른 이유는 [decisions.md](decisions.md#결함-트래커는-github-issues).
 
 - 끝남: qcard GitHub App 등록(`qcard-bot`, App ID 5619807), App 비밀 키·클라이언트 비밀값·웹훅 비밀값을 Secret Manager에 등록(2026-11-05). 절차는 [dev/deploy.md](dev/deploy.md#github-app-결함--이슈-발행).
 - 끝남: 개인정보처리방침·이용약관에 GitHub로 나가는 데이터와 "발행한 이슈는 qcard가 지우지 못함"을 넣었다(시행일 2026-11-25 — 처음 정한 11-13 전에 배포하지 못해 미뤘다). 시행 전 공지 배너가 앱 상단·프로젝트 목록에 뜬다.
-- 남음: 운영 배포(2026-11-18까지 — 공지를 시행 7일 전부터 띄우려면), 배포 뒤 웹훅 ping·연결·초안·발행·양방향 동기화를 실제 GitHub·Claude로 확인.
+- 끝남: 운영 배포(2026-11-15). CI 배포 계정에 비밀값 셋의 권한이 없어 처음엔 Functions 배포가 실패했다 — 절차를 [dev/ci.md](dev/ci.md#1-google-cloud-배포용-서비스-계정--workload-identity)에 넣었다.
+- 남음: 웹훅 ping·연결·초안·발행·양방향 동기화를 실제 GitHub·Claude로 확인.
 
 ### 결함 재테스트
 
-**구현 완료, 배포 전**(2026-11-05). 이전 사이클의 fixed 결함을 새 빌드 사이클에서 다시 확인하고, 그 결과로 결함을 closed로 확정하거나 다시 연다. 이슈가 연결돼 있으면 이슈 코멘트에 재테스트 근거를 남긴다. 규칙은 [product/results.md](product/results.md#재테스트), 고른 이유는 [decisions.md](decisions.md#재테스트는-새-빌드-사이클-안에서). 확정은 Functions `confirmRetest`라 GitHub 이슈 발행과 함께 Functions 배포가 필요하다. 다음 단계는 같은 TC의 결함·이슈를 묶는 것(발행 전 비슷한 결함 표시, 기존 이슈에 연결, 재발 감지)이다.
+**운영 배포 완료**(1.1.0, 2026-11-15). 이전 사이클의 fixed 결함을 새 빌드 사이클에서 다시 확인하고, 그 결과로 결함을 closed로 확정하거나 다시 연다. 이슈가 연결돼 있으면 이슈 코멘트에 재테스트 근거를 남긴다. 규칙은 [product/results.md](product/results.md#재테스트), 고른 이유는 [decisions.md](decisions.md#재테스트는-새-빌드-사이클-안에서). 남은 확인: 실제 GitHub 이슈가 연결된 결함으로 closed 확정·다시 열기와 이슈 코멘트. 후속 개선: 이전 사이클 읽기·리스너 비용, 시트를 연 동안 결함 사이클 이름·삭제 반영. 다음 단계는 같은 TC의 결함·이슈를 묶는 것(발행 전 비슷한 결함 표시, 기존 이슈에 연결, 재발 감지)이다.
 
 ### 테스트 가능성 리포트
 
