@@ -188,8 +188,28 @@ describe('확정', () => {
     expect(ruleOf(() => confirm({ b: { cycle: B, build: build('b120', 120) } }))).toContain('새 빌드가 아닙니다');
   });
 
-  it('칸에 다른 결함이 있으면 다시 열지 않는다', () => {
-    expect(ruleOf(() => confirm({ to: 'open', result: { ...humanFail, defectId: 'D-3' } }))).toContain('D-3');
+  it('칸에 다른 결함이 있으면 다시 열지 않는다 — 같은 증상이면 결함 사이클에서 직접 바꾸라고 안내한다', () => {
+    const message = ruleOf(() => confirm({ to: 'open', result: { ...humanFail, defectId: 'D-3' } }));
+    expect(message).toContain('D-3');
+    expect(message).toContain('같은 증상이면');
+  });
+
+  it('이 사이클에서 이미 확정한 결함은 다시 fixed가 돼도 다시 확정하지 않는다 (칸 결과가 고치기 전 빌드의 것)', () => {
+    const reopened = confirm({ to: 'open', result: humanFail }).record;
+    const fixedAgain = src({ status: 'fixed', retests: [reopened] });
+    expect(ruleOf(() => confirm({ src: fixedAgain, to: 'open', result: humanFail }))).toContain('이미');
+    expect(ruleOf(() => confirm({ src: fixedAgain }))).toContain('다음 새 빌드');
+    // 다른 사이클의 기록은 막지 않는다
+    expect(confirm({ src: src({ retests: [{ ...reopened, cycleId: 'older' }] }) }).record.to).toBe('closed');
+  });
+
+  it('로컬 실행 묶음·삭제 중인 사이클로는 확정하지 않는다', () => {
+    const local = { ...inB, cycle: { ...B, origin: 'local_run' as const } };
+    expect(ruleOf(() => confirm({ b: local }))).toContain('재테스트를 받지 않는');
+    const deleting = { ...inB, cycle: { ...B, deletingAt: '2026-11-05T00:00:00.000Z' } };
+    expect(ruleOf(() => confirm({ b: deleting }))).toContain('재테스트를 받지 않는');
+    const srcDeleting = { ...src(), cycle: { ...A, deletingAt: '2026-11-05T00:00:00.000Z' } };
+    expect(ruleOf(() => confirm({ src: srcDeleting }))).toContain('삭제 중');
   });
 
   it('Viewer는 확정하지 못한다', () => {

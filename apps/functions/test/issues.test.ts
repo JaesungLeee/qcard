@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HARUKONG_PUBLIC_REPO, HARUKONG_REPO } from '@qcard/fixtures/github';
 import { MembershipError, type Defect, type Project } from '@qcard/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -516,8 +516,10 @@ describe('재테스트 확정', () => {
         '확인: @minji-kim',
       ].join('\n'),
     );
-    // 한 번 닫으면 fixed가 아니라 다시 확정하지 못한다
-    await expectRule(iss.confirmRetest(ctx('qa'), input('closed')), 'rule', 'fixed가 아닙니다');
+    // 이 사이클에서 한 번 확정하면 다시 확정하지 못한다 — 다시 fixed가 돼도 그렇다
+    await expectRule(iss.confirmRetest(ctx('qa'), input('closed')), 'rule', '이미');
+    await defectDoc().update({ status: 'fixed' });
+    await expectRule(iss.confirmRetest(ctx('qa'), input('closed')), 'rule', '다음 새 빌드');
   });
 
   it('사람이 확정한 Fail이면 다시 열고 칸이 그 결함을 가리킨다 (이슈 없는 결함)', async () => {
@@ -528,6 +530,27 @@ describe('재테스트 확정', () => {
     expect([d.status, d.retests?.[0]?.verdict, d.statusLog]).toEqual(['open', 'fail', undefined]);
     const cell = (await cellDoc().get()).data();
     expect([cell?.defectId, cell?.defectCycleId]).toEqual(['D-1', C]);
+  });
+
+  it('GitHub를 부르는 동안 칸에 다른 결함이 연결되거나 같은 확정이 먼저 기록되면 덮어쓰지 않는다', async () => {
+    await connect();
+    await iss.publishIssue(ctx('qa'), publishInput);
+    await cellDoc().update({ verdict: 'fail', decidedBy: { kind: 'human', name: '김민지' }, actualSummary: '빈 화면' });
+    const comment = fake.comment.bind(fake);
+    const first = { cycleId: C2, to: 'open', verdict: 'fail', by: '이재성', at: NOW };
+    fake.comment = async (...a) => {
+      await cellDoc().update({ defectId: 'D-7' });
+      await defectDoc().update({ retests: FieldValue.arrayUnion(first) });
+      return comment(...a);
+    };
+    try {
+      const d = await iss.confirmRetest(ctx('qa'), input('open'));
+      expect([d.status, d.retests]).toEqual(['open', [first]]);
+    } finally {
+      fake.comment = comment;
+    }
+    const cell = (await cellDoc().get()).data();
+    expect([cell?.defectId, cell?.defectCycleId]).toEqual(['D-7', undefined]);
   });
 
   it('GitHub 호출이 실패하면 바꾸지 않는다', async () => {

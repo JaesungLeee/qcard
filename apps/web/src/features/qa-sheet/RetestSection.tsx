@@ -39,7 +39,9 @@ export function RetestSection({
   const counts = retestCounts(rows);
   const closable = rows.filter((r) => retestAction(r) === 'close');
   const run = (items: RetestRow[], to: 'closed' | 'open') =>
-    confirm.mutate(items.map((r) => ({ source: { cycleId: r.src.cycle.id, defectId: r.src.defect.id }, to })));
+    confirm.mutate(
+      items.map((r) => ({ source: { cycleId: r.src.cycle.id, defectId: r.src.defect.id }, to, label: r.label })),
+    );
   return (
     <Card
       id="retest"
@@ -194,8 +196,8 @@ function Decision({
 }) {
   const action = retestAction(r);
   const status = r.src.defect.status;
-  // 이 사이클에서 확정했고 그 뒤 다시 fixed가 되지 않았으면 확정한 결과를 보인다
-  if (r.record && status !== 'fixed')
+  // 이 사이클에서 확정했으면 확정한 결과를 보인다. 그 뒤 다시 fixed가 됐으면 다음 새 빌드 사이클에서 재테스트한다
+  if (r.record)
     return (
       <span className="qs-stack" style={{ gap: token('space-2') }}>
         <span className={textClass('label1', 'medium')}>
@@ -205,6 +207,9 @@ function Decision({
         <span className={`${textClass('caption1')} qs-muted`} style={{ whiteSpace: 'nowrap' }}>
           {r.record.by} · {fmtDateTime(r.record.at)}
         </span>
+        {status === 'fixed' && (
+          <span className={`${textClass('caption1')} qs-muted`}>다음 새 빌드 사이클에서 재테스트합니다</span>
+        )}
       </span>
     );
   if (status !== 'fixed')

@@ -85,7 +85,8 @@ export type RetestTo = DefectRetest['to'];
 /**
  * 재테스트 확정 (Functions confirmRetest·메모리 구현 공용). Admin·QA만. 결함이 아직 fixed이고, 칸 결과가
  * closed면 Pass·open이면 사람 확정 Fail이어야 한다. 다시 열 때 칸에 다른 결함이 연결돼 있으면 막는다 — 증상이 달라
- * 새 결함을 만든 칸이다. 돌려주는 값: 결함에 남길 기록, 칸에 결함을 연결할지
+ * 새 결함을 만든 칸이다. 이 사이클에서 이미 확정한 결함은 다시 fixed가 돼도 막는다 — 칸 결과가 고치기 전 빌드의
+ * 것이라 다음 새 빌드 사이클에서 재테스트한다. 돌려주는 값: 결함에 남길 기록, 칸에 결함을 연결할지
  */
 export function retestConfirmation(input: {
   members: Member[];
@@ -101,6 +102,10 @@ export function retestConfirmation(input: {
   requireEditor(input.members, input.actor.uid);
   const label = `${src.cycle.name} ${src.defect.id}`;
   if (src.cycle.id === b.cycle.id) throw rule('같은 사이클의 결함은 재테스트로 확정하지 않습니다.');
+  if (!retestsIn(b.cycle)) throw rule(`${b.cycle.name}은(는) 재테스트를 받지 않는 사이클입니다.`);
+  if (src.cycle.deletingAt) throw rule(`${src.cycle.name}은(는) 삭제 중인 사이클입니다.`);
+  if (retestRecordIn(src.defect, b.cycle.id))
+    throw rule(`${label}은(는) 이미 ${b.cycle.name}에서 재테스트로 확정했습니다. 다음 새 빌드 사이클에서 재테스트하세요.`);
   if (src.defect.status !== 'fixed')
     throw rule(`${label}은(는) 지금 fixed가 아닙니다. 목록을 새로 본 뒤 다시 확정하세요.`);
   if (!isNewerBuild(src.build, b.build))
@@ -117,7 +122,7 @@ export function retestConfirmation(input: {
   const ref = { cycleId: src.cycle.id, defectId: src.defect.id };
   if (to === 'open' && result?.defectId && !pointsTo(result, ref))
     throw rule(
-      `이 칸에는 이미 결함 ${result.defectId}이(가) 연결돼 있습니다. 같은 증상이 아니면 ${label}의 상태를 직접 바꾸세요.`,
+      `이 칸에는 이미 결함 ${result.defectId}이(가) 연결돼 있습니다. 같은 증상이면 ${label}의 상태를 결함 사이클에서 직접 바꾸세요.`,
     );
   const record: DefectRetest = {
     cycleId: b.cycle.id,
