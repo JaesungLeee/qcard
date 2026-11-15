@@ -2,6 +2,7 @@ import { Button, Icons, SectionMessage, textClass } from '@qcard/ui';
 import type { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { PageHeader } from '../../components/PageHeader';
+import { PolicyNotice } from '../legal';
 import { QueryState } from '../../components/QueryState';
 import { fmtDate } from '../../components/format';
 import type { ProjectSummary } from '../../data/api';
@@ -48,6 +49,7 @@ export function ProjectListPage() {
           </div>
         }
       />
+      <PolicyNotice />
       <QueryState query={projects}>
         {(list) =>
           list.length === 0 ? (

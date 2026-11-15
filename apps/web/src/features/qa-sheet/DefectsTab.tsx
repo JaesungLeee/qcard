@@ -1,4 +1,5 @@
-// ③ 결함 목록 (docs/product/results.md). Admin·QA는 심각도·상태를 그 자리에서 바꾼다. 결함은 판정 추적 뷰의 Fail 칸에서 등록한다
+// ③ 결함 목록 (docs/product/results.md). Admin·QA는 심각도·상태를 그 자리에서 바꾸고 GitHub 이슈로 발행한다
+// (docs/product/issues.md). 결함은 판정 추적 뷰의 Fail 칸에서 등록한다. 위쪽에는 이전 사이클 결함 재테스트(RetestSection)
 import { SEVERITY_LABEL, Severity, type Defect } from '@qcard/shared';
 import {
   ContentBadge,
@@ -17,9 +18,11 @@ import {
 import { Link } from 'react-router';
 import { fmtDateTime } from '../../components/format';
 import { useMyRole, useUpdateDefect } from '../../data/hooks';
+import { IssueCell } from '../issues/IssueCell';
 import { ErrorMessage } from '../projects/parts';
-import { resultKey } from './model';
+import { resultKey, retestColumn, retestRows } from './model';
 import { Mono, OsBuild, TabBody, traceUrl } from './parts';
+import { RetestSection } from './RetestSection';
 import type { SheetProps } from './QaSheetPage';
 import { DEFECT_STATUS_LABEL } from './SummaryTab';
 
@@ -31,11 +34,14 @@ export function DefectsTab({ d, index, projectId }: SheetProps) {
   const update = useUpdateDefect({ projectId, cycleId: d.cycle.id });
   const change = (df: Defect, patch: Partial<Pick<Defect, 'severity' | 'status'>>) =>
     update.mutate({ defectId: df.id, patch });
+  const retests = retestRows(d, index);
+  const retestPart = retests.length > 0 && <RetestSection d={d} rows={retests} projectId={projectId} canEdit={canEdit} />;
   if (d.defects.length === 0)
     return (
       <TabBody>
+        {retestPart}
         <div className="qc-card qs-empty">
-          <span className={textClass('headline2', 'bold')}>결함이 없습니다</span>
+          <span className={textClass('headline2', 'bold')}>이 사이클에서 등록한 결함이 없습니다</span>
           <span className={`${textClass('label1')} qs-muted`}>
             판정 추적 뷰의 Fail 칸에서 결함을 등록하면 여기에 모입니다.
           </span>
@@ -44,10 +50,11 @@ export function DefectsTab({ d, index, projectId }: SheetProps) {
     );
   return (
     <TabBody>
+      {retestPart}
       <ErrorMessage error={update.error} title="결함을 바꾸지 못했습니다" />
       <div className="qc-card" style={{ padding: 0 }}>
         <div className="qs-scroll-x">
-          <Table sx={{ minWidth: 1200 }}>
+          <Table sx={{ minWidth: 1460 }}>
             <TableHead>
               <TableRow>
                 <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>결함 ID</TableHeadCell>
@@ -58,6 +65,8 @@ export function DefectsTab({ d, index, projectId }: SheetProps) {
                 <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>재현 절차</TableHeadCell>
                 <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>기대 / 실제 결과</TableHeadCell>
                 <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>상태</TableHeadCell>
+                <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>GitHub 이슈</TableHeadCell>
+                <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>재테스트</TableHeadCell>
                 <TableHeadCell sx={{ whiteSpace: 'nowrap' }}>등록</TableHeadCell>
               </TableRow>
             </TableHead>
@@ -151,6 +160,12 @@ export function DefectsTab({ d, index, projectId }: SheetProps) {
                         </ContentBadge>
                       )}
                     </TableCell>
+                    <TableCell sx={{ verticalAlign: 'top' }}>
+                      <IssueCell projectId={projectId} cycle={d.cycle} defect={df} cases={d.cases} canEdit={canEdit} />
+                    </TableCell>
+                    <TableCell sx={{ verticalAlign: 'top' }}>
+                      <RetestCell df={df} projectId={projectId} />
+                    </TableCell>
                     <TableCell sx={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
                       {df.createdBy ? (
                         <span className="qs-stack" style={{ gap: token('space-2') }}>
@@ -171,5 +186,37 @@ export function DefectsTab({ d, index, projectId }: SheetProps) {
         </div>
       </div>
     </TabBody>
+  );
+}
+
+/** 결함 사이클의 재테스트 컬럼: 마지막 재테스트 판정과 사이클. fixed면 다음 새 빌드 사이클의 재테스트를 기다린다 */
+function RetestCell({ df, projectId }: { df: Defect; projectId: string }) {
+  const { last, waiting } = retestColumn(df);
+  if (!last && !waiting) return <span className="qs-faint">—</span>;
+  return (
+    <span className="qs-stack" style={{ gap: token('space-2') }}>
+      {last && (
+        <>
+          <span className="qs-row" style={{ gap: token('space-4'), flexWrap: 'nowrap' }}>
+            <VerdictBadge verdict={last.verdict} />
+            <Link
+              to={`/p/${projectId}/cycles/${last.cycleId}?tab=defects`}
+              className={`qs-link ${textClass('label2', 'medium')}`}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              {last.cycleName}
+            </Link>
+          </span>
+          <span className={`${textClass('caption1')} qs-muted`} style={{ whiteSpace: 'nowrap' }}>
+            {last.to === 'closed' ? 'closed로 확정' : '다시 열림'} · {last.by} · {fmtDateTime(last.at)}
+          </span>
+        </>
+      )}
+      {waiting && (
+        <span className={`${textClass('label2', 'medium')} qs-muted`} style={{ whiteSpace: 'nowrap' }}>
+          재테스트 대기
+        </span>
+      )}
+    </span>
   );
 }

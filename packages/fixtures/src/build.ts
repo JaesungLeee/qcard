@@ -39,6 +39,7 @@ import { rowHash } from '@qcard/spec';
 import raw from './data/onboarding-flow.json';
 import generatedPoints from './data/onboarding-points.json';
 import { APP_PACKAGE } from './device';
+import { HARUKONG_REPO } from './github';
 import { SCREENS, element, type MockElement } from './screens';
 
 type Row = {
@@ -232,6 +233,18 @@ export const project: Project = {
   packageName: 'com.example.harukong',
   createdBy: PEOPLE.lead,
   createdAt: T(1, 9),
+  // 이슈 발행 (docs/product/issues.md): 가상 저장소(github.ts)를 연결해 두었다
+  repo: {
+    installationId: HARUKONG_REPO.installationId,
+    repoId: HARUKONG_REPO.repoId,
+    owner: HARUKONG_REPO.owner,
+    name: HARUKONG_REPO.name,
+    private: HARUKONG_REPO.private,
+    status: 'active',
+    connectedBy: PEOPLE.lead,
+    connectedAt: T(2, 10),
+  },
+  assigneeMap: { [SPEC]: ['seojun-choi'] },
 };
 
 // ---------------------------------------------------------------- 프로젝트·멤버·초대
@@ -1193,6 +1206,19 @@ export const defects130: Defect[] = [
     expected: 'FR-009 문구와 같다',
     actual: '"…습관이 돼요 메이트가 들어오면" — 마침표가 빠짐',
     status: 'fixed',
+    // 개발자가 이슈를 고쳐서 닫았다 → fixed. QA 재테스트 뒤 closed로 바꾸는 흐름 (github.ts의 #12)
+    issue: {
+      repoId: HARUKONG_REPO.repoId,
+      repo: `${HARUKONG_REPO.owner}/${HARUKONG_REPO.name}`,
+      number: 12,
+      url: `https://github.com/${HARUKONG_REPO.owner}/${HARUKONG_REPO.name}/issues/12`,
+      state: 'closed',
+      closeReason: 'completed',
+      link: 'linked',
+      publishedBy: PEOPLE.qa,
+      publishedAt: T(3, 15),
+    },
+    statusLog: [{ to: 'fixed', by: 'seojun-choi', via: 'github', at: T(4, 11) }],
   },
 ];
 
@@ -1229,7 +1255,30 @@ export const cycle121: TestCycle = {
   serverEnv: 'stage',
   snapshot: snapshot120.map((c) => ({ tcId: c.tcId, contentHash: c.contentHash })),
   createdBy: PEOPLE.lead,
-  defectSeq: 1,
+  defectSeq: 4,
+};
+
+/**
+ * 1.2.1에서 난 결함의 칸. D-1은 닫혔고, D-2~D-4는 개발자가 고쳐 fixed — 1.3.0 회귀에서 재테스트한다
+ * (docs/product/results.md#재테스트): D-2는 1.3.0 Galaxy S24가 Pass, D-3은 Fail, D-4는 Pixel 8이 아직 남음
+ */
+const SPECIAL_121: Record<string, Partial<Record<string, Special>>> = {
+  [src('EC-004')]: {
+    [P8.id]: {
+      verdict: 'fail',
+      actual: '첫 습관 만들기 스텝에서 뒤로가기 시 닉네임 설정 스텝으로 되돌아감',
+      defectId: 'D-1',
+    },
+  },
+  [src('TS-018')]: {
+    [S24.id]: { verdict: 'fail', actual: '[초대 링크 복사]를 눌러도 복사 완료 토스트가 뜨지 않았다.', defectId: 'D-2' },
+  },
+  [src('EC-009')]: {
+    [S24.id]: { verdict: 'fail', actual: '[초대 링크 복사]를 연달아 누르자 토스트가 겹쳐 쌓였다.', defectId: 'D-3' },
+  },
+  [src('TS-022')]: {
+    [P8.id]: { verdict: 'fail', actual: '오른쪽 위 [X]를 눌러도 반응이 없었다.', defectId: 'D-4' },
+  },
 };
 
 const results121: CaseResult[] = snapshot120.flatMap((tc, i) =>
@@ -1239,13 +1288,7 @@ const results121: CaseResult[] = snapshot120.flatMap((tc, i) =>
       d,
       T(3 + k, 10 + Math.floor(i / 10), (i * 7) % 60),
       k === 0 ? PEOPLE.qa : PEOPLE.lead,
-      tc.sourceId === src('EC-004') && k === 1
-        ? {
-            verdict: 'fail',
-            actual: '첫 습관 만들기 스텝에서 뒤로가기 시 닉네임 설정 스텝으로 되돌아감',
-            defectId: 'D-1',
-          }
-        : undefined,
+      SPECIAL_121[tc.sourceId]?.[d.id],
       `run-121-${k}`,
     ),
   ),
@@ -1262,6 +1305,45 @@ export const defects121: Defect[] = [
     expected: '아무 반응 없이 현재 스텝에 머무른다',
     actual: '닉네임 설정 스텝으로 되돌아간다',
     status: 'closed',
+  },
+  {
+    id: 'D-2',
+    title: '초대 링크 복사 후 토스트가 뜨지 않음',
+    severity: 'minor',
+    tcId: caseBySrc('TS-018').tcId,
+    deviceId: S24.id,
+    repro: ['온보딩을 메이트 초대 스텝까지 진행', '[초대 링크 복사]를 누른다'],
+    expected: '복사 완료 토스트가 노출된다 (FR-009)',
+    actual: '토스트가 뜨지 않는다',
+    status: 'fixed',
+    createdBy: PEOPLE.qa,
+    createdAt: T(3, 11),
+  },
+  {
+    id: 'D-3',
+    title: '초대 링크 복사를 연달아 누르면 토스트가 겹쳐 쌓임',
+    severity: 'minor',
+    tcId: caseBySrc('EC-009').tcId,
+    deviceId: S24.id,
+    repro: ['온보딩을 메이트 초대 스텝까지 진행', '[초대 링크 복사]를 빠르게 3번 누른다'],
+    expected: '복사 완료 토스트는 1개만 보인다',
+    actual: '토스트가 누른 횟수만큼 겹쳐 쌓인다',
+    status: 'fixed',
+    createdBy: PEOPLE.qa,
+    createdAt: T(3, 11, 20),
+  },
+  {
+    id: 'D-4',
+    title: '메이트 초대 스텝 [X]가 반응하지 않음',
+    severity: 'major',
+    tcId: caseBySrc('TS-022').tcId,
+    deviceId: P8.id,
+    repro: ['온보딩을 메이트 초대 스텝까지 진행', '오른쪽 위 [X]를 누른다'],
+    expected: '사용법 안내 스텝 1이 열린다',
+    actual: '아무 반응이 없다',
+    status: 'fixed',
+    createdBy: PEOPLE.lead,
+    createdAt: T(4, 14),
   },
 ];
 

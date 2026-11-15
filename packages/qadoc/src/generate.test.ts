@@ -40,7 +40,6 @@ const META = {
   createdAt: '2026-10-22T10:00:00+09:00',
 };
 
-
 const run = (over: Partial<GenerateInput> & Pick<GenerateInput, 'llm'>) =>
   generateQaDoc({ bundle: bundleOf(SPEC), prepFlows: [], meta: META, ...over });
 
@@ -254,7 +253,14 @@ describe('generateQaDoc — 응답 확인', () => {
   });
 
   it('이전 버전의 플로우는 케이스가 참조하는 것만 사람이 고친 내용 그대로 이어받는다', async () => {
-    const home = { id: 'pf-home', name: '홈 (사람이 고침)', kind: 'data_state' as const, check: '홈', steps: ['a'], rev: 3 };
+    const home = {
+      id: 'pf-home',
+      name: '홈 (사람이 고침)',
+      kind: 'data_state' as const,
+      check: '홈',
+      steps: ['a'],
+      rev: 3,
+    };
     const unused = { id: 'pf-old', name: '옛 플로우', kind: 'data_state' as const, check: '-', steps: ['-'] };
     const { prepFlows, newPrepFlows } = await run({
       llm: fakeGeneratorLlm().llm,
@@ -269,9 +275,64 @@ describe('generateQaDoc — 응답 확인', () => {
     const { doc, warnings } = await run({ llm: fakeGeneratorLlm().llm, prepFlows: [CLEAN_FLOW, login] });
     const caseOf = (src: string) => doc.cases.find((c) => c.sourceId === `sample/${src}`)!;
     expect(caseOf('TS-001').accountKind).toBe('기본');
-    expect(warnings).toContain(`${caseOf('TS-001').tcId}: 로그인 준비 플로우를 쓰는데 계정 종류가 없어 기본으로 채웠다`);
+    expect(warnings).toContain(
+      `${caseOf('TS-001').tcId}: 로그인 준비 플로우를 쓰는데 계정 종류가 없어 기본으로 채웠다`,
+    );
     // 모델이 정한 종류는 그대로 둔다
     expect(caseOf('EC-001').accountKind).toBe('구독자');
     expect(warnings.join('\n')).not.toContain(caseOf('EC-001').tcId);
+  });
+});
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+describe('generateQaDoc — 여러 스펙', () => {
+  const twoSpecs = () =>
+    readBundle([
+      { path: 'sample-a/spec.md', content: SPEC },
+      { path: 'sample-b/spec.md', content: SPEC },
+    ]);
+
+  it('계획이 끝난 스펙의 묶음은 뒤 스펙 계획을 기다리지 않고 바로 변환한다', async () => {
+    const { llm, calls } = fakeGeneratorLlm();
+    const events: GenerateProgress[] = [];
+    const { doc } = await run({ llm, bundle: twoSpecs(), onProgress: (e) => events.push(e) });
+    expect(calls.map((c) => c.kind)).toEqual(['plan', 'case', 'plan', 'case']);
+    const order = events.filter((e) => e.kind === 'plan' || e.kind === 'batch_start').map((e) => `${e.kind} ${e.spec}`);
+    expect(order).toEqual(['plan sample-a', 'batch_start sample-a', 'plan sample-b', 'batch_start sample-b']);
+    // 뒤 스펙 계획은 앞 스펙이 만든 준비 플로우를 본다
+    expect(calls[2]!.prompt).toContain('pf-home ·');
+    expect(doc.cases.filter((c) => c.change === 'new')).toHaveLength(6);
+  });
+
+  it('묶음 하나가 실패하면 남은 스펙의 묶음은 부르지 않고 그 오류를 던진다', async () => {
+    const error = new Error('플랜 한도');
+    const { llm: inner, calls } = fakeGeneratorLlm({ failOn: { call: 2, error } });
+    // sample-b 계획이 묶음 실패보다 늦게 끝나게 한다
+    const llm: typeof inner = {
+      create: (req, meta) =>
+        calls.length === 2 ? sleep(5).then(() => inner.create(req, meta)) : inner.create(req, meta),
+    };
+    await expect(run({ llm, bundle: twoSpecs() })).rejects.toBe(error);
+    // 진행 중이던 sample-b 계획은 끝까지 기다리고, 그 묶음은 시작하지 않는다
+    expect(calls.map((c) => c.kind)).toEqual(['plan', 'case', 'plan']);
+  });
+
+  it('케이스 변환은 동시에 concurrency개까지만 부른다', async () => {
+    const { llm: inner } = fakeGeneratorLlm();
+    let running = 0;
+    let peak = 0;
+    const llm: typeof inner = {
+      async create(req, meta) {
+        const kind = JSON.stringify(req.output_config?.format).includes('prep_flows') ? 'plan' : 'case';
+        if (kind === 'case') peak = Math.max(peak, ++running);
+        await sleep(5);
+        if (kind === 'case') running--;
+        return inner.create(req, meta);
+      },
+    };
+    const { doc } = await run({ llm, bundle: twoSpecs(), batchSize: 1, concurrency: 2 });
+    expect(peak).toBe(2);
+    expect(doc.cases.filter((c) => c.change === 'new')).toHaveLength(6);
   });
 });

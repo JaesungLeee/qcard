@@ -150,7 +150,14 @@ describe('사이클 삭제', () => {
   it('사이클과 하위 문서·증거를 지우고, 접두어가 겹치는 다른 사이클·빌드는 남긴다', async () => {
     const p = (await h.createProject(ctx('lead'), input)).id;
     const [mine, other] = await seed(p);
+    const draft = (cycleId: string) => ({ kind: 'issue_draft', requestedBy: 'u-lead', input: { cycleId } });
+    await db.doc(`projects/${p}/issueDrafts/draft-c1-D-1-u-lead`).set(draft('c1'));
+    await db.doc(`projects/${p}/issueDrafts/draft-c10-D-1-u-lead`).set(draft('c10'));
     await del('lead', p);
+    // 이 사이클 결함의 이슈 초안도 지운다
+    expect((await db.collection(`projects/${p}/issueDrafts`).get()).docs.map((d) => d.id)).toEqual([
+      'draft-c10-D-1-u-lead',
+    ]);
     expect((await db.doc(`projects/${p}/cycles/c1`).get()).exists).toBe(false);
     expect((await db.doc(`projects/${p}/cycles/c1`).listCollections()).length).toBe(0);
     expect((await bucket.file(mine!).exists())[0]).toBe(false);

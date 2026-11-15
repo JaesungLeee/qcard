@@ -6,6 +6,7 @@
 
 - **웹 대시보드** (`apps/web`) — `https://qcard.dev`(Firebase Hosting). 스펙 업로드, QA 문서 검토·편집·승인, 사이클과 진행 상태, QA 시트, 결과 확정. 설치할 것이 없다.
 - **Firebase** — Auth, Firestore, Storage, Cloud Functions(`apps/functions`), Cloud KMS. 리전은 서울(`asia-northeast3`).
+- **GitHub** — 결함을 이슈로 발행하는 곳. qcard GitHub App을 팀 저장소에 설치하고, Functions만 GitHub API를 부르고 웹훅을 받는다([product/issues.md](product/issues.md)).
 - **호스트 에이전트** (`apps/host-agent`, npm `@qcard/host`, 명령 `qcard`) — 디바이스가 꽂힌 실행자 PC(macOS)에서 돈다. `127.0.0.1`로 로컬 콘솔을 띄우고, Firebase에는 밖으로 나가는 연결만 쓰므로 포트를 열 필요가 없다. LLM은 같은 PC에 설치된 사용자 본인의 Claude Code로 부른다.
 
 실행자는 디바이스가 연결된 PC 앞에 있어야 한다. 원격 실행·여러 명의 동시 관전은 범위 밖이다.
@@ -22,7 +23,8 @@
 │ Auth (웹: GitHub 로그인 / 호스트: 호스트 자격으로 받은 호스트 토큰)         │
 │ Firestore (프로젝트·멤버·QA 문서·사이클·Run·결과·작업, 보안 규칙으로 격리)  │
 │ Storage (스펙·빌드·스크린샷)                                               │
-│ Cloud Functions (초대·호스트 연결·계정 배정·칸 선점·사이클·프로젝트 삭제)   │
+│ Cloud Functions (초대·호스트 연결·계정 배정·칸 선점·사이클·프로젝트 삭제,   │
+│                  GitHub 이슈 발행·상태 동기화 웹훅) ◀──▶ GitHub App        │
 │ Cloud KMS (테스트 계정 비밀값 암호화)                                      │
 └──────────────────────▲─────────────────────────────────────────────────────┘
                        │ 결과·증거 업로드, 작업 구독, 빌드 다운로드  ※ 아웃바운드만
@@ -42,7 +44,7 @@
 ### 왜 이렇게 나눴나
 
 - **Executor를 호스트에 둔다.** 관찰 → 판단 → 액션 루프는 디바이스와 가까울수록 지연이 적고, 스크린샷 같은 큰 데이터를 로컬에서 처리한 뒤 필요한 것만 올릴 수 있다.
-- **LLM 작업을 모두 호스트에 둔다.** LLM 비용을 각 사용자의 Claude 플랜으로 부담하려면, 호출이 그 사용자가 로그인한 Claude Code에서 나가야 한다([security.md](security.md#llm-호출-경로)). 그래서 클라우드에는 LLM을 부르는 구성 요소가 없다. 웹의 QA 문서 생성·케이스 수정안·Run 시작은 Firestore **작업 문서**로 만들고, 요청자의 호스트가 구독해 처리한다. 호스트는 처리할 수 있는 작업 종류를 연결 신호로 알리고, 웹은 이를 보고 업데이트가 필요한 호스트를 안내한다.
+- **LLM 작업을 모두 호스트에 둔다.** LLM 비용을 각 사용자의 Claude 플랜으로 부담하려면, 호출이 그 사용자가 로그인한 Claude Code에서 나가야 한다([security.md](security.md#llm-호출-경로)). 그래서 클라우드에는 LLM을 부르는 구성 요소가 없다. 웹의 QA 문서 생성·케이스 수정안·Run 시작·이슈 초안은 Firestore **작업 문서**로 만들고, 요청자의 호스트가 구독해 처리한다. 호스트는 처리할 수 있는 작업 종류를 연결 신호로 알리고, 웹은 이를 보고 업데이트가 필요한 호스트를 안내한다.
 - **화면은 로컬에서만 본다.** 실행 관찰은 실행자 1명만 하면 되므로, 영상을 서버로 중계하지 않으면 미디어 서버·NAT 통과·대역폭 문제가 없다. 팀은 진행 상태를 실시간으로, 화면은 스크린샷으로 나중에 확인한다.
 
 ## Agent 구조
@@ -52,6 +54,7 @@
 | **QA Doc Generator** (`packages/qadoc`) | 요청자의 호스트 | 스펙 TS·EC 행 → 실행 가능한 케이스 변환(신규·변경만), 준비 플로우, 확인 질문, 보강 제안, 답변 기반 수정안. 매칭·동일 케이스 복사·ID·해시는 코드 | Opus          |
 | **Executor** (`packages/agent`)         | 실행자의 호스트 | 화면 관찰 → 액션 결정 → 디바이스 조작, 준비 플로우 수행                                                                                         | Sonnet        |
 | **Verifier** (`packages/agent`)         | 실행자의 호스트 | 검증 포인트 판정과 근거. Executor와 분리해 자기확증 편향을 줄인다. 트리 포인트는 대상 요소만 찾고 값 비교는 코드, 비전 포인트는 화면으로 판정   | Sonnet (고정) |
+| **Reporter** (`packages/reporter`)      | 요청자의 호스트 | 결함·케이스 텍스트 → 고른 이슈 템플릿에 맞춘 제목·본문 초안. 넘긴 정보에 없는 칸은 비운다. 템플릿 해석·본문 조립·끝줄은 코드                    | Sonnet        |
 
 Haiku는 판정이 아닌 보조 작업(화면 변화 감지, 팝업 분류 등)에만 쓴다. 역할별 모델은 `packages/llm/src/types.ts`의 `MODELS`에 있다.
 
@@ -77,6 +80,7 @@ Haiku는 판정이 아닌 보조 작업(화면 변화 감지, 팝업 분류 등)
 | 작업 큐      | Firestore 작업 문서 → 요청자의 호스트가 구독                                                                 | LLM 작업을 요청자 본인의 플랜으로 처리                                                                                                               |
 | 파일         | Cloud Storage for Firebase                                                                                   | 스펙·빌드·스크린샷                                                                                                                                   |
 | 인증         | Firebase Auth — 웹은 GitHub 단일, 호스트는 Functions가 발급한 커스텀 토큰(호스트 클레임)                     | 대상 사용자는 GitHub 계정이 있다. 로그인 장소를 웹 하나로 모으고, 호스트에 GitHub 토큰을 두지 않으며, 보안 규칙이 호스트 쓰기와 사람 쓰기를 구분한다 |
+| 이슈 트래커  | GitHub Issues, qcard GitHub App(Issues 쓰기·Contents 읽기) + Functions 웹훅                                  | 대상 사용자가 GitHub을 쓴다. 저장소 단위 최소 권한, 상태 동기화를 같은 App 웹훅으로([decisions.md](decisions.md#결함-트래커는-github-issues))        |
 | 비밀값       | Cloud KMS + Firestore                                                                                        | 테스트 계정 비밀값은 수가 많고 프로젝트와 함께 지워야 해서 KMS로 암호화해 Firestore에 둔다                                                           |
 | Android 제어 | ADB 직접 호출(`uiautomator dump`, `input`, 한글은 ADBKeyboard), `DeviceDriver` 인터페이스(`packages/device`) | 설치 부담이 없다. Appium은 필요해지면 같은 인터페이스 뒤에 붙인다. 테스트는 `FakeDevice`                                                             |
 | Android 화면 | scrcpy H.264 → 브라우저 WebCodecs                                                                            | 저지연·서버 불필요. Chrome 계열에서만 된다                                                                                                           |

@@ -12,6 +12,7 @@ import { Link, NavLink, Outlet, useParams } from 'react-router';
 import { fmtDate } from '../components/format';
 import { useProject } from '../data/hooks';
 import { ConsoleNavLink } from '../features/console/Open';
+import { PolicyNotice } from '../features/legal';
 import { CurrentUser } from './DevUserSwitch';
 import { PlainShell } from './PlainShell';
 import './shell.css';
@@ -80,6 +81,7 @@ export function AppShell() {
         </div>
       </aside>
       <main className="qc-main">
+        <PolicyBanner />
         {p?.deletedAt && (
           <div className="qc-page" style={{ paddingBottom: 0 }}>
             <SectionMessage
@@ -92,6 +94,15 @@ export function AppShell() {
         )}
         <Outlet />
       </main>
+    </div>
+  );
+}
+
+/** 약관 변경 공지 (시행일 전에만, 닫으면 숨긴다) */
+function PolicyBanner() {
+  return (
+    <div className="qc-page qc-policy-notice">
+      <PolicyNotice />
     </div>
   );
 }

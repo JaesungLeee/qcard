@@ -1,0 +1,9 @@
+/* 약관 변경 공지 배너의 링크. 색은 --qc-* 토큰만 쓴다. */
+.qc-notice-link {
+  color: var(--qc-foreground-brand-primary);
+  text-decoration: underline;
+}
+.qc-notice-link:focus-visible {
+  outline: 3px solid var(--qc-line-brand-focus);
+  outline-offset: 2px;
+}

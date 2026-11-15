@@ -5,9 +5,18 @@ import {
   isRunStale,
   HOST_ONLINE_MS,
   hostOutdated,
+  pointsTo,
+  retestCell,
+  retestReading,
+  retestRecordIn,
+  type DefectRetest,
+  type RetestCell,
+  type RetestReading,
+  type RetestSource,
   type Host,
   type AutoConfirmCondition,
   type CaseResult,
+  type Defect,
   type PauseReason,
   type Requirement,
   type Run,
@@ -289,3 +298,99 @@ export function caseVerdictCounts(cases: TestCase[], targets: TargetDevice[], in
 
 /** 요구사항 ID에서 스펙 이름을 뺀 짧은 표기: `onboarding-flow/FR-001` → `FR-001` */
 export const shortId = (id: string) => id.slice(id.lastIndexOf('/') + 1);
+
+// ---------------------------------------------------------------- 재테스트 (docs/product/results.md#재테스트)
+
+/** 재테스트 목록 한 줄: 이전 사이클 결함, 이 사이클의 재테스트 칸과 판정, 이 사이클에서 확정한 기록 */
+export type RetestRow = {
+  src: RetestSource;
+  /** 사이클 밖에서 가리키는 결함 이름: `사이클 이름 D-n` */
+  label: string;
+  cell: RetestCell;
+  result?: CaseResult;
+  reading: RetestReading;
+  record?: DefectRetest;
+};
+
+export const defectRefLabel = (cycleName: string, defectId: string) => `${cycleName} ${defectId}`;
+
+export function retestRows(d: Pick<CycleDetail, 'cycle' | 'retests'>, index: ResultIndex): RetestRow[] {
+  return d.retests.map((src) => {
+    const cell = retestCell(src, d.cycle);
+    const result = cell.kind === 'found' ? index.get(resultKey(cell.tcId, cell.deviceId)) : undefined;
+    return {
+      src,
+      label: defectRefLabel(src.cycle.name, src.defect.id),
+      cell,
+      result,
+      reading: retestReading(result),
+      record: retestRecordIn(src.defect, d.cycle.id),
+    };
+  });
+}
+
+/** 확정했으면 그 판정, 아니면 칸 판정. 사람 확정 전 Fail도 Fail로 센다 */
+export function retestOutcome(row: RetestRow): 'pass' | 'fail' | 'pending' {
+  if (row.record) return row.record.verdict;
+  if (row.reading === 'pass') return 'pass';
+  return row.reading === 'pending' ? 'pending' : 'fail';
+}
+
+/** 요약 탭: "재테스트 대상 결함 N건 — Pass a · Fail b · 남음 c" */
+export function retestCounts(rows: RetestRow[]) {
+  const counts = { total: rows.length, pass: 0, fail: 0, pending: 0 };
+  for (const r of rows) counts[retestOutcome(r)]++;
+  return counts;
+}
+
+/**
+ * 확정할 수 있는 일: 결함이 아직 fixed이고 칸 판정이 맞을 때. 이 사이클에서 이미 확정했으면 다시 fixed가 돼도
+ * 없다 — 칸 결과가 고치기 전 빌드의 것이다
+ */
+export function retestAction(row: RetestRow): 'close' | 'reopen' | undefined {
+  if (row.record || row.src.defect.status !== 'fixed' || row.cell.kind !== 'found') return undefined;
+  if (row.reading === 'pass') return 'close';
+  // 칸에 다른 결함이 있으면 증상이 달라 새 결함을 만든 칸이다 — 다시 열지 않는다
+  const ref = { cycleId: row.src.cycle.id, defectId: row.src.defect.id };
+  if (row.reading === 'fail' && (!row.result?.defectId || pointsTo(row.result, ref))) return 'reopen';
+  return undefined;
+}
+
+/** 칸 → 그 칸에서 재테스트하는 결함 번호 (케이스 그리드의 "재테스트 D-n"). 이 사이클에서 확정한 결함은 뺀다 */
+export function retestMarks(rows: RetestRow[]): Map<string, string[]> {
+  const marks = new Map<string, string[]>();
+  for (const r of rows) {
+    if (r.cell.kind !== 'found' || r.record) continue;
+    const k = resultKey(r.cell.tcId, r.cell.deviceId);
+    marks.set(k, [...(marks.get(k) ?? []), r.src.defect.id]);
+  }
+  return marks;
+}
+
+/**
+ * 칸에 연결된 결함의 이름. 재테스트에서 다시 연 이전 사이클 결함은 사이클 이름을 붙이고, 그 사이클을 지웠으면
+ * "삭제된 결함"으로 보인다
+ */
+export function cellDefect(
+  r: Pick<CaseResult, 'defectId' | 'defectCycleId'>,
+  d: Pick<CycleDetail, 'retests'>,
+): { id: string; label: string; cycleId?: string; cycleName?: string; deleted?: boolean } | undefined {
+  if (!r.defectId) return undefined;
+  if (!r.defectCycleId) return { id: r.defectId, label: r.defectId };
+  const src = d.retests.find((s) => s.cycle.id === r.defectCycleId && s.defect.id === r.defectId);
+  if (!src) return { id: r.defectId, label: `삭제된 결함 ${r.defectId}`, cycleId: r.defectCycleId, deleted: true };
+  return {
+    id: r.defectId,
+    label: defectRefLabel(src.cycle.name, r.defectId),
+    cycleId: r.defectCycleId,
+    cycleName: src.cycle.name,
+  };
+}
+
+/**
+ * 결함 사이클의 재테스트 컬럼: 마지막 재테스트와, 지금 재테스트를 기다리는지(fixed). 다시 연 결함이 또 fixed가 되면
+ * 다음 새 빌드 사이클에서 다시 재테스트한다
+ */
+export function retestColumn(df: Pick<Defect, 'status' | 'retests'>): { last?: DefectRetest; waiting: boolean } {
+  return { last: df.retests?.at(-1), waiting: df.status === 'fixed' };
+}

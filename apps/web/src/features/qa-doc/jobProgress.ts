@@ -23,17 +23,27 @@ export type PhaseState = 'done' | 'current' | 'stopped' | 'todo';
 export const PHASE_LABEL: Record<PhaseKey, string> = { plan: '스펙 계획', cases: '케이스 변환', save: '저장' };
 const PHASES: PhaseKey[] = ['plan', 'cases', 'save'];
 
-/** 단계 표시: 스펙 계획 → 케이스 변환 → 저장. 멈춘 작업은 멈춘 단계를 표시한다 */
+/**
+ * 단계 표시: 스펙 계획 → 케이스 변환 → 저장. 멈춘 작업은 멈춘 단계를 표시한다.
+ * 계획이 끝난 스펙부터 케이스를 변환하므로, 케이스 변환 중에도 계획이 남아 있으면 두 단계가 함께 진행 중이다
+ */
 export function phaseSteps(job: QaDocJob): { key: PhaseKey; state: PhaseState; count?: string }[] {
   const p = job.progress;
   const at = job.status === 'done' ? PHASES.length : job.status === 'queued' || !p ? -1 : PHASES.indexOf(p.phase);
   const stopped = job.status === 'paused' || job.status === 'failed';
   const planned = job.plan?.specs.filter((s) => s.new + s.changed > 0).length;
+  const planning = p?.phase === 'cases' && planned !== undefined && p.planDone !== undefined && p.planDone < planned;
   return PHASES.map((key, i) => {
-    const state: PhaseState = i < at ? 'done' : i === at ? (stopped ? 'stopped' : 'current') : 'todo';
+    const reached = i < at && !(key === 'plan' && planning);
+    const state: PhaseState = reached ? 'done' : i <= at ? (stopped ? 'stopped' : 'current') : 'todo';
     let count: string | undefined;
     if (key === 'plan' && p && state !== 'todo')
-      count = p.phase === 'plan' ? `${p.done}/${p.total}` : planned !== undefined ? `${planned}/${planned}` : undefined;
+      count =
+        p.phase === 'plan'
+          ? `${p.done}/${p.total}`
+          : planned !== undefined
+            ? `${planning ? p.planDone : planned}/${planned}`
+            : undefined;
     if (key === 'cases' && p && state !== 'todo' && p.phase !== 'plan')
       count = p.phase === 'cases' ? `${p.done}/${p.total}` : `${targetsOf(job)}/${targetsOf(job)}`;
     if (key === 'save' && job.status === 'done' && job.result) count = `${job.result.cases}`;
@@ -72,7 +82,13 @@ export function paged<T>(items: T[], page: number, size: number) {
   const pages = Math.max(1, Math.ceil(items.length / size));
   const current = Math.min(Math.max(1, page), pages);
   const start = (current - 1) * size;
-  return { items: items.slice(start, start + size), page: current, pages, from: start + 1, to: Math.min(items.length, start + size) };
+  return {
+    items: items.slice(start, start + size),
+    page: current,
+    pages,
+    from: start + 1,
+    to: Math.min(items.length, start + size),
+  };
 }
 
 /** 처음 여는 페이지: 지금 만들고 있는 행이 있는 곳, 없으면 아직 안 만든 첫 행이 있는 곳 */

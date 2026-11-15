@@ -246,6 +246,22 @@ describe('쓰기', () => {
       setDoc(doc(as('u-viewer'), 'projects/haru/jobs/j3'), { kind: 'qa_doc_generate', requestedBy: 'u-viewer' }),
     );
   });
+
+  it('이슈 초안은 작업과 따로, 요청자 본인만 읽고 쓴다', async () => {
+    const draft = (by: string) => ({ kind: 'issue_draft', requestedBy: by, status: 'queued' });
+    const at = (who: string) => doc(as(who), 'projects/haru/issueDrafts/d1');
+    await assertSucceeds(setDoc(at('u-qa'), draft('u-qa')));
+    await assertFails(setDoc(doc(as('u-qa'), 'projects/haru/issueDrafts/d2'), draft('u-admin')));
+    await assertFails(
+      setDoc(doc(as('u-qa'), 'projects/haru/issueDrafts/d3'), { ...draft('u-qa'), kind: 'qa_doc_generate' }),
+    );
+    await assertFails(setDoc(doc(as('u-viewer'), 'projects/haru/issueDrafts/d4'), draft('u-viewer')));
+    await assertSucceeds(getDoc(at('u-qa')));
+    await assertFails(getDoc(at('u-admin')));
+    await assertSucceeds(updateDoc(at('u-qa'), { status: 'running' }));
+    await assertFails(updateDoc(at('u-admin'), { status: 'running' }));
+    await assertFails(updateDoc(at('u-qa'), { requestedBy: 'u-admin' }));
+  });
 });
 
 describe('호스트 토큰', () => {
@@ -349,6 +365,51 @@ describe('결함', () => {
     await assertFails(updateDoc(at, { title: '바꾼 제목' }));
     await assertFails(updateDoc(doc(as('u-viewer'), `${C}/defects/D-1`), { status: 'closed' }));
     await assertFails(deleteDoc(at));
+  });
+
+  it('GitHub 이슈 연결은 클라이언트가 쓰지 못한다', async () => {
+    const issue = { repoId: 1, repo: 'o/r', number: 3, url: 'u', state: 'open', link: 'linked' };
+    await assertFails(create(as('u-qa'), 1, { ...defect, issue }));
+    await assertFails(create(as('u-qa'), 1, { ...defect, statusLog: [] }));
+    await assertSucceeds(create(as('u-qa'), 1));
+    const at = doc(as('u-qa'), `${C}/defects/D-1`);
+    await assertFails(updateDoc(at, { issue }));
+    await assertFails(updateDoc(at, { publishing: { by: 'x', at: 't' } }));
+  });
+
+  it('이슈가 연결된 결함은 상태를 Functions로만 바꾼다 (심각도는 그대로 바꾼다)', async () => {
+    await env.withSecurityRulesDisabled((c) =>
+      setDoc(doc(c.firestore(), `${C}/defects/D-1`), {
+        ...defect,
+        issue: { repoId: 1, repo: 'o/r', number: 3, url: 'u', state: 'open', link: 'linked' },
+      }),
+    );
+    const at = doc(as('u-qa'), `${C}/defects/D-1`);
+    await assertFails(updateDoc(at, { status: 'closed' }));
+    await assertSucceeds(updateDoc(at, { severity: 'critical' }));
+  });
+
+  it('발행 중인 결함도 상태를 직접 바꾸지 못한다 (새 이슈와 어긋나지 않게)', async () => {
+    await env.withSecurityRulesDisabled((c) =>
+      setDoc(doc(c.firestore(), `${C}/defects/D-1`), { ...defect, publishing: { by: '김민지', at: 't' } }),
+    );
+    const at = doc(as('u-qa'), `${C}/defects/D-1`);
+    await assertFails(updateDoc(at, { status: 'closed' }));
+    await assertSucceeds(updateDoc(at, { severity: 'critical' }));
+  });
+
+  it('이슈 색인·저장소 연결 진행은 아무도 직접 읽거나 쓰지 못한다', async () => {
+    await env.withSecurityRulesDisabled(async (c) => {
+      await setDoc(doc(c.firestore(), 'issueLinks/1_3'), { projectId: 'haru' });
+      await setDoc(doc(c.firestore(), 'githubConnects/s1'), { projectId: 'haru', uid: 'u-admin' });
+    });
+    await assertFails(getDoc(doc(as('u-admin'), 'issueLinks/1_3')));
+    await assertFails(setDoc(doc(as('u-admin'), 'issueLinks/1_4'), { projectId: 'haru' }));
+    await assertFails(getDoc(doc(as('u-admin'), 'githubConnects/s1')));
+  });
+
+  it('프로젝트의 저장소 연결·담당자 매핑은 Admin도 직접 쓰지 못한다', async () => {
+    await assertFails(updateDoc(doc(as('u-admin'), 'projects/haru'), { assigneeMap: { a: ['kim'] } }));
   });
 });
 

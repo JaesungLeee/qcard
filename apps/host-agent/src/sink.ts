@@ -137,9 +137,14 @@ export function firestoreApply(db: Firestore, storage: FirebaseStorage): ApplyOp
     const prev = (await getDoc(at)).data() as (CaseResult & { _i?: number; _decision?: string }) | undefined;
     const next = op.data as CaseResult;
     const resent = prev && prev.runId === next.runId && prev.executedAt === next.executedAt;
+    // 칸에 연결한 결함(재테스트로 다시 연 이전 사이클 결함 포함)은 다시 실행해도 그대로 둔다
+    const linked = {
+      ...(prev?.defectId ? { defectId: prev.defectId } : {}),
+      ...(prev?.defectCycleId ? { defectCycleId: prev.defectCycleId } : {}),
+    };
     if (resent) {
       const kept = prev.previousAttempts ? { previousAttempts: prev.previousAttempts } : {};
-      return setDoc(at, { ...op.data, ...kept, attempts: prev.attempts, _i: prev._i ?? Date.now() });
+      return setDoc(at, { ...op.data, ...kept, ...linked, attempts: prev.attempts, _i: prev._i ?? Date.now() });
     }
     if (!prev || prev.verdict === 'nt') return setDoc(at, { ...op.data, attempts: 1, _i: prev?._i ?? Date.now() });
     const { _i, _decision: _, ...old } = prev;
@@ -147,6 +152,7 @@ export function firestoreApply(db: Firestore, storage: FirebaseStorage): ApplyOp
     batch.set(doc(db, `${op.path}__${old.attempts}`.replace('/results/', '/attempts/')), old);
     batch.set(at, {
       ...op.data,
+      ...linked,
       attempts: old.attempts + 1,
       previousAttempts: [...(old.previousAttempts ?? []), attemptSummary(old)],
       _i,

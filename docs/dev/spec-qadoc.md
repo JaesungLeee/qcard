@@ -21,6 +21,7 @@ pnpm --filter @qcard/qadoc generate <docs/specs 폴더> --out <결과.json> [--o
 - 실제 스펙으로 QA 문서를 만들어 JSON으로 쓴다. 플랜 사용량 차감, Firestore에 올리지 않는다.
 - 호출은 `../qcard-specs/cassettes/qadoc`에 녹화돼 같은 요청은 재생하므로 중단해도 이어 간다. 프롬프트를 바꾸면 바뀐 호출만 다시 부른다.
 - 매칭·복사·ID·해시·승인 상태는 코드, 신규·변경 행의 케이스 변환·준비 플로우·확인 질문·보강 제안은 모델(`packages/qadoc/src/prompts.ts`).
+- 호출 순서: 스펙 계획은 스펙 순서대로 한 번씩(뒤 스펙이 앞 스펙의 준비 플로우를 재사용), 케이스 변환은 8행 묶음을 동시에 6개까지(스펙 계획과 합쳐 Claude Code 프로세스 최대 7개). 계획이 끝난 스펙의 묶음은 뒤 스펙 계획을 기다리지 않고 바로 변환한다.
 - 결과의 `prepFlows`는 이 버전의 준비 플로우다. `--prev-doc`의 플로우 중 케이스가 참조하는 것을 그대로 이어받고, 없는 것만 새로 만든다(`newPrepFlows`). 다음 버전은 이 결과를 `--prev-doc`으로 준다.
 
 웹에서 요청한 생성 작업은 호스트 에이전트 `serve`가 처리한다([host-agent.md](host-agent.md)).

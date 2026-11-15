@@ -5,7 +5,7 @@ import { useSearchParams } from 'react-router';
 import { CasePickModal } from '../../components/case-pick/CasePickModal';
 import { pickRows } from '../../components/case-pick/rules';
 import type { CycleDetail } from '../../data/api';
-import { indexResults, resultKey } from './model';
+import { indexResults, resultKey, retestMarks, retestRows } from './model';
 import { launchNote, useRunLaunch } from './RunLaunch';
 
 /** 내 호스트가 실행할 수 있을 때만 보인다. `?pick=modal`이면 열린 채로 시작 (ui:snap) */
@@ -17,8 +17,13 @@ export function RunCasePickAction({ d, projectId }: { d: CycleDetail; projectId:
   const rows = useMemo(() => {
     if (!target) return [];
     const index = indexResults(d.results);
-    return pickRows(d.cases, (c) => index.get(resultKey(c.tcId, target.id))?.verdict);
-  }, [d.cases, d.results, target]);
+    const marks = retestMarks(retestRows(d, index));
+    return pickRows(
+      d.cases,
+      (c) => index.get(resultKey(c.tcId, target.id))?.verdict,
+      (c) => marks.has(resultKey(c.tcId, target.id)),
+    );
+  }, [d, target]);
   if (!usable || !target || launchNote(launch)) return null;
   return (
     <>

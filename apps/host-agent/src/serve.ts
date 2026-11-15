@@ -34,12 +34,25 @@ import {
   MODELS_FOR,
   versionShortfall,
   type ClaudeCodeStatus,
+  type LlmClient,
 } from '@qcard/llm';
+import { ISSUE_DRAFTS } from '@qcard/shared';
 import { collectionGroup, onSnapshot, query, where } from 'firebase/firestore';
 import { HostDisconnectedError, openHostSession, targetFromEnv } from './connect';
 import { attachScreen, ConsoleService, launchConsole, type OnDemandScreen } from './console';
 import { RESTORED, restoreAwake } from './awake';
-import { claimJob, heartbeat, HOST_JOBS, pendingJobs, processJob, processReviseJob, startRunJobs } from './jobs';
+import {
+  claimJob,
+  failJob,
+  heartbeat,
+  HOST_JOBS,
+  pendingDrafts,
+  pendingJobs,
+  processDraftJob,
+  processJob,
+  processReviseJob,
+  startRunJobs,
+} from './jobs';
 import { UploadQueue } from './queue';
 import { firestoreApply } from './sink';
 import { hostVersion } from './version';
@@ -221,7 +234,9 @@ async function drain() {
   try {
     for (;;) {
       again = false;
-      const job = (await pendingJobs(db, user.uid)).find((j) => j.kind !== 'run_cycle');
+      const job = (await pendingJobs(db, user.uid)).find(
+        (j) => j.kind === 'qa_doc_generate' || j.kind === 'case_revise',
+      );
       if (!job) {
         if (again) continue;
         break;
@@ -245,20 +260,7 @@ async function drain() {
       const live = createLiveLlm(undefined, { turnTimeoutMs: 600_000 });
       const awake = keepAwake();
       try {
-        const deps = {
-          db,
-          storage,
-          api,
-          uid: user.uid,
-          host: host.name,
-          llmFor: (j: { projectId: string; id: string }) =>
-            createCassetteLlm({
-              dir: join(homedir(), '.qcard', 'jobs', `${j.projectId}-${j.id}`, 'llm'),
-              mode: 'resume',
-              inner: live,
-            }),
-          log: (l: string) => console.log(l),
-        };
+        const deps = jobDeps(live);
         const out =
           running.kind === 'case_revise' ? await processReviseJob(deps, running) : await processJob(deps, running);
         if (out.status === 'paused' && out.error?.kind === 'plan_limit') service.planLimited();
@@ -270,6 +272,63 @@ async function drain() {
     }
   } finally {
     busy = false;
+  }
+}
+
+/** 작업 처리에 넘기는 것. 작업마다 호출을 녹화해 다시 시도할 때 끝난 호출은 다시 부르지 않는다 */
+function jobDeps(live: LlmClient) {
+  return {
+    db,
+    storage,
+    api,
+    uid: user.uid,
+    host: host.name,
+    llmFor: (j: { projectId: string; id: string }) =>
+      createCassetteLlm({
+        dir: join(homedir(), '.qcard', 'jobs', `${j.projectId}-${j.id}`, 'llm'),
+        mode: 'resume',
+        inner: live,
+      }),
+    log: (l: string) => console.log(l),
+  };
+}
+
+// ---------------------------------------------------------------- 이슈 초안 (짧다 — QA 문서 생성을 기다리지 않는다)
+let drafting = false;
+let draftAgain = false;
+async function drainDrafts() {
+  if (drafting) return void (draftAgain = true);
+  drafting = true;
+  try {
+    for (;;) {
+      draftAgain = false;
+      const [job] = await pendingDrafts(db, user.uid);
+      if (!job) {
+        if (draftAgain) continue;
+        break;
+      }
+      const problem = claudeCodeProblem(await readClaude(), MODELS_FOR.reporter);
+      const running = await claimJob(db, job, host.name, new Date().toISOString());
+      if (running?.kind !== 'issue_draft') continue;
+      // 초안은 사람이 팝업에서 기다린다 — 대기열에 두지 않고 이유와 함께 실패로 남겨 [다시 시도]·[초안 없이 작성]을 고르게 한다
+      if (problem) {
+        await failJob(db, running, problem.message, new Date().toISOString());
+        console.log(`\n이슈 초안 ${running.input.defectId}을(를) 만들지 못했습니다: ${problem.message}`);
+        continue;
+      }
+      console.log(`\n■ ${job.projectId} · 이슈 초안 ${running.input.defectId} (${job.id})`);
+      const live = createLiveLlm(undefined, { turnTimeoutMs: 300_000 });
+      try {
+        const out = await processDraftJob(jobDeps(live), running);
+        if (out.status === 'paused' && out.error?.kind === 'plan_limit') service.planLimited();
+      } finally {
+        live.close?.();
+      }
+    }
+  } catch (e) {
+    console.error(`이슈 초안 처리 실패: ${(e as Error).message}`);
+  } finally {
+    drafting = false;
   }
 }
 
@@ -308,8 +367,15 @@ onSnapshot(
   (snap) => {
     const queued = snap.docChanges().filter((c) => c.doc.data().status === 'queued');
     if (queued.some((c) => c.doc.data().kind === 'run_cycle')) void startRuns();
-    if (queued.some((c) => c.doc.data().kind !== 'run_cycle')) void drain();
+    if (queued.some((c) => ['qa_doc_generate', 'case_revise'].includes(c.doc.data().kind as string))) void drain();
   },
   (e) => console.error(`작업 구독 실패: ${e.message}`),
+);
+onSnapshot(
+  query(collectionGroup(db, ISSUE_DRAFTS), where('requestedBy', '==', user.uid)),
+  (snap) => {
+    if (snap.docChanges().some((c) => c.doc.data().status === 'queued')) void drainDrafts();
+  },
+  (e) => console.error(`이슈 초안 구독 실패: ${e.message}`),
 );
 console.log('웹에서 요청한 작업을 기다립니다 (Ctrl+C로 종료)');

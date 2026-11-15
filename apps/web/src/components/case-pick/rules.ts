@@ -5,44 +5,51 @@ import type { Priority, TestCase, Verdict } from '@qcard/shared';
 /** 고르기에 필요한 케이스 정보. TestCase와 콘솔의 ConsoleCycleOption.cases 둘 다 맞는다 */
 export type PickCase = Pick<TestCase, 'tcId' | 'title' | 'feature' | 'subFeature' | 'priority'>;
 
-/** 판정 필터. `remaining`은 아직 결과가 없는(N/T) 칸 — Run의 기본 대상 */
-export const PICK_VERDICTS = ['remaining', 'fail', 'blocked', 'check', 'all'] as const;
+/**
+ * 판정 필터. `remaining`은 아직 결과가 없는(N/T) 칸 — Run의 기본 대상. `retest`는 이전 사이클 fixed 결함의
+ * 재테스트 칸 (docs/product/results.md#재테스트) — 판정과 상관없이 고른다
+ */
+export const PICK_VERDICTS = ['remaining', 'fail', 'blocked', 'check', 'retest', 'all'] as const;
 export type PickVerdict = (typeof PICK_VERDICTS)[number];
 export const PICK_VERDICT_LABEL: Record<PickVerdict, string> = {
   remaining: '남은 칸',
   fail: 'Fail',
   blocked: 'Blocked',
   check: '확인필요',
+  retest: '재테스트 대상',
   all: '전체',
 };
 
 export const PRIORITIES: Priority[] = ['high', 'medium', 'low'];
 
 /** 고르기 대상 한 줄: 자동 케이스와 내 기기 칸의 판정. 결과가 있는 칸을 고르면 다시 실행한다 */
-export type PickRow = { tc: PickCase; verdict: Verdict; rerun: boolean };
+export type PickRow = { tc: PickCase; verdict: Verdict; rerun: boolean; retest?: boolean };
 
 /** 빈 목록이면 거르지 않는다 */
 export type PickFilter = { verdict: PickVerdict; priorities: Priority[] };
 export const DEFAULT_PICK_FILTER: PickFilter = { verdict: 'remaining', priorities: [] };
 
 /**
- * Run은 자동 케이스만 돌린다(`mode`가 없으면 이미 자동 케이스만 받은 것). `verdictOf`는 내 기기 칸의 판정 (결과가 없으면 undefined)
+ * Run은 자동 케이스만 돌린다(`mode`가 없으면 이미 자동 케이스만 받은 것). `verdictOf`는 내 기기 칸의 판정 (결과가 없으면 undefined).
+ * `retestOf`는 내 기기 칸이 재테스트 칸인지 (재테스트 정보가 없는 곳은 주지 않는다)
  */
 export function pickRows<C extends PickCase & { mode?: TestCase['mode'] }>(
   cases: C[],
   verdictOf: (tc: C) => Verdict | undefined,
+  retestOf?: (tc: C) => boolean,
 ): PickRow[] {
   return cases
     .filter((tc) => (tc.mode ?? 'auto') === 'auto')
     .map((tc) => {
       const verdict = verdictOf(tc) ?? 'nt';
-      return { tc, verdict, rerun: verdict !== 'nt' };
+      return { tc, verdict, rerun: verdict !== 'nt', ...(retestOf?.(tc) ? { retest: true } : {}) };
     });
 }
 
 export function matchesPickVerdict(row: PickRow, v: PickVerdict): boolean {
   if (v === 'all') return true;
   if (v === 'remaining') return !row.rerun;
+  if (v === 'retest') return !!row.retest;
   return row.verdict === v;
 }
 

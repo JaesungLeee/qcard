@@ -1,9 +1,16 @@
 import type { QcardApi } from '@qcard/data';
 import { ClaudeCodeSetupError, PlanLimitError, UsageMeter, withUsage, type LlmClient } from '@qcard/llm';
 import { generateQaDoc, reviseCase, type GenerateProgress } from '@qcard/qadoc';
+import { draftIssue } from '@qcard/reporter';
 import {
   hash,
+  ISSUE_DRAFTS,
+  type Build,
   type CaseReviseJob,
+  type Defect,
+  type IssueDraftJob,
+  type TestCase,
+  type TestCycle,
   type Host,
   type Job,
   type JobErrorKind,
@@ -49,15 +56,16 @@ export type JobDeps = {
   /** 처리하는 호스트 이름 (웹에 보인다) */
   host: string;
   /** 작업용 LLM. 작업마다 녹화 폴더를 따로 둔다 */
-  llmFor: (job: QaDocJob | CaseReviseJob) => LlmClient;
+  llmFor: (job: QaDocJob | CaseReviseJob | IssueDraftJob) => LlmClient;
   now?: () => string;
   log?: (line: string) => void;
 };
 
 /** 이 호스트가 처리하는 작업 종류. 연결 신호에 실어 보내 웹이 옛 호스트를 알아본다 (Host.jobs) */
-export const HOST_JOBS: Job['kind'][] = ['qa_doc_generate', 'run_cycle', 'case_revise'];
+export const HOST_JOBS: Job['kind'][] = ['qa_doc_generate', 'run_cycle', 'case_revise', 'issue_draft'];
 
-const jobRef = (db: Firestore, j: Pick<Job, 'projectId' | 'id'>) => doc(db, 'projects', j.projectId, 'jobs', j.id);
+const jobRef = (db: Firestore, j: Pick<Job, 'projectId' | 'id' | 'kind'>) =>
+  doc(db, 'projects', j.projectId, j.kind === 'issue_draft' ? ISSUE_DRAFTS : 'jobs', j.id);
 /** Firestore는 undefined를 저장하지 못한다 */
 const clean = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
@@ -72,6 +80,15 @@ export async function pendingJobs(db: Firestore, uid: string): Promise<Job[]> {
     .map((d) => d.data() as Job)
     .filter((j) => j.status === 'queued')
     .sort((a, b) => rank(a) - rank(b) || (a.createdAt < b.createdAt ? -1 : 1));
+}
+
+/** 내 이슈 초안 대기열 (작업과 따로 둔다 — `ISSUE_DRAFTS`). 오래된 것부터 */
+export async function pendingDrafts(db: Firestore, uid: string): Promise<IssueDraftJob[]> {
+  const snap = await getDocs(query(collectionGroup(db, ISSUE_DRAFTS), where('requestedBy', '==', uid)));
+  return snap.docs
+    .map((d) => d.data() as IssueDraftJob)
+    .filter((j) => j.status === 'queued')
+    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
 }
 
 /** 대기 → 생성 중. 다른 호스트(같은 사용자의 다른 PC)가 먼저 가져갔으면 undefined */
@@ -288,6 +305,67 @@ export async function processReviseJob(deps: JobDeps, job: CaseReviseJob): Promi
   }
 }
 
+/**
+ * 이슈 초안 작업 하나를 처리한다 (docs/product/issues.md#초안): 결함·케이스 사본·빌드·대상 디바이스 텍스트와
+ * 웹이 넘긴 템플릿으로 초안을 만들어 작업 결과에 쓴다. 스크린샷·화면 구조는 읽지도 넘기지도 않는다
+ */
+/** 맡은 작업을 시작하지 못하고 실패로 남긴다 (웹에서 이유를 보고 다시 요청한다) */
+export async function failJob<J extends Job>(db: Firestore, job: J, message: string, now: string): Promise<J> {
+  const next = { ...job, status: 'failed', finishedAt: now, error: { kind: 'failed', message } } as J;
+  await setDoc(jobRef(db, job), clean(next));
+  return next;
+}
+
+export async function processDraftJob(deps: JobDeps, job: IssueDraftJob): Promise<Job> {
+  const { db } = deps;
+  const now = deps.now ?? (() => new Date().toISOString());
+  const log = deps.log ?? (() => {});
+  const r = jobRef(db, job);
+  const meter = new UsageMeter();
+  const { cycleId, defectId, template } = job.input;
+  try {
+    const at = (...path: string[]) => getDoc(doc(db, 'projects', job.projectId, ...path));
+    const defect = (await at('cycles', cycleId, 'defects', defectId)).data() as Defect | undefined;
+    const cycle = (await at('cycles', cycleId)).data() as TestCycle | undefined;
+    if (!defect || !cycle) throw new Error(`결함을 찾지 못했습니다: ${cycleId}/${defectId}`);
+    const testCase = (await at('cycles', cycleId, 'cases', defect.tcId)).data() as TestCase | undefined;
+    const build = (await at('builds', cycle.buildId)).data() as Build | undefined;
+    const target = cycle.targets.find((t) => t.id === defect.deviceId);
+    const draft = await draftIssue({
+      facts: {
+        defect,
+        ...(testCase ? { case: testCase } : {}),
+        device: { label: target?.label ?? defect.deviceId, ...(defect.osBuild ? { osBuild: defect.osBuild } : {}) },
+        app: { version: build?.version ?? '(알 수 없음)', ...(build ? { buildNumber: build.buildNumber } : {}) },
+        cycleName: cycle.name,
+      },
+      template,
+      llm: withUsage(deps.llmFor(job), meter),
+    });
+    const done: IssueDraftJob = {
+      ...job,
+      status: 'done',
+      finishedAt: now(),
+      result: { ...draft, tokens: meter.run.tokens, costUsd: meter.run.costUsd },
+    };
+    await setDoc(r, clean(done));
+    log(`이슈 초안 ${defectId}: 빈 칸 ${draft.empty.length} · 토큰 ${meter.run.tokens.toLocaleString()}`);
+    return done;
+  } catch (e) {
+    const kind = errorKind(e);
+    const message = (e as Error).message ?? String(e);
+    const next: IssueDraftJob = {
+      ...job,
+      status: kind ? 'paused' : 'failed',
+      finishedAt: now(),
+      error: { kind: kind ?? 'failed', message },
+    };
+    await setDoc(r, clean(next));
+    log(`${kind ? '일시정지' : '실패'}: ${message}`);
+    return next;
+  }
+}
+
 type Progress = NonNullable<QaDocJob['progress']>;
 type ProgressRecorder = Awaited<ReturnType<typeof progressRecorder>>;
 
@@ -319,7 +397,15 @@ async function progressRecorder(
     write(() => setDoc(doc(r, 'events', id), e));
   };
   const at = now();
-  let state: Progress = { ...job.progress, phase: 'plan', done: 0, total: 0, phaseStartedAt: at, updatedAt: at };
+  let state: Progress = {
+    ...job.progress,
+    phase: 'plan',
+    done: 0,
+    total: 0,
+    planDone: 0,
+    phaseStartedAt: at,
+    updatedAt: at,
+  };
   const progress = (p: Partial<Progress>) => {
     const t = now();
     const phaseStartedAt = p.phase && p.phase !== state.phase ? t : state.phaseStartedAt;
@@ -359,8 +445,11 @@ async function progressRecorder(
         );
         return;
       }
+      // 케이스 변환이 시작된 뒤의 계획은 planDone으로만 보인다 (단계를 되돌리지 않는다)
       case 'plan':
-        return progress({ phase: 'plan', done: e.index, total: e.total, spec: e.spec });
+        return state.phase === 'plan'
+          ? progress({ phase: 'plan', done: e.index, total: e.total, spec: e.spec })
+          : undefined;
       case 'planned':
         event(`plan-${e.spec}`, 'plan', `${e.spec} 계획 · 보강 제안 ${e.suggestions}개`);
         if (e.prepFlows.length)
@@ -369,7 +458,7 @@ async function progressRecorder(
             'prep_flow',
             `새로 만듦: ${e.prepFlows.map((f) => `${f.id} (${f.name})`).join(', ')}`,
           );
-        return progress({ done: e.index + 1 });
+        return progress({ planDone: e.index + 1, ...(state.phase === 'plan' ? { done: e.index + 1 } : {}) });
       case 'batch_start':
         for (const s of e.sources) active.add(s);
         return progress({

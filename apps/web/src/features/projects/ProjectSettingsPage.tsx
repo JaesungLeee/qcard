@@ -14,7 +14,7 @@ import {
   type RunLimits,
 } from '@qcard/shared';
 import { Button, Icons, Option, Select, SectionMessage, TextButton, TextField, textClass } from '@qcard/ui';
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryState } from '../../components/QueryState';
@@ -34,10 +34,11 @@ import {
   useSetMemberRole,
   useSetRunLimits,
 } from '../../data/hooks';
-import { ErrorMessage, Field, RoleBadge } from './parts';
+import { RepoSection } from '../issues/RepoSection';
+import { ErrorMessage, Field, RoleBadge, Section, SECTION_ICON } from './parts';
 import './projects.css';
 
-/** 프로젝트 설정: 멤버 · 초대(Admin) · 실행 안전장치 · 탈퇴·삭제. Admin이 아니면 보기와 탈퇴만 */
+/** 프로젝트 설정: 멤버 · 초대(Admin) · 실행 안전장치 · GitHub 저장소 · 탈퇴·삭제. Admin이 아니면 보기와 탈퇴만 */
 export function ProjectSettingsPage() {
   const { projectId = '' } = useParams();
   const project = useProject(projectId);
@@ -49,8 +50,8 @@ export function ProjectSettingsPage() {
         title="프로젝트 설정"
         meta={
           admin
-            ? '멤버를 초대하고 역할과 실행 안전장치를 정합니다.'
-            : '멤버와 실행 안전장치를 볼 수 있습니다. 초대와 변경은 Admin이 합니다.'
+            ? '멤버를 초대하고 역할·실행 안전장치·GitHub 저장소를 정합니다.'
+            : '멤버·실행 안전장치·GitHub 저장소를 볼 수 있습니다. 초대와 변경은 Admin이 합니다.'
         }
       />
       <QueryState query={project}>
@@ -59,6 +60,7 @@ export function ProjectSettingsPage() {
             <MembersSection projectId={projectId} admin={admin} />
             {admin && <InvitationsSection projectId={projectId} />}
             <RunLimitsSection project={p} admin={admin} />
+            <RepoSection project={p} admin={admin} />
             <DangerSection project={p} admin={admin} />
           </>
         )}
@@ -67,29 +69,7 @@ export function ProjectSettingsPage() {
   );
 }
 
-function Section({
-  title,
-  icon,
-  children,
-  className = '',
-}: {
-  title: string;
-  icon: ReactNode;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section className={`qp-card ${className}`} aria-label={title}>
-      <div className="qp-card-head">
-        {icon}
-        <h2 className={textClass('headline2', 'bold')}>{title}</h2>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-const icon = { width: 20, height: 20 };
+const icon = SECTION_ICON;
 
 function MembersSection({ projectId, admin }: { projectId: string; admin: boolean }) {
   const api = useApi();

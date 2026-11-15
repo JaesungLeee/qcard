@@ -6,13 +6,23 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { FirebaseError } from 'firebase/app';
 import { collection, doc, getDocs, setDoc, setLogLevel, updateDoc, type Firestore } from 'firebase/firestore';
 import { GITHUB, PEOPLE } from '@qcard/fixtures';
-import { DEFAULT_RUN_LIMITS, MembershipError, runLimitsOf, type PrepFlow, type TestCycle } from '@qcard/shared';
+import {
+  DEFAULT_ISSUE_TEMPLATE,
+  DEFAULT_RUN_LIMITS,
+  MembershipError,
+  runLimitsOf,
+  type PrepFlow,
+  type TestCycle,
+} from '@qcard/shared';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConflictError, NotFoundError, PermissionError, PrepFlowConflictError, RuleError } from '@qcard/data';
 import { createFirebaseApi, writeAll } from '@qcard/data/firebase';
 import { createMemoryApi } from '../../web/src/data/memory';
+import { SAMPLE_REPOS } from '@qcard/fixtures/github';
 import * as acc from '../src/accounts';
+import { FakeGitHub } from '../src/githubFake';
 import * as h from '../src/handlers';
+import * as iss from '../src/issues';
 import { localBox } from '../src/secretBox';
 import { seedDocs, SEED_USERS } from '@qcard/data/seed';
 
@@ -35,17 +45,27 @@ beforeAll(async () => {
 });
 afterAll(() => env.cleanup());
 beforeEach(async () => {
+  fakeGithub = new FakeGitHub(SAMPLE_REPOS);
   await env.clearFirestore();
   await env.withSecurityRulesDisabled((c) => writeAll(c.firestore() as unknown as Firestore, seedDocs()));
 });
 
 const CODE = { permission: 'permission-denied', rule: 'failed-precondition', not_found: 'not-found' } as const;
 
+// GitHub은 가짜 (fixture의 하루콩 저장소, 메모리 구현과 같은 값)
+let fakeGithub = new FakeGitHub(SAMPLE_REPOS);
+const withGithub = (fn: (ctx: iss.IssueCtx, data: unknown) => Promise<unknown>) => (ctx: h.Ctx, data: unknown) =>
+  fn({ ...ctx, gh: fakeGithub }, data);
 // Storage는 핸들러 테스트(handlers.test.ts)가 본다
 const handlers = {
   ...h,
   ...acc,
   deleteCycle: (ctx: h.Ctx, data: unknown) => h.deleteCycle(ctx, data, async () => {}),
+  getIssueContext: withGithub(iss.getIssueContext),
+  publishIssue: withGithub(iss.publishIssue),
+  setDefectStatus: withGithub(iss.setDefectStatus),
+  confirmRetest: withGithub(iss.confirmRetest),
+  setAssigneeMap: withGithub(iss.setAssigneeMap),
 };
 const box = localBox('test');
 
@@ -248,6 +268,50 @@ describe('QA 데이터 쓰기', () => {
       status: 'fixed',
       severity: 'major',
     });
+  });
+
+  it('재테스트 목록·확정이 메모리 구현과 같고, 다시 열면 칸이 이전 사이클 결함을 가리킨다', async () => {
+    const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
+    const fb = apiAs(PEOPLE.qa);
+    const mem = memory();
+    mem.switchUser(PEOPLE.qa);
+    const list = (await fb.getCycle(cref)).retests;
+    expect(list.map((s) => `${s.cycle.id} ${s.defect.id}`)).toEqual([
+      'cycle-121-1 D-2',
+      'cycle-121-1 D-3',
+      'cycle-121-1 D-4',
+    ]);
+    // 같은 빌드(130)의 fixed 결함(1차 회귀 D-2)은 Prod 확인 사이클에서도 재테스트 대상이 아니다
+    const prod = (await fb.getCycle({ projectId: 'haru', cycleId: 'cycle-130-2' })).retests;
+    expect(prod.map((s) => `${s.cycle.id} ${s.defect.id}`)).toEqual(list.map((s) => `${s.cycle.id} ${s.defect.id}`));
+
+    const closeD2 = { ...cref, source: { cycleId: 'cycle-121-1', defectId: 'D-2' }, to: 'closed' as const };
+    const closed = await fb.confirmRetest(closeD2);
+    const strip = (d: typeof closed) => ({ ...d, retests: d.retests?.map(({ at: _, ...r }) => r) });
+    expect(strip(closed)).toEqual(strip(await mem.confirmRetest(closeD2)));
+    expect(closed).toMatchObject({ status: 'closed', retests: [{ verdict: 'pass', cycleId: 'cycle-130-1' }] });
+
+    const openD3 = { ...cref, source: { cycleId: 'cycle-121-1', defectId: 'D-3' }, to: 'open' as const };
+    const opened = await fb.confirmRetest(openD3);
+    expect(strip(opened)).toEqual(strip(await mem.confirmRetest(openD3)));
+    const after = await fb.getCycle(cref);
+    const cell = after.results.find((r) => r.tcId === opened.tcId && r.deviceId === opened.deviceId);
+    expect([cell?.defectId, cell?.defectCycleId]).toEqual(['D-3', 'cycle-121-1']);
+    // 확정한 결함은 상태가 바뀌어도 목록에 남는다. 남은 결함(Pixel 8 N/T)은 확정하지 못한다
+    expect(after.retests.map((s) => [s.defect.id, s.defect.status])).toEqual([
+      ['D-2', 'closed'],
+      ['D-3', 'open'],
+      ['D-4', 'fixed'],
+    ]);
+    await expect(
+      fb.confirmRetest({ ...cref, source: { cycleId: 'cycle-121-1', defectId: 'D-4' }, to: 'closed' }),
+    ).rejects.toBeInstanceOf(RuleError);
+    await expect(apiAs(PEOPLE.planner).confirmRetest(closeD2)).rejects.toBeInstanceOf(PermissionError);
+    // 재테스트 기록과 다른 사이클 결함 연결은 클라이언트가 직접 쓰지 못한다
+    const qaDb = env.authenticatedContext(GITHUB[PEOPLE.qa]!).firestore() as unknown as Firestore;
+    await expect(
+      updateDoc(doc(qaDb, 'projects/haru/cycles/cycle-121-1/defects/D-4'), { retests: [] }),
+    ).rejects.toBeInstanceOf(FirebaseError);
   });
 
   it('사이클 완료·다시 열기가 메모리 구현과 같고, 완료된 사이클은 Run 요청을 받지 않는다', async () => {
@@ -510,5 +574,51 @@ describe('호스트 연결', () => {
       expect(await api.myHostConnections()).toEqual([]);
       await expect(api.disconnectHost(cred.hostId)).rejects.toBeInstanceOf(Error);
     }
+  });
+});
+
+describe('GitHub 이슈 (메모리 구현과 같은 결과)', () => {
+  const cref = { projectId: 'haru', cycleId: 'cycle-130-1' };
+
+  it('발행 팝업의 저장소 정보', async () => {
+    expect(await apiAs(PEOPLE.qa).getIssueContext('haru')).toEqual(
+      await createMemoryApi({ currentUser: PEOPLE.qa }).getIssueContext('haru'),
+    );
+    await expect(apiAs(PEOPLE.planner).getIssueContext('haru')).rejects.toBeInstanceOf(PermissionError);
+  });
+
+  it('이슈가 연결된 결함의 상태는 Functions로 바뀌고 이슈와 맞춘다', async () => {
+    const fb = await apiAs(PEOPLE.qa).updateDefect(cref, 'D-2', { status: 'open', severity: 'minor' });
+    const mem = await createMemoryApi({ currentUser: PEOPLE.qa }).updateDefect(cref, 'D-2', {
+      status: 'open',
+      severity: 'minor',
+    });
+    const noTime = (d: typeof fb) => ({ ...d, statusLog: d.statusLog?.map(({ at: _a, ...x }) => x) });
+    expect(noTime(fb)).toEqual(noTime(mem));
+    expect(fb).toMatchObject({ status: 'open', severity: 'minor', issue: { state: 'open' } });
+    expect(fakeGithub.issue(1001, 12)).toMatchObject({ state: 'open', comments: ['QA에서 다시 열림 (@minji-kim)'] });
+  });
+
+  it('발행 중인 결함의 상태 변경은 이유와 함께 거절한다 (말없이 버리지 않는다)', async () => {
+    await admin.doc('projects/haru/cycles/cycle-130-1/defects/D-1').update({ publishing: { by: '이재성', at: 't' } });
+    await expect(apiAs(PEOPLE.qa).updateDefect(cref, 'D-1', { status: 'closed' })).rejects.toThrow('발행하고 있습니다');
+    const d = (await admin.doc('projects/haru/cycles/cycle-130-1/defects/D-1').get()).data();
+    expect(d?.status).toBe('open');
+  });
+
+  it('초안 요청·발행', async () => {
+    const fb = apiAs(PEOPLE.qa);
+    const mem = createMemoryApi({ currentUser: PEOPLE.qa });
+    const job = await fb.requestIssueDraft(cref, 'D-1', DEFAULT_ISSUE_TEMPLATE);
+    expect(await fb.getIssueDraft(cref, 'D-1')).toEqual(job);
+    expect(job.id).toBe(`draft-cycle-130-1-D-1-${GITHUB[PEOPLE.qa]}`);
+
+    const input = { ...cref, defectId: 'D-1', title: '[Bug] 뒤로가기', body: '본문', labels: ['bug'], assignees: [] };
+    const a = await fb.publishIssue(input);
+    const b = await mem.publishIssue(input);
+    const noTime = (d: typeof a) => ({ ...d, issue: { ...d.issue!, publishedAt: '' } });
+    expect(noTime(a)).toEqual(noTime(b));
+    await expect(fb.publishIssue(input)).rejects.toBeInstanceOf(RuleError);
+    await expect(fb.requestIssueDraft(cref, 'D-1', job.input.template)).rejects.toBeInstanceOf(RuleError);
   });
 });

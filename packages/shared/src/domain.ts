@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { IssueTemplate } from './issueTemplate';
 import { RunLimits } from './runLimits';
 import { Verdict } from './verdict';
 
@@ -18,8 +19,25 @@ export const Project = z.object({
   purgeAt: z.string().optional(),
   /** 실행 안전장치. 없으면 기본값 (`runLimitsOf`) */
   runLimits: RunLimits.optional(),
+  /** 결함을 이슈로 발행할 GitHub 저장소 (docs/product/issues.md). 쓰기는 Functions만 */
+  repo: z
+    .object({
+      installationId: z.number(),
+      repoId: z.number(),
+      owner: z.string(),
+      name: z.string(),
+      private: z.boolean(),
+      /** broken: GitHub에서 App을 지웠거나 저장소를 설치에서 뺐다. 발행·동기화가 멈추고 다시 연결해야 한다 */
+      status: z.enum(['active', 'broken']),
+      connectedBy: z.string(),
+      connectedAt: z.string(),
+    })
+    .optional(),
+  /** 담당자 매핑: 스펙 이름 → GitHub 사용자명. 이슈 담당자의 기본값 */
+  assigneeMap: z.record(z.string(), z.array(z.string())).optional(),
 });
 export type Project = z.infer<typeof Project>;
+export type ProjectRepo = NonNullable<Project['repo']>;
 
 /** 역할. 프로젝트에는 Admin이 항상 1명 이상 */
 export const Role = z.enum(['admin', 'qa', 'viewer']);
@@ -473,6 +491,8 @@ export const CaseResult = z.object({
   executedAt: z.string().optional(),
   osBuild: z.string().optional(),
   defectId: z.string().optional(),
+  /** `defectId`가 다른 사이클의 결함이면 그 사이클 (재테스트에서 다시 연 결함, docs/product/results.md#재테스트) */
+  defectCycleId: z.string().optional(),
   note: z.string().optional(),
   runId: z.string().optional(),
   steps: z.array(ExecStep),
@@ -496,6 +516,55 @@ export const SEVERITY_LABEL: Record<Severity, string> = {
   trivial: 'Trivial',
 };
 
+export const DefectStatus = z.enum(['open', 'fixed', 'closed']);
+export type DefectStatus = z.infer<typeof DefectStatus>;
+
+/** GitHub 이슈가 닫힌 이유 (`state_reason`) */
+export const IssueCloseReason = z.enum(['completed', 'not_planned', 'duplicate']);
+export type IssueCloseReason = z.infer<typeof IssueCloseReason>;
+
+/** 결함에 남기는 이슈 연결. 삭제·이전된 이슈는 동기화하지 않는다 */
+export const DefectIssue = z.object({
+  repoId: z.number(),
+  /** 발행할 때의 저장소 이름 (표시용) */
+  repo: z.string(),
+  number: z.number(),
+  url: z.string(),
+  state: z.enum(['open', 'closed']),
+  closeReason: IssueCloseReason.optional(),
+  /** deleted: GitHub에서 지웠다(다시 발행할 수 있다) · transferred: 다른 저장소로 옮겼다(url이 새 주소) */
+  link: z.enum(['linked', 'deleted', 'transferred']),
+  publishedBy: z.string(),
+  publishedAt: z.string(),
+});
+export type DefectIssue = z.infer<typeof DefectIssue>;
+
+/** 결함 상태 변경 기록: qcard 사용자(이름) 또는 GitHub 사용자명 */
+export const DefectStatusChange = z.object({
+  to: DefectStatus,
+  by: z.string(),
+  via: z.enum(['qcard', 'github']),
+  at: z.string(),
+});
+export type DefectStatusChange = z.infer<typeof DefectStatusChange>;
+
+/** 재테스트 확정 기록: 더 새 빌드 사이클의 칸 결과로 closed·open을 확정했다 (docs/product/results.md#재테스트) */
+export const DefectRetest = z.object({
+  cycleId: z.string(),
+  cycleName: z.string(),
+  build: z.object({ version: z.string(), buildNumber: z.number() }),
+  /** 재테스트 칸 (그 사이클의 대상 디바이스) */
+  tcId: z.string(),
+  deviceId: z.string(),
+  deviceLabel: z.string(),
+  verdict: z.enum(['pass', 'fail']),
+  to: z.enum(['closed', 'open']),
+  traceUrl: z.string(),
+  by: z.string(),
+  at: z.string(),
+});
+export type DefectRetest = z.infer<typeof DefectRetest>;
+
 /**
  * 결함. Fail 칸에서 만들고 그 칸의 `defectId`로 연결한다. id(`D-1`)는 사이클 안에서 매긴다 —
  * 사이클 밖에서 가리킬 때는 사이클 이름을 함께 쓴다. 앱 빌드는 사이클의 빌드다
@@ -511,9 +580,15 @@ export const Defect = z.object({
   repro: z.array(z.string()),
   expected: z.string(),
   actual: z.string(),
-  status: z.enum(['open', 'fixed', 'closed']),
-  /** GitHub Issues로 발행한 이슈 주소 (P1 — 아직 화면에 보이지 않는다) */
-  trackerUrl: z.string().optional(),
+  status: DefectStatus,
+  /** 발행한 GitHub 이슈 (docs/product/issues.md). Functions만 쓴다 */
+  issue: DefectIssue.optional(),
+  /** 이슈가 연결된 결함의 상태 변경 기록 (Functions만 쓴다) */
+  statusLog: z.array(DefectStatusChange).optional(),
+  /** 재테스트 확정 기록 (오래된 것부터, Functions만 쓴다) */
+  retests: z.array(DefectRetest).optional(),
+  /** 이슈 발행 중 표시 (두 번 발행하지 않게 Functions가 잠깐 둔다) */
+  publishing: z.object({ by: z.string(), at: z.string() }).optional(),
   createdBy: z.string().optional(),
   createdAt: z.string().optional(),
 });
@@ -690,9 +765,13 @@ export const QaDocJob = z.object({
   input: z.object({ bundleId: z.string(), appVersion: z.string(), prevDocId: z.string().optional() }),
   progress: z
     .object({
+      /** 가장 늦게 시작한 단계. 계획이 끝난 스펙부터 케이스 변환을 하므로 cases인 동안에도 계획이 남아 있을 수 있다 */
       phase: z.enum(['plan', 'cases', 'save']),
+      /** 이 단계의 진행 (plan: 스펙 수 · cases: 행 수) */
       done: z.number(),
       total: z.number(),
+      /** 계획이 끝난 스펙 수. 케이스 변환과 겹치는 동안 계획 진행을 보인다 */
+      planDone: z.number().optional(),
       spec: z.string().optional(),
       /** 지금 모델이 만들고 있는 행 (출처 ID). 케이스 변환 중에만 */
       active: z.array(z.string()).optional(),
@@ -841,9 +920,39 @@ export const CaseReviseJob = z.object({
 });
 export type CaseReviseJob = z.infer<typeof CaseReviseJob>;
 
+/** 이슈 초안 값: 템플릿 필드 id → 값 (텍스트는 문자열, 드롭다운·체크박스는 고른 항목) */
+export const IssueFieldValues = z.record(z.string(), z.union([z.string(), z.array(z.string())]));
+export type IssueFieldValues = z.infer<typeof IssueFieldValues>;
+
+/**
+ * 이슈 초안 (docs/product/issues.md): 고른 템플릿에 맞춘 제목·필드 값을 요청자의 호스트(Reporter)가 쓴다.
+ * id는 `draft-<사이클>-<결함>-<요청자>`라 결함마다 요청자의 마지막 초안 하나만 남는다
+ */
+export const IssueDraftJob = z.object({
+  ...JobBase,
+  kind: z.literal('issue_draft'),
+  input: z.object({
+    cycleId: z.string(),
+    defectId: z.string(),
+    /** 웹이 저장소에서 읽어 해석한 템플릿 (호스트는 GitHub에 접근하지 않는다) */
+    template: IssueTemplate,
+  }),
+  result: z
+    .object({
+      title: z.string(),
+      values: IssueFieldValues,
+      /** 넘긴 정보로 채울 수 없어 비운 필드 id */
+      empty: z.array(z.string()),
+      tokens: z.number(),
+      costUsd: z.number(),
+    })
+    .optional(),
+});
+export type IssueDraftJob = z.infer<typeof IssueDraftJob>;
+
 /** 호스트 에이전트가 처리할 작업 (docs/architecture.md, docs/concepts.md) */
-export const Job = z.discriminatedUnion('kind', [QaDocJob, RunCycleJob, CaseReviseJob]);
-export type Job = QaDocJob | RunCycleJob | CaseReviseJob;
+export const Job = z.discriminatedUnion('kind', [QaDocJob, RunCycleJob, CaseReviseJob, IssueDraftJob]);
+export type Job = QaDocJob | RunCycleJob | CaseReviseJob | IssueDraftJob;
 
 /**
  * 호스트 에이전트 연결 상태 (docs/concepts.md). 실행 중인 호스트가 주기적으로 `lastSeen`을 갱신한다.

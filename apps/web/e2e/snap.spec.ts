@@ -6,8 +6,9 @@ import { join } from 'node:path';
  * 찍을 화면은 `e2e/screens/<기능>.json`에 둔다: `[{ "name": "qa-sheet-cases", "path": "/p/haru/cycles/cycle-130-1?tab=cases" }]`
  * 화면 이름은 전체에서 겹치지 않게 기능 이름으로 시작한다. `waitFor`를 주면 그 텍스트가 보일 때까지 기다린다.
  * `click`을 주면 그 이름의 버튼을 누른 뒤 `then` 텍스트가 보일 때까지 기다려 찍는다(확인 메시지처럼 눌러야 보이는 상태).
+ * 여러 번 눌러야 하면 `click`에 이름을 차례로 준다(팝업을 열고 그 안에서 고르기).
  */
-type Screen = { name: string; path: string; waitFor?: string; click?: string; then?: string };
+type Screen = { name: string; path: string; waitFor?: string; click?: string | string[]; then?: string };
 const dir = join(import.meta.dirname, 'screens');
 const only = process.env.SNAP_ONLY?.split(',');
 const SCREENS: Screen[] = readdirSync(dir)
@@ -26,7 +27,7 @@ for (const screen of SCREENS) {
       await page.goto(`${screen.path}${sep}theme=${theme}`);
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
       if (screen.waitFor) await expect(page.getByText(screen.waitFor).first()).toBeVisible();
-      if (screen.click) await page.getByRole('button', { name: screen.click }).first().click();
+      for (const name of [screen.click ?? []].flat()) await page.getByRole('button', { name }).first().click();
       if (screen.then) await expect(page.getByText(screen.then).first()).toBeVisible();
       await page.evaluate(() => document.fonts.ready);
       await page.waitForLoadState('networkidle');
