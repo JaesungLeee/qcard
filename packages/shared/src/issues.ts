@@ -119,6 +119,22 @@ export function issueActionFor(to: DefectStatus, issueState: 'open' | 'closed', 
   }
 }
 
+/** 재테스트로 확정할 때 이슈에 남기는 코멘트 (docs/product/issues.md#상태-동기화). `by`는 확정한 사람의 GitHub 사용자명 */
+export function retestIssueComment(p: {
+  verdict: 'pass' | 'fail';
+  build: { version: string; buildNumber: number };
+  cycleName: string;
+  deviceLabel: string;
+  traceUrl: string;
+  by: string;
+  /** Fail일 때 칸의 실제 결과 한 줄 요약 */
+  actual?: string;
+}): string {
+  const head = `QA 재테스트 ${p.verdict === 'pass' ? 'Pass' : 'Fail'} — 빌드 ${p.build.version} (${p.build.buildNumber}) · 사이클 "${p.cycleName}" · ${p.deviceLabel}`;
+  const actual = p.verdict === 'fail' && p.actual?.trim() ? [`실제 결과: ${p.actual.trim().split('\n')[0]}`] : [];
+  return [head, ...actual, `판정 추적: ${p.traceUrl}`, `확인: @${p.by}`].join('\n');
+}
+
 /**
  * qcard에서 이슈가 연결된 결함의 상태를 바꿀 때 (Functions setDefectStatus·메모리 구현 공용):
  * 동기화 중이면 이슈에 할 일(`action`), 그 일이 성공한 뒤 결함에 쓸 이슈(`issue`)와 상태 기록(`change`)
@@ -129,11 +145,14 @@ export function linkedStatusChange(input: {
   to: DefectStatus;
   by: { name: string; github: string };
   at: string;
+  /** 기본 코멘트 대신 남길 코멘트 (재테스트 근거, `retestIssueComment`) */
+  comment?: string;
 }): { action?: IssueAction; issue: DefectIssue; change: DefectStatusChange } {
   const { defect, to, by, at } = input;
   const change: DefectStatusChange = { to, by: by.name, via: 'qcard', at };
   if (!issueSyncs(input.project, defect)) return { issue: defect.issue, change };
-  const action = issueActionFor(to, defect.issue.state, by.github);
+  const base = issueActionFor(to, defect.issue.state, by.github);
+  const action = input.comment ? { ...base, comment: input.comment } : base;
   const { closeReason: _c, ...rest } = defect.issue;
   const issue: DefectIssue = !action.state
     ? defect.issue

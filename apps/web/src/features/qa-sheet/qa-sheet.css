@@ -403,3 +403,24 @@
   align-items: center;
   gap: var(--qc-space-4);
 }
+
+/* 요약 탭: 재테스트 대상 결함 한 줄 — 결함 탭으로 간다 */
+.qs-retest-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--qc-space-4) var(--qc-space-12);
+  padding: var(--qc-space-12) var(--qc-space-16);
+  color: var(--qc-foreground-neutral-primary);
+  text-decoration: none;
+}
+.qs-retest-strip:hover {
+  background: var(--qc-surface-neutral-tertiary);
+}
+.qs-retest-strip:focus-visible {
+  outline: 3px solid var(--qc-line-brand-focus);
+  outline-offset: 2px;
+}
+.qs-retest-strip > :last-child {
+  margin-left: auto;
+}

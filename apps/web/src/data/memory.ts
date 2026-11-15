@@ -12,6 +12,7 @@ import {
   invitationState,
   leaseLive,
   leaving,
+  linkedStatusChange,
   mergeSecret,
   MIN_HOST_VERSION,
   newAccount,
@@ -27,13 +28,18 @@ import {
   requireEditor,
   requireMember,
   restoration,
+  retestCell,
+  retestConfirmation,
+  retestIssueComment,
   runLimitsChange,
   type AccountSecret,
   type Actor,
   type CaseReviseJob,
+  type Defect,
   type HostConnection,
   type Member,
   type PrepFlow,
+  type RetestSource,
   type TestAccount,
   type TestCycle,
 } from '@qcard/shared';
@@ -74,6 +80,8 @@ import {
   reopenedCycle,
   requireOpenCycle,
   resolveQuestionIn,
+  retestList,
+  retestSourceCycles,
   retriedJob,
 } from '@qcard/data';
 
@@ -208,12 +216,27 @@ export function createMemoryApi(
       db.cycles.filter((c) => c.projectId === projectId).map((c) => ({ cycle: c, cases: db.cycleCases[c.id] ?? [] })),
     );
 
-  // 사이클 구독 (watchCycle): 쓰기가 일어나면 그 사이클을 다시 읽어 알린다
+  // 사이클 구독 (watchCycle): 쓰기가 일어나면 같은 프로젝트에서 구독 중인 사이클을 다시 읽어 알린다 —
+  // 재테스트 목록이 다른 사이클의 결함을 보여 준다
   const watchers = new Map<string, Set<(d: CycleDetail) => void>>();
   const notify = (ref: CycleRef) => {
-    const set = watchers.get(ref.cycleId);
-    if (!set?.size) return;
-    void api.getCycle(ref).then((d) => set.forEach((fn) => fn(d)));
+    for (const [cycleId, set] of watchers) {
+      const c = db.cycles.find((x) => x.id === cycleId);
+      if (!set.size || (c && c.projectId !== ref.projectId)) continue;
+      void api.getCycle({ projectId: ref.projectId, cycleId }).then(
+        (d) => set.forEach((fn) => fn(d)),
+        () => undefined,
+      );
+    }
+  };
+  /** 이 사이클의 재테스트 목록: 같은 패키지의 더 오래된 빌드 사이클에서 결함을 읽는다 */
+  const retestsOf = (c: TestCycle): RetestSource[] => {
+    const b = { cycle: c, build: build(c.buildId) };
+    const all = db.cycles.filter((x) => x.projectId === c.projectId).map((x) => ({ cycle: x, build: build(x.buildId) }));
+    const sources = retestSourceCycles(b, all).flatMap((s) =>
+      (db.defects[s.cycle.id] ?? []).map((defect) => ({ ...s, defect })),
+    );
+    return retestList(b, sources);
   };
 
   // GitHub 이슈: 하루콩 가상 저장소 (memoryGithub.ts)
@@ -508,6 +531,7 @@ export function createMemoryApi(
         results: db.results[c.id] ?? [],
         defects: db.defects[c.id] ?? [],
         runs: db.runs[c.id] ?? [],
+        retests: retestsOf(c),
       };
       return wait(detail);
     },
@@ -562,6 +586,46 @@ export function createMemoryApi(
         list[i] = changedDefect(list[i]!, list[i]!.issue ? { severity: patch.severity } : patch);
         notify(ref);
         return clone(list[i]);
+      });
+    },
+    async confirmRetest(input) {
+      await ensureLocal();
+      return rules(() => {
+        const b = cycle(input.cycleId);
+        const a = cycle(input.source.cycleId);
+        const list = db.defects[a.id] ?? [];
+        const i = list.findIndex((x) => x.id === input.source.defectId);
+        if (i < 0) throw new NotFoundError(`결함 없음: ${input.source.defectId}`);
+        const src = { cycle: a, build: build(a.buildId), defect: list[i]! };
+        const cell = retestCell(src, b);
+        const results = db.results[b.id] ?? [];
+        const k = cell.kind === 'found' ? results.findIndex((r) => r.tcId === cell.tcId && r.deviceId === cell.deviceId) : -1;
+        const { record, linkCell } = retestConfirmation({
+          members: membersOf(input.projectId),
+          actor: actor(),
+          projectId: input.projectId,
+          src,
+          b: { cycle: b, build: build(b.buildId) },
+          result: results[k],
+          to: input.to,
+          at: now(),
+        });
+        let next: Defect = { ...src.defect, status: input.to, retests: [...(src.defect.retests ?? []), record] };
+        if (src.defect.issue) {
+          const { issue, change } = linkedStatusChange({
+            project: project(input.projectId),
+            defect: { ...src.defect, issue: src.defect.issue },
+            to: input.to,
+            by: actor(),
+            at: record.at,
+            comment: retestIssueComment({ ...record, by: actor().github, actual: results[k]?.actualSummary }),
+          });
+          next = { ...next, issue, statusLog: [...(src.defect.statusLog ?? []), change] };
+        }
+        list[i] = next;
+        if (linkCell) results[k] = { ...results[k]!, defectId: src.defect.id, defectCycleId: a.id };
+        notify(input);
+        return clone(next);
       });
     },
     async completeCycle(ref) {

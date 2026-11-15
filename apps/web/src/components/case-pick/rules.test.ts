@@ -66,6 +66,7 @@ describe('Run 케이스 고르기 (case-pick rules)', () => {
       fail: 1,
       blocked: 1,
       check: 1,
+      retest: 0,
       all: 5,
     });
     expect(pickVerdictCounts(rows, { ...DEFAULT_PICK_FILTER, priorities: ['low', 'medium'] })).toEqual({
@@ -73,8 +74,19 @@ describe('Run 케이스 고르기 (case-pick rules)', () => {
       fail: 1,
       blocked: 0,
       check: 1,
+      retest: 0,
       all: 2,
     });
+  });
+
+  it('재테스트 대상: 이전 사이클 fixed 결함의 칸만, 판정과 상관없이', () => {
+    const retest = new Set(['TC-1', 'TC-4']);
+    const rs = pickRows(CASES, (c) => VERDICTS[c.tcId], (c) => retest.has(c.tcId));
+    expect(ids(rs.filter((r) => matchesPick(r, { ...DEFAULT_PICK_FILTER, verdict: 'retest' })))).toEqual([
+      'TC-1',
+      'TC-4',
+    ]);
+    expect(pickVerdictCounts(rs, DEFAULT_PICK_FILTER).retest).toBe(2);
   });
 
   it('처음엔 남은 칸 전체를 고르고, 개별로 넣고 뺀다', () => {

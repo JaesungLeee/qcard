@@ -73,7 +73,8 @@ function PickFilters({ p, device }: { p: CasePick; device: string }) {
     <div className="qcp-filters">
       <div className="qcp-row" role="group" aria-label={`판정 필터 (${device} 칸 기준)`}>
         <span className={`${textClass('caption1', 'medium')} qcp-muted qcp-label`}>판정</span>
-        {PICK_VERDICTS.map((v) => (
+        {/* 재테스트 대상은 그런 칸이 있을 때만 보인다 (로컬 콘솔은 재테스트 정보를 받지 않는다) */}
+        {PICK_VERDICTS.filter((v) => v !== 'retest' || p.counts.retest > 0 || filter.verdict === v).map((v) => (
           <Chip
             key={v}
             size="small"

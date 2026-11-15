@@ -19,7 +19,7 @@ import type { CycleDetail, DefectDraft } from '../../data/api';
 import { useCreateDefect, useMyRole } from '../../data/hooks';
 import { fmtDateTime } from '../../components/format';
 import { IssueCell } from '../issues/IssueCell';
-import { Card, KV, Mono } from './parts';
+import { Card, CellDefectName, KV, Mono } from './parts';
 import { DEFECT_STATUS_LABEL } from './SummaryTab';
 
 export function DefectPanel({
@@ -38,6 +38,8 @@ export function DefectPanel({
   const [form, setForm] = useState<DefectDraft | null>(null);
   const listUrl = `/p/${projectId}/cycles/${d.cycle.id}?tab=defects`;
 
+  // 재테스트에서 다시 연 이전 사이클 결함 (docs/product/results.md#재테스트)
+  if (r.defectId && r.defectCycleId) return <EarlierDefect d={d} r={r} projectId={projectId} />;
   if (r.defectId) {
     const df = d.defects.find((x) => x.id === r.defectId);
     return (
@@ -91,6 +93,54 @@ export function DefectPanel({
             결함 등록
           </Button>
         </div>
+      )}
+    </Card>
+  );
+}
+
+function EarlierDefect({ d, r, projectId }: { d: CycleDetail; r: CaseResult; projectId: string }) {
+  const src = d.retests.find((s) => s.cycle.id === r.defectCycleId && s.defect.id === r.defectId);
+  const df = src?.defect;
+  return (
+    <Card
+      title={
+        <span className="qs-row" style={{ gap: token('space-8') }}>
+          결함 <CellDefectName r={r} d={d} />
+        </span>
+      }
+      actions={
+        df && (
+          <span className="qs-row" style={{ gap: token('space-4') }}>
+            <ContentBadge color="neutral" size="small" variant="outlined">
+              {SEVERITY_LABEL[df.severity]}
+            </ContentBadge>
+            <ContentBadge color="neutral" size="small" variant="outlined">
+              {DEFECT_STATUS_LABEL[df.status]}
+            </ContentBadge>
+          </span>
+        )
+      }
+    >
+      {df ? (
+        <>
+          <span className={textClass('label1', 'medium')}>{df.title}</span>
+          <span className={`${textClass('caption1')} qs-muted`}>
+            이전 사이클에서 난 결함을 이 칸의 재테스트 Fail로 다시 열었습니다.
+          </span>
+          {df.issue && (
+            <a href={df.issue.url} target="_blank" rel="noreferrer" className={`qs-link qc-mono ${textClass('label2')}`}>
+              GitHub 이슈 #{df.issue.number}
+            </a>
+          )}
+          <Link
+            to={`/p/${projectId}/cycles/${src.cycle.id}?tab=defects`}
+            className={`qs-link ${textClass('label2', 'medium')}`}
+          >
+            {src.cycle.name} 결함 목록에서 보기
+          </Link>
+        </>
+      ) : (
+        <span className={`${textClass('label1')} qs-muted`}>결함이 난 사이클을 지워 결함을 볼 수 없습니다.</span>
       )}
     </Card>
   );

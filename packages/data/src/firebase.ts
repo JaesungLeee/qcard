@@ -83,6 +83,8 @@ import {
   newBuild,
   newCycle,
   newDefect,
+  retestList,
+  retestSourceCycles,
   nextCase,
   qaDocRequest,
   qaDocSummary,
@@ -274,6 +276,32 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
     const snap = await getDoc(doc(db, P(p), 'builds', id));
     if (!snap.exists()) throw new NotFoundError(`빌드 없음: ${id}`);
     return strip<Build>(snap.data());
+  }
+  /** 재테스트 목록의 결함을 읽을 사이클 (`retestSourceCycles`): 같은 패키지의 더 오래된 빌드 사이클 */
+  async function retestCycles(p: string, b: { cycle: TestCycle; build: Build }) {
+    const [cycles, builds] = await Promise.all([
+      getDocs(collection(db, P(p), 'cycles')),
+      getDocs(collection(db, P(p), 'builds')),
+    ]);
+    const byId = new Map(builds.docs.map((d) => [d.id, strip<Build>(d.data())]));
+    const all = cycles.docs.flatMap((d) => {
+      const cycle = strip<TestCycle>(d.data());
+      const build = byId.get(cycle.buildId);
+      return build ? [{ cycle, build }] : [];
+    });
+    return retestSourceCycles(b, all);
+  }
+  const retestsFrom = (
+    b: { cycle: TestCycle; build: Build },
+    sources: { cycle: TestCycle; build: Build }[],
+    defectsOf: (cycleId: string) => Defect[],
+  ) => retestList(b, sources.flatMap((s) => defectsOf(s.cycle.id).map((defect) => ({ ...s, defect }))));
+  async function loadRetests(p: string, b: { cycle: TestCycle; build: Build }) {
+    const sources = await retestCycles(p, b);
+    const defects = await Promise.all(
+      sources.map(async (s) => ordered<Defect>((await getDocs(collection(db, P(p), 'cycles', s.cycle.id, 'defects'))).docs)),
+    );
+    return retestsFrom(b, sources, (id) => defects[sources.findIndex((s) => s.cycle.id === id)] ?? []);
   }
 
   return {
@@ -551,7 +579,8 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
           // 사이클을 만들 때 복사한 내용 (QA 문서의 현재 케이스가 아니라)
           getDocs(collection(db, P(projectId), 'cycles', cycleId, 'cases')),
         ]);
-        const detail: CycleDetail = { ...c, build, doc: d, cases: ordered<TestCase>(cases.docs) };
+        const retests = await loadRetests(projectId, { cycle: c.cycle, build });
+        const detail: CycleDetail = { ...c, build, doc: d, cases: ordered<TestCase>(cases.docs), retests };
         return detail;
       }),
     watchCycle: ({ projectId, cycleId }, onChange, onError) => {
@@ -561,6 +590,8 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
       };
       // 빌드·QA 문서·케이스 사본은 사이클을 만든 뒤 바뀌지 않아 처음 한 번만 읽는다
       let fixed: Promise<Pick<CycleDetail, 'build' | 'doc' | 'cases'>> | undefined;
+      let retest: Promise<{ cycle: TestCycle; build: Build }[]> | undefined;
+      const retestDefects = new Map<string, Defect[]>();
       const live: Partial<Pick<CycleDetail, 'cycle' | 'runs' | 'defects'>> & {
         results?: DocumentData[];
         logs?: QueryDocumentSnapshot[];
@@ -575,13 +606,34 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
         ]).then(([build, d, cases]) => ({ build, doc: d, cases: ordered<TestCase>(cases.docs) }));
         try {
           const f = await fixed;
+          // 재테스트 목록: 결함을 읽을 사이클은 처음 한 번 정하고, 그 사이클들의 결함을 구독한다
+          retest ??= retestCycles(projectId, { cycle, build: f.build }).then((sources) => {
+            for (const s of sources) {
+              if (stopped) break;
+              unsubs.push(
+                onSnapshot(
+                  collection(db, P(projectId), 'cycles', s.cycle.id, 'defects'),
+                  (snap) => {
+                    retestDefects.set(s.cycle.id, ordered<Defect>(snap.docs));
+                    void emit();
+                  },
+                  fail,
+                ),
+              );
+            }
+            return sources;
+          });
+          const sources = await retest;
+          if (!sources.every((s) => retestDefects.has(s.cycle.id))) return;
           // 기다리는 동안 더 새 값이 왔으면 그 값으로 (live를 다시 읽는다)
           if (!stopped) {
             const results = withHistory(live.results!, live.logs!);
-            onChange({ cycle: live.cycle!, ...f, results, defects: live.defects!, runs: live.runs! });
+            const retests = retestsFrom({ cycle: live.cycle!, build: f.build }, sources, (id) => retestDefects.get(id) ?? []);
+            onChange({ cycle: live.cycle!, ...f, results, defects: live.defects!, runs: live.runs!, retests });
           }
         } catch (e) {
           fixed = undefined;
+          retest = undefined;
           fail(e);
         }
       };
@@ -709,6 +761,8 @@ export function createFirebaseApi(deps: FirebaseDeps): QcardApi {
           statusDone = true;
         }
       }),
+    // 재테스트 확정은 칸 결과를 서버에서 다시 확인하고 결함·칸·이슈를 함께 바꿔야 해서 Functions가 한다
+    confirmRetest: async (input) => strip<Defect>(await call<Defect>('confirmRetest', input)),
     completeCycle: (ref) => guard(() => updateCycle(ref, (c) => completedCycle(c, me(), now()))),
     reopenCycle: (ref) => guard(() => updateCycle(ref, reopenedCycle)),
     // 하위 문서·Storage 증거까지 지워야 해서 Functions가 한다 (보안 규칙이 직접 삭제를 막는다)

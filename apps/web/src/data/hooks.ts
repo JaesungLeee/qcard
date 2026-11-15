@@ -5,6 +5,7 @@ import type {
   ConfirmVerdictInput,
   ConnectReposInput,
   CycleRef,
+  ConfirmRetestInput,
   DefectPatch,
   DocRef,
   NewDefectInput,
@@ -345,6 +346,29 @@ export function useUpdateDefect(ref: CycleRef) {
   return useMutation({
     mutationFn: (v: { defectId: string; patch: DefectPatch }) => api.updateDefect(ref, v.defectId, v.patch),
     onSettled: () => void qc.invalidateQueries({ queryKey: keys.cycle(ref.projectId, ref.cycleId) }),
+  });
+}
+
+/** 재테스트 확정 (docs/product/results.md#재테스트). 여러 건이면 차례로 확정하고, 실패한 건은 이유와 함께 모아 던진다 */
+export function useConfirmRetest(ref: CycleRef) {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (items: Pick<ConfirmRetestInput, 'source' | 'to'>[]) => {
+      const failed: string[] = [];
+      for (const it of items) {
+        await api.confirmRetest({ ...ref, ...it }).catch((e: unknown) => {
+          failed.push(`${it.source.defectId}: ${e instanceof Error ? e.message : String(e)}`);
+        });
+      }
+      if (failed.length) throw new Error(failed.join('\n'));
+    },
+    onSettled: (_r, _e, items) => {
+      void qc.invalidateQueries({ queryKey: keys.cycle(ref.projectId, ref.cycleId) });
+      for (const c of new Set(items.map((x) => x.source.cycleId)))
+        void qc.invalidateQueries({ queryKey: keys.cycle(ref.projectId, c) });
+      void qc.invalidateQueries({ queryKey: keys.cycles(ref.projectId) });
+    },
   });
 }
 

@@ -154,6 +154,7 @@ export const setAssigneeMap = call(withGithub(iss.setAssigneeMap), { secrets: gh
 export const getIssueContext = call(withGithub(iss.getIssueContext), { secrets: ghSecrets });
 export const publishIssue = call(withGithub(iss.publishIssue), { secrets: ghSecrets });
 export const setDefectStatus = call(withGithub(iss.setDefectStatus), { secrets: ghSecrets });
+export const confirmRetest = call(withGithub(iss.confirmRetest), { secrets: ghSecrets });
 
 /** App 웹훅: 서명(X-Hub-Signature-256)을 확인한 요청만 처리한다. GitHub는 실패한 전달을 다시 보내지 않는다 */
 export const githubWebhook = onRequest({ secrets: ghSecrets }, async (req, res) => {

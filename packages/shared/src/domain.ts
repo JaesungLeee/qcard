@@ -491,6 +491,8 @@ export const CaseResult = z.object({
   executedAt: z.string().optional(),
   osBuild: z.string().optional(),
   defectId: z.string().optional(),
+  /** `defectId`가 다른 사이클의 결함이면 그 사이클 (재테스트에서 다시 연 결함, docs/product/results.md#재테스트) */
+  defectCycleId: z.string().optional(),
   note: z.string().optional(),
   runId: z.string().optional(),
   steps: z.array(ExecStep),
@@ -546,6 +548,23 @@ export const DefectStatusChange = z.object({
 });
 export type DefectStatusChange = z.infer<typeof DefectStatusChange>;
 
+/** 재테스트 확정 기록: 더 새 빌드 사이클의 칸 결과로 closed·open을 확정했다 (docs/product/results.md#재테스트) */
+export const DefectRetest = z.object({
+  cycleId: z.string(),
+  cycleName: z.string(),
+  build: z.object({ version: z.string(), buildNumber: z.number() }),
+  /** 재테스트 칸 (그 사이클의 대상 디바이스) */
+  tcId: z.string(),
+  deviceId: z.string(),
+  deviceLabel: z.string(),
+  verdict: z.enum(['pass', 'fail']),
+  to: z.enum(['closed', 'open']),
+  traceUrl: z.string(),
+  by: z.string(),
+  at: z.string(),
+});
+export type DefectRetest = z.infer<typeof DefectRetest>;
+
 /**
  * 결함. Fail 칸에서 만들고 그 칸의 `defectId`로 연결한다. id(`D-1`)는 사이클 안에서 매긴다 —
  * 사이클 밖에서 가리킬 때는 사이클 이름을 함께 쓴다. 앱 빌드는 사이클의 빌드다
@@ -566,6 +585,8 @@ export const Defect = z.object({
   issue: DefectIssue.optional(),
   /** 이슈가 연결된 결함의 상태 변경 기록 (Functions만 쓴다) */
   statusLog: z.array(DefectStatusChange).optional(),
+  /** 재테스트 확정 기록 (오래된 것부터, Functions만 쓴다) */
+  retests: z.array(DefectRetest).optional(),
   /** 이슈 발행 중 표시 (두 번 발행하지 않게 Functions가 잠깐 둔다) */
   publishing: z.object({ by: z.string(), at: z.string() }).optional(),
   createdBy: z.string().optional(),
