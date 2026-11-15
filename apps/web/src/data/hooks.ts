@@ -349,16 +349,19 @@ export function useUpdateDefect(ref: CycleRef) {
   });
 }
 
-/** 재테스트 확정 (docs/product/results.md#재테스트). 여러 건이면 차례로 확정하고, 실패한 건은 이유와 함께 모아 던진다 */
+/**
+ * 재테스트 확정 (docs/product/results.md#재테스트). 여러 건이면 차례로 확정하고, 실패한 건은 이유와 함께 모아 던진다.
+ * `label`은 오류에 보일 결함 이름(`사이클 이름 D-n`) — 결함 번호는 사이클 안에서만 겹치지 않는다
+ */
 export function useConfirmRetest(ref: CycleRef) {
   const api = useApi();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (items: Pick<ConfirmRetestInput, 'source' | 'to'>[]) => {
+    mutationFn: async (items: (Pick<ConfirmRetestInput, 'source' | 'to'> & { label: string })[]) => {
       const failed: string[] = [];
-      for (const it of items) {
+      for (const { label, ...it } of items) {
         await api.confirmRetest({ ...ref, ...it }).catch((e: unknown) => {
-          failed.push(`${it.source.defectId}: ${e instanceof Error ? e.message : String(e)}`);
+          failed.push(`${label}: ${e instanceof Error ? e.message : String(e)}`);
         });
       }
       if (failed.length) throw new Error(failed.join('\n'));

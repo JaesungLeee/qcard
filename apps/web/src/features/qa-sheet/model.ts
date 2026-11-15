@@ -5,6 +5,7 @@ import {
   isRunStale,
   HOST_ONLINE_MS,
   hostOutdated,
+  pointsTo,
   retestCell,
   retestReading,
   retestRecordIn,
@@ -330,7 +331,7 @@ export function retestRows(d: Pick<CycleDetail, 'cycle' | 'retests'>, index: Res
 
 /** 확정했으면 그 판정, 아니면 칸 판정. 사람 확정 전 Fail도 Fail로 센다 */
 export function retestOutcome(row: RetestRow): 'pass' | 'fail' | 'pending' {
-  if (row.record && row.src.defect.status !== 'fixed') return row.record.verdict;
+  if (row.record) return row.record.verdict;
   if (row.reading === 'pass') return 'pass';
   return row.reading === 'pending' ? 'pending' : 'fail';
 }
@@ -342,21 +343,24 @@ export function retestCounts(rows: RetestRow[]) {
   return counts;
 }
 
-/** 확정할 수 있는 일: 결함이 아직 fixed이고 칸 판정이 맞을 때 */
+/**
+ * 확정할 수 있는 일: 결함이 아직 fixed이고 칸 판정이 맞을 때. 이 사이클에서 이미 확정했으면 다시 fixed가 돼도
+ * 없다 — 칸 결과가 고치기 전 빌드의 것이다
+ */
 export function retestAction(row: RetestRow): 'close' | 'reopen' | undefined {
-  if (row.src.defect.status !== 'fixed' || row.cell.kind !== 'found') return undefined;
+  if (row.record || row.src.defect.status !== 'fixed' || row.cell.kind !== 'found') return undefined;
   if (row.reading === 'pass') return 'close';
   // 칸에 다른 결함이 있으면 증상이 달라 새 결함을 만든 칸이다 — 다시 열지 않는다
-  if (row.reading === 'fail' && (!row.result?.defectId || row.result.defectCycleId === row.src.cycle.id))
-    return 'reopen';
+  const ref = { cycleId: row.src.cycle.id, defectId: row.src.defect.id };
+  if (row.reading === 'fail' && (!row.result?.defectId || pointsTo(row.result, ref))) return 'reopen';
   return undefined;
 }
 
-/** 칸 → 그 칸에서 재테스트하는 결함 번호 (케이스 그리드의 "재테스트 D-n") */
+/** 칸 → 그 칸에서 재테스트하는 결함 번호 (케이스 그리드의 "재테스트 D-n"). 이 사이클에서 확정한 결함은 뺀다 */
 export function retestMarks(rows: RetestRow[]): Map<string, string[]> {
   const marks = new Map<string, string[]>();
   for (const r of rows) {
-    if (r.cell.kind !== 'found') continue;
+    if (r.cell.kind !== 'found' || r.record) continue;
     const k = resultKey(r.cell.tcId, r.cell.deviceId);
     marks.set(k, [...(marks.get(k) ?? []), r.src.defect.id]);
   }

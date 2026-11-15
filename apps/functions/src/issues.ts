@@ -16,6 +16,7 @@ import {
   retestCell,
   retestConfirmation,
   retestIssueComment,
+  retestRecordIn,
   requireEditor,
   statusOnIssueEvent,
   traceUrlOf,
@@ -496,10 +497,16 @@ export async function confirmRetest(ctx: IssueCtx, data: unknown): Promise<Defec
     if (action) await applyIssueAction(ctx, project.repo!, defect.issue.number, action);
     Object.assign(patch, issuePatch(defect.issue, issue, change));
   }
-  const batch = ctx.db.batch();
-  batch.update(dRef, patch);
-  if (linkCell && rRef) batch.update(rRef, { defectId: defect.id, defectCycleId: input.source.cycleId });
-  await batch.commit();
+  // GitHub를 부르는 동안 바뀐 것을 다시 본다: 같이 확정한 요청이 먼저 기록했으면 기록을 겹쳐 남기지 않고, 칸에 그
+  // 사이 다른 결함이 연결됐으면 덮어쓰지 않는다. 상태는 setDefectStatus처럼 나중에 쓴 쪽을 따른다
+  await ctx.db.runTransaction(async (tx) => {
+    const fresh = (await tx.get(dRef)).data() as Defect | undefined;
+    const cell = linkCell && rRef ? ((await tx.get(rRef)).data() as CaseResult | undefined) : undefined;
+    if (!fresh) throw fail('not_found', '결함이 지워졌습니다.');
+    if (retestRecordIn(fresh, input.cycleId)) delete patch.retests;
+    tx.update(dRef, patch);
+    if (rRef && cell && !cell.defectId) tx.update(rRef, { defectId: defect.id, defectCycleId: input.source.cycleId });
+  });
   return (await dRef.get()).data() as Defect;
 }
 

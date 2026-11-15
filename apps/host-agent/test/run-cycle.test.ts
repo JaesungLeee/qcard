@@ -194,6 +194,26 @@ describe('runCycle → Firestore·Storage', () => {
     expect(after.previousAttempts).toHaveLength((before.previousAttempts?.length ?? 0) + 1);
   });
 
+  it('다시 실행해도 칸에 연결한 결함(재테스트로 다시 연 이전 사이클 결함 포함)은 남는다', async () => {
+    const { db, storage, api } = await host(PEOPLE.lead);
+    const before = (await api.getCycle(REF)).results.find((r) => r.verdict !== 'nt' && r.deviceId === DEVICE)!;
+    const path = `projects/haru/cycles/cycle-130-1/results/${before.tcId}__${DEVICE}`;
+    await env.withSecurityRulesDisabled(async (c) => {
+      const admin = c.firestore() as unknown as Firestore;
+      await updateDoc(doc(admin, path), { defectId: 'D-3', defectCycleId: 'cycle-121-1' });
+    });
+    await setDoc(doc(db, 'projects/haru/cycles/cycle-130-1/runs/run-y'), {
+      id: 'run-y',
+      executorUid: GITHUB[PEOPLE.lead],
+      hostId: hostOf(GITHUB[PEOPLE.lead]!),
+    });
+    const { defectId: _d, defectCycleId: _c, ...fresh } = before;
+    const rerun = { ...fresh, verdict: 'fail', decidedBy: { kind: 'agent' }, runId: 'run-y', executedAt: '2026-10-24T10:00:00.000Z' };
+    await firestoreApply(db, storage)({ type: 'result', path, data: rerun });
+    const after = (await getDoc(doc(db, path))).data();
+    expect(after).toMatchObject({ runId: 'run-y', defectId: 'D-3', defectCycleId: 'cycle-121-1' });
+  });
+
   it('플랜 한도에 닿으면 결과를 쓰지 않고 Run을 일시정지한다', async () => {
     const { db, api, sink } = await host(PEOPLE.lead, 'run-host-2');
     const until = '2026-10-20T05:30:00.000Z';
