@@ -3,6 +3,26 @@
 qcard의 버전별 변경 사항입니다. 버전 하나는 웹 서비스와, 바뀐 경우 PC에 설치하는 호스트(`@qcard/host`)를 함께 가리킵니다.
 버전은 [Semantic Versioning](https://semver.org/)을 따릅니다.
 
+## [1.1.0](https://github.com/JaesungLeee/qcard/compare/v1.0.0...v1.1.0) - 2026-11-15
+
+> 호스트 1.1.0. PC에서 `npm i -g @qcard/host`로 1.1.0으로 업데이트한 뒤 `qcard serve`를 다시 켜 주세요. 1.0.0 호스트로도 테스트를 실행할 수 있지만, GitHub 이슈 초안은 1.1.0 호스트에서만 만듭니다.
+
+### Added
+
+- 결함을 **GitHub 이슈로 발행**할 수 있습니다. Admin이 프로젝트 설정에서 qcard GitHub App으로 저장소를 연결하고 스펙별 담당자를 정해 두면, 결함마다 [이슈 발행]에서 저장소의 이슈 템플릿을 고르고 Claude가 쓴 초안을 고쳐 발행합니다. 초안은 요청한 사람의 PC에 연결된 호스트가 씁니다. ([#46](https://github.com/JaesungLeee/qcard/pull/46))
+- 발행한 이슈와 결함의 상태가 서로 맞춰집니다. GitHub에서 이슈를 닫거나 다시 열면 결함 상태가 바뀌고, qcard에서 결함 상태를 바꾸면 이슈를 닫거나 다시 열고 코멘트를 남깁니다. ([#46](https://github.com/JaesungLeee/qcard/pull/46))
+- 이전 사이클의 fixed 결함을 **더 새 빌드의 사이클에서 재테스트**합니다. 결함 탭의 "이전 사이클 결함 재테스트"에서 같은 케이스·같은 기종 칸의 결과를 보고 closed로 확정하거나 다시 엽니다. 이슈가 연결된 결함은 재테스트 근거가 이슈 코멘트로 남습니다. ([#48](https://github.com/JaesungLeee/qcard/pull/48), [#51](https://github.com/JaesungLeee/qcard/pull/51))
+- Run 케이스 고르기에 **재테스트 대상** 필터가 생겼습니다. 재테스트할 칸을 먼저 돌릴 수 있습니다. ([#48](https://github.com/JaesungLeee/qcard/pull/48))
+
+### Changed
+
+- QA 문서 생성이 빨라졌습니다. 스펙 3개 기준으로 약 9분에서 4분으로 줄었고, 진행 표시에서 스펙 계획과 케이스 변환을 함께 볼 수 있습니다. ([#47](https://github.com/JaesungLeee/qcard/pull/47))
+- 개인정보처리방침과 이용약관에 GitHub 이슈 연동으로 GitHub에 보내는 정보를 추가했습니다. 2026-11-25부터 시행하며, 그 전까지 앱 상단과 프로젝트 목록에 안내가 보입니다. ([#46](https://github.com/JaesungLeee/qcard/pull/46), [#50](https://github.com/JaesungLeee/qcard/pull/50))
+
+### Fixed
+
+- 결과가 있는 칸을 다시 실행하면 그 칸에 연결한 결함이 사라지던 문제를 고쳤습니다(호스트 1.1.0). ([#51](https://github.com/JaesungLeee/qcard/pull/51))
+
 ## [1.0.0](https://github.com/JaesungLeee/qcard/compare/v0.5.0...v1.0.0) - 2026-11-04
 
 > 호스트 1.0.0. PC에서 `npm i -g @qcard/host`로 1.0.0으로 업데이트한 뒤 `qcard serve`를 다시 켜 주세요. 0.5.0 호스트도 계속 쓸 수 있습니다.
