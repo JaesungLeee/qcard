@@ -4,8 +4,10 @@ import { expect, test } from '@playwright/test';
  * 시작 가이드(`/guide`)에 넣는 화면 스크린샷을 `public/guide/<이름>-<light|dark>.jpg`로 찍는다.
  * `pnpm --filter @qcard/web guide:shots`로만 돈다 (`ui:snap`에서는 건너뛴다). 메모리 구현의 가상 앱 데이터(하루콩 등)를 쓴다.
  * 화면이 바뀌어 가이드 그림이 낡았으면 다시 찍는다. `selector`를 주면 그 요소만, 없으면 첫 화면(1280×800)만 찍는다.
+ * `width`를 주면 그 폭으로 찍는다(넓은 표가 잘릴 때).
+ * `click`을 주면 그 이름의 버튼을 차례로 누르고 `then` 텍스트가 보일 때까지 기다려 찍는다(`snap.spec.ts`와 같다).
  */
-type Shot = { name: string; path: string; waitFor: string; selector?: string };
+type Shot = { name: string; path: string; waitFor: string; selector?: string; click?: string[]; then?: string; width?: number };
 export const GUIDE_SHOTS: Shot[] = [
   { name: 'projects', path: '/projects', waitFor: '하루콩 위젯' },
   { name: 'members', path: '/p/haru/settings', waitFor: '@hyejin-han' },
@@ -45,6 +47,26 @@ export const GUIDE_SHOTS: Shot[] = [
     path: '/p/haru/cycles/cycle-130-1/results/TC-ONBOARDING-027/pixel-8-16',
     waitFor: '수동 결과 입력',
   },
+  {
+    name: 'repo',
+    path: '/p/haru/settings',
+    waitFor: 'harukong/harukong-android',
+    selector: 'section[aria-label="GitHub 저장소"]',
+  },
+  {
+    name: 'issue-publish',
+    path: '/p/haru/cycles/cycle-130-1?tab=defects',
+    waitFor: '앱이 백그라운드로 감',
+    click: ['이슈 발행', '버그 리포트'],
+    then: '직접 채울 칸이 있습니다',
+  },
+  {
+    name: 'retest',
+    path: '/p/haru/cycles/cycle-130-1?tab=defects',
+    waitFor: '이전 사이클 결함 재테스트',
+    selector: 'section[aria-labelledby="retest-title"]',
+    width: 1600,
+  },
 ];
 
 /** 화면 글자 바꾸기 (실명 → 가상 이름) */
@@ -60,10 +82,13 @@ test.describe('시작 가이드 스크린샷', () => {
   for (const shot of GUIDE_SHOTS) {
     for (const theme of ['light', 'dark'] as const) {
       test(`${shot.name} ${theme}`, async ({ page }) => {
+        if (shot.width) await page.setViewportSize({ width: shot.width, height: 800 });
         const sep = shot.path.includes('?') ? '&' : '?';
         await page.goto(`${shot.path}${sep}theme=${theme}`);
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
         await expect(page.getByText(shot.waitFor).first()).toBeVisible();
+        for (const name of shot.click ?? []) await page.getByRole('button', { name }).first().click();
+        if (shot.then) await expect(page.getByText(shot.then).first()).toBeVisible();
         await page.evaluate(() => document.fonts.ready);
         await page.waitForLoadState('networkidle');
         // 테스트 데이터의 Admin은 운영자 실명이다. 공개 가이드에는 가상 이름으로 바꿔 찍는다 (데이터는 그대로)
